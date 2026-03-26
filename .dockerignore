@@ -1,0 +1,6 @@
+.git
+.cache
+node_modules
+Acesso temporário
+pdf_compare
+tmp-diario-teste*.pdf

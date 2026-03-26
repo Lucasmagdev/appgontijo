@@ -1,0 +1,346 @@
+{
+  "machines": [
+    {
+      "id": "machine-1",
+      "imei": "356308047707200",
+      "machine_name": "HTC-03",
+      "status": "active",
+      "last_communication": "2026-03-19T18:49:38.452Z",
+      "region": "Sul",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-2",
+      "imei": "353719099360685",
+      "machine_name": "HTM-01",
+      "status": "active",
+      "last_communication": "2026-03-19T17:14:38.452Z",
+      "region": "Norte",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-3",
+      "imei": "352353087311780",
+      "machine_name": "HTM-02",
+      "status": "maintenance",
+      "last_communication": "2026-03-19T15:39:38.452Z",
+      "region": "Centro",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-4",
+      "imei": "352353087304165",
+      "machine_name": "HTM-03",
+      "status": "active",
+      "last_communication": "2026-03-19T14:04:38.452Z",
+      "region": "Leste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-5",
+      "imei": "352353087311855",
+      "machine_name": "HTM-04",
+      "status": "alert",
+      "last_communication": "2026-03-19T12:29:38.452Z",
+      "region": "Oeste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-6",
+      "imei": "352353087290521",
+      "machine_name": "HTM-05",
+      "status": "inactive",
+      "last_communication": "2026-03-19T10:54:38.452Z",
+      "region": "Sul",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-7",
+      "imei": "358278000324905",
+      "machine_name": "CA-02",
+      "status": "active",
+      "last_communication": "2026-03-19T09:19:38.452Z",
+      "region": "Norte",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-8",
+      "imei": "352622021019539",
+      "machine_name": "CA-03",
+      "status": "active",
+      "last_communication": "2026-03-19T07:44:38.452Z",
+      "region": "Centro",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-9",
+      "imei": "352622021013953",
+      "machine_name": "CA-07",
+      "status": "maintenance",
+      "last_communication": "2026-03-19T06:09:38.452Z",
+      "region": "Leste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-10",
+      "imei": "352622021150631",
+      "machine_name": "CA-04(s)",
+      "status": "active",
+      "last_communication": "2026-03-19T04:34:38.453Z",
+      "region": "Oeste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-11",
+      "imei": "352622021181404",
+      "machine_name": "CA-05(s)",
+      "status": "alert",
+      "last_communication": "2026-03-19T02:59:38.453Z",
+      "region": "Sul",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-12",
+      "imei": "352622021175398",
+      "machine_name": "CA-06(s)",
+      "status": "inactive",
+      "last_communication": "2026-03-19T01:24:38.453Z",
+      "region": "Norte",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-13",
+      "imei": "352622021184705",
+      "machine_name": "CA-09(s)",
+      "status": "active",
+      "last_communication": "2026-03-18T23:49:38.453Z",
+      "region": "Centro",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-14",
+      "imei": "352622021182170",
+      "machine_name": "MAIT-01",
+      "status": "active",
+      "last_communication": "2026-03-18T22:14:38.453Z",
+      "region": "Leste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-15",
+      "imei": "352353087320450",
+      "machine_name": "HTM-06",
+      "status": "maintenance",
+      "last_communication": "2026-03-18T20:39:38.453Z",
+      "region": "Oeste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-16",
+      "imei": "353719099340026",
+      "machine_name": "EM400-01",
+      "status": "active",
+      "last_communication": "2026-03-18T19:04:38.453Z",
+      "region": "Sul",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-17",
+      "imei": "352622021177063",
+      "machine_name": "CA-08",
+      "status": "alert",
+      "last_communication": "2026-03-18T17:29:38.453Z",
+      "region": "Norte",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-18",
+      "imei": "356078119138507",
+      "machine_name": "MAIT-02",
+      "status": "inactive",
+      "last_communication": "2026-03-18T15:54:38.453Z",
+      "region": "Centro",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "machine-19",
+      "imei": "356078119129365",
+      "machine_name": "MAIT-03",
+      "status": "active",
+      "last_communication": "2026-03-18T14:19:38.453Z",
+      "region": "Leste",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    }
+  ],
+  "contracts": [
+    {
+      "id": "contract-1",
+      "contract_name": "Obra Shopping Cidade Nova",
+      "client_name": "Construtora ABC",
+      "responsible": "Joao Silva",
+      "status": "active",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "contract-2",
+      "contract_name": "Complexo Residencial Vila Nova",
+      "client_name": "Engenharia XYZ",
+      "responsible": "Maria Santos",
+      "status": "active",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "contract-3",
+      "contract_name": "Ponte Rio Claro",
+      "client_name": "Obras Publicas SA",
+      "responsible": "Pedro Costa",
+      "status": "active",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "contract-4",
+      "contract_name": "Tunel Centro-Sul",
+      "client_name": "Infraestrutura Brasil",
+      "responsible": "Ana Paula",
+      "status": "active",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "contract-5",
+      "contract_name": "Estadio Municipal",
+      "client_name": "Construtora Mega",
+      "responsible": "Carlos Eduardo",
+      "status": "active",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    }
+  ],
+  "mappings": [
+    {
+      "id": "mapping-1",
+      "machine_id": "machine-1",
+      "imei": "356308047707200",
+      "machine_name": "HTC-03",
+      "operator_contract_name": "Obra Shopping",
+      "validated_contract_id": "contract-1",
+      "validated_contract_name": "Obra Shopping Cidade Nova",
+      "validation_status": "divergent",
+      "notes": "Contrato do operador com nome reduzido.",
+      "updated_by": "admin",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "mapping-2",
+      "machine_id": "machine-2",
+      "imei": "353719099360685",
+      "machine_name": "HTM-01",
+      "operator_contract_name": "Complexo Residencial Vila Nova",
+      "validated_contract_id": "contract-2",
+      "validated_contract_name": "Complexo Residencial Vila Nova",
+      "validation_status": "validated",
+      "notes": "",
+      "updated_by": "admin",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "mapping-3",
+      "machine_id": "machine-3",
+      "imei": "352353087311780",
+      "machine_name": "HTM-02",
+      "operator_contract_name": null,
+      "validated_contract_id": "contract-3",
+      "validated_contract_name": "Ponte Rio Claro",
+      "validation_status": "pending",
+      "notes": "Aguardando confirmacao operacional.",
+      "updated_by": "admin",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "mapping-4",
+      "machine_id": "machine-4",
+      "imei": "352353087304165",
+      "machine_name": "HTM-03",
+      "operator_contract_name": "Tunel Centro-Sul",
+      "validated_contract_id": "contract-4",
+      "validated_contract_name": "Tunel Centro-Sul",
+      "validation_status": "validated",
+      "notes": "",
+      "updated_by": "admin",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    },
+    {
+      "id": "mapping-5",
+      "machine_id": "machine-5",
+      "imei": "352353087311855",
+      "machine_name": "HTM-04",
+      "operator_contract_name": "Obra Estadio",
+      "validated_contract_id": "contract-5",
+      "validated_contract_name": "Estadio Municipal",
+      "validation_status": "divergent",
+      "notes": "Nome do contrato nao confere com o validado.",
+      "updated_by": "admin",
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "updated_at": "2026-03-19T19:34:38.441Z"
+    }
+  ],
+  "alerts": [
+    {
+      "id": "alert-1",
+      "machine_id": "machine-1",
+      "alert_type": "contract_divergence",
+      "severity": "medium",
+      "message": "Divergencia entre contrato do operador e contrato validado.",
+      "resolved": false,
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "resolved_at": null
+    },
+    {
+      "id": "alert-2",
+      "machine_id": "machine-5",
+      "alert_type": "no_communication",
+      "severity": "high",
+      "message": "Maquina sem comunicacao recente.",
+      "resolved": false,
+      "created_at": "2026-03-19T19:34:38.441Z",
+      "resolved_at": null
+    }
+  ],
+  "displayConfig": {
+    "id": "display-config-1",
+    "tv_mode": true,
+    "rotation_seconds": 300,
+    "auto_refresh_seconds": 60,
+    "tabs": [
+      "visao-geral",
+      "acompanhamento-comercial"
+    ],
+    "updated_at": "2026-03-19T19:34:38.441Z"
+  }
+}

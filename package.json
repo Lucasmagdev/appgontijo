@@ -1,0 +1,21 @@
+{
+  "name": "s3-estacas-teste",
+  "version": "1.0.0",
+  "description": "Teste web simples para consultar estacas no S3 da Geodigitus por IMEI e data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1011.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "pdfkit": "^0.18.0",
+    "xlsx": "^0.18.5"
+  }
+}

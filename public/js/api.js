@@ -1,0 +1,156 @@
+function getApiBaseUrl() {
+  const configured = window.__APP_CONFIG__?.apiBaseUrl || '';
+  return String(configured).replace(/\/+$/, '');
+}
+
+function buildApiUrl(path) {
+  const baseUrl = getApiBaseUrl();
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(buildApiUrl(path), {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  let data = null;
+
+  if (text && isJson) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Resposta JSON invalida em ${buildApiUrl(path)}.`);
+    }
+  }
+
+  if (text && !isJson) {
+    const compactText = text.replace(/\s+/g, ' ').trim();
+    const preview = compactText.slice(0, 120);
+    throw new Error(`Resposta inesperada em ${buildApiUrl(path)}: HTTP ${response.status}${preview ? ` | ${preview}` : ''}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.details || data?.message || `Erro HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+async function requestForm(path, formData, options = {}) {
+  const response = await fetch(buildApiUrl(path), {
+    credentials: 'include',
+    method: 'POST',
+    body: formData,
+    ...options,
+  });
+
+  const text = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  let data = null;
+
+  if (text && isJson) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Resposta JSON invalida em ${buildApiUrl(path)}.`);
+    }
+  }
+
+  if (text && !isJson) {
+    const compactText = text.replace(/\s+/g, ' ').trim();
+    const preview = compactText.slice(0, 120);
+    throw new Error(`Resposta inesperada em ${buildApiUrl(path)}: HTTP ${response.status}${preview ? ` | ${preview}` : ''}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.details || data?.message || `Erro HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+export const api = {
+  getHealth() {
+    return request('/api/health');
+  },
+  getDaily(params) {
+    return request(`/api/dashboard/daily?${new URLSearchParams(params).toString()}`);
+  },
+  getWeekly(params) {
+    return request(`/api/dashboard/weekly?${new URLSearchParams(params).toString()}`);
+  },
+  getSecondary(params) {
+    return request(`/api/dashboard/secondary?${new URLSearchParams(params).toString()}`);
+  },
+  getDisplayConfig(screen) {
+    return request(`/api/display/config?${new URLSearchParams({ screen }).toString()}`);
+  },
+  getAdminStatus() {
+    return request('/api/admin/status');
+  },
+  loginAdmin(password) {
+    return request('/api/admin/session', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+  logoutAdmin() {
+    return request('/api/admin/logout', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  getAdminMachines() {
+    return request('/api/admin/machines');
+  },
+  getAdminMappings(includeInactive) {
+    return request(`/api/admin/mappings?${new URLSearchParams({ includeInactive: String(includeInactive) }).toString()}`);
+  },
+  createMapping(payload) {
+    return request('/api/admin/mappings', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+  updateMapping(id, payload) {
+    return request(`/api/admin/mappings/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+  activateMapping(id) {
+    return request(`/api/admin/mappings/${id}/activate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  archiveMapping(id) {
+    return request(`/api/admin/mappings/${id}/archive`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  getGoalTargets(limit = 100) {
+    return request(`/api/admin/goal-targets?${new URLSearchParams({ limit: String(limit) }).toString()}`);
+  },
+  parseGoalImport(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return requestForm('/api/admin/goal-imports/parse', formData);
+  },
+  confirmGoalImport(items) {
+    return request('/api/admin/goal-imports/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  },
+};
