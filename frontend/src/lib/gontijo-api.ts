@@ -260,6 +260,103 @@ export type ObraLiveDashboard = {
   }>
 }
 
+export type ProductionMetric = 'estacas' | 'meq' | 'faturamento'
+
+export type ProductionTimelineItem = {
+  date: string
+  finishedAt: string
+  machineName: string
+  imei: string
+  obraName: string
+  obraCode: string
+  estaca: string
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+}
+
+export type ProductionWorkRankingItem = {
+  obraName: string
+  goalEstacas: number
+  realizedEstacas: number
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+}
+
+export type ProductionMachineDailyRow = {
+  date: string
+  goalEstacas: number
+  realizedEstacas: number
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+}
+
+export type ProductionMachineRow = {
+  imei: string
+  machineName: string
+  obraCode: string
+  obraName: string
+  workSource: 'admin' | 'api' | 'none'
+  dailyGoalEstacas: number
+  weeklyGoalEstacas: number
+  realizedEstacas: number
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+  progressPercent: number | null
+  active: boolean
+  alerts: string[]
+  daily: ProductionMachineDailyRow[]
+}
+
+export type ProductionDailyDashboard = {
+  date: string
+  totalRealizedEstacas: number
+  totalGoalEstacas: number
+  totalRealizedLinearMeters: number
+  totalRealizedMeq: number
+  totalApproxRevenueRealized: number
+  totalProgressPercent: number | null
+  machines: ProductionMachineRow[]
+  topWorks: ProductionWorkRankingItem[]
+  ranking: ProductionMachineRow[]
+  timeline: ProductionTimelineItem[]
+  generatedAt: string
+}
+
+export type ProductionWeeklyAccumulatedDay = {
+  date: string
+  goalEstacas: number
+  realizedEstacas: number
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+  accumulatedEstacas: number
+  accumulatedLinearMeters: number
+  accumulatedMeq: number
+  accumulatedApproxRevenueRealized: number
+  expectedAccumulatedEstacas: number
+}
+
+export type ProductionWeeklyDashboard = {
+  weekStart: string
+  weekDates: string[]
+  totalRealizedEstacas: number
+  totalGoalEstacas: number
+  totalRealizedLinearMeters: number
+  totalRealizedMeq: number
+  totalApproxRevenueRealized: number
+  totalProgressPercent: number | null
+  machines: ProductionMachineRow[]
+  ranking: ProductionMachineRow[]
+  topWorks: ProductionWorkRankingItem[]
+  accumulatedByDay: ProductionWeeklyAccumulatedDay[]
+  timeline: ProductionTimelineItem[]
+  generatedAt: string
+}
+
 function listResult<T>(payload: ApiEnvelope<T[]>): ApiListResult<T> {
   return {
     items: payload.data,
@@ -451,6 +548,67 @@ function adaptDiarioDetail(row: Record<string, unknown>): DiarioDetail {
   }
 }
 
+function adaptProductionTimeline(row: Record<string, unknown>): ProductionTimelineItem {
+  return {
+    date: toStringValue(row.date),
+    finishedAt: toStringValue(row.finishedAt),
+    machineName: toStringValue(row.machine_name),
+    imei: toStringValue(row.imei),
+    obraName: toStringValue(row.obra_name),
+    obraCode: toStringValue(row.obra_code),
+    estaca: toStringValue(row.estaca),
+    realizedLinearMeters: Number(row.realized_linear_meters || 0),
+    realizedMeq: Number(row.realized_meq || 0),
+    approxRevenueRealized: Number(row.approx_revenue_realized || 0),
+  }
+}
+
+function adaptProductionWorkRanking(row: Record<string, unknown>): ProductionWorkRankingItem {
+  return {
+    obraName: toStringValue(row.obra_name),
+    goalEstacas: Number(row.goal_estacas || 0),
+    realizedEstacas: Number(row.realized_estacas || 0),
+    realizedLinearMeters: Number(row.realized_linear_meters || 0),
+    realizedMeq: Number(row.realized_meq || 0),
+    approxRevenueRealized: Number(row.approx_revenue_realized || 0),
+  }
+}
+
+function adaptProductionMachineDailyRow(row: Record<string, unknown>): ProductionMachineDailyRow {
+  return {
+    date: toStringValue(row.date),
+    goalEstacas: Number(row.goal_estacas || 0),
+    realizedEstacas: Number(row.realized_estacas || 0),
+    realizedLinearMeters: Number(row.realized_linear_meters || 0),
+    realizedMeq: Number(row.realized_meq || 0),
+    approxRevenueRealized: Number(row.approx_revenue_realized || 0),
+  }
+}
+
+function adaptProductionMachine(row: Record<string, unknown>): ProductionMachineRow {
+  const workSource = toStringValue(row.work_source)
+
+  return {
+    imei: toStringValue(row.imei),
+    machineName: toStringValue(row.machine_name),
+    obraCode: toStringValue(row.obra_code),
+    obraName: toStringValue(row.obra_name),
+    workSource: workSource === 'admin' || workSource === 'api' ? workSource : 'none',
+    dailyGoalEstacas: Number(row.daily_goal_estacas || 0),
+    weeklyGoalEstacas: Number(row.weekly_goal_estacas || 0),
+    realizedEstacas: Number(row.realized_estacas || 0),
+    realizedLinearMeters: Number(row.realized_linear_meters || 0),
+    realizedMeq: Number(row.realized_meq || 0),
+    approxRevenueRealized: Number(row.approx_revenue_realized || 0),
+    progressPercent: row.progress_percent == null ? null : Number(row.progress_percent || 0),
+    active: Boolean(row.active),
+    alerts: Array.isArray(row.alerts) ? row.alerts.map((item) => toStringValue(item)).filter(Boolean) : [],
+    daily: Array.isArray(row.daily)
+      ? row.daily.map((item) => adaptProductionMachineDailyRow(item as Record<string, unknown>))
+      : [],
+  }
+}
+
 function buildObraPayload(payload: ObraDetail) {
   return {
     numero: payload.numero,
@@ -550,6 +708,91 @@ export const dashboardService = {
         title: toStringValue(item.title),
         description: toStringValue(item.description),
       })),
+    }
+  },
+}
+
+export const productionService = {
+  async daily(params: { date?: string; clientLogin?: string }): Promise<ProductionDailyDashboard> {
+    const { data } = await api.get<Record<string, unknown>>('/dashboard/daily', {
+      params: {
+        date: params.date,
+        clientLogin: params.clientLogin || undefined,
+      },
+    })
+
+    return {
+      date: toStringValue(data.date),
+      totalRealizedEstacas: Number(data.total_realized_estacas || 0),
+      totalGoalEstacas: Number(data.total_goal_estacas || 0),
+      totalRealizedLinearMeters: Number(data.total_realized_linear_meters || 0),
+      totalRealizedMeq: Number(data.total_realized_meq || 0),
+      totalApproxRevenueRealized: Number(data.total_approx_revenue_realized || 0),
+      totalProgressPercent: data.total_progress_percent == null ? null : Number(data.total_progress_percent || 0),
+      machines: Array.isArray(data.machines)
+        ? data.machines.map((item) => adaptProductionMachine(item as Record<string, unknown>))
+        : [],
+      topWorks: Array.isArray(data.top_works)
+        ? data.top_works.map((item) => adaptProductionWorkRanking(item as Record<string, unknown>))
+        : [],
+      ranking: Array.isArray(data.ranking)
+        ? data.ranking.map((item) => adaptProductionMachine(item as Record<string, unknown>))
+        : [],
+      timeline: Array.isArray(data.timeline)
+        ? data.timeline.map((item) => adaptProductionTimeline(item as Record<string, unknown>))
+        : [],
+      generatedAt: toStringValue(data.generated_at),
+    }
+  },
+
+  async weekly(params: { weekStart?: string; clientLogin?: string }): Promise<ProductionWeeklyDashboard> {
+    const { data } = await api.get<Record<string, unknown>>('/dashboard/weekly', {
+      params: {
+        weekStart: params.weekStart,
+        clientLogin: params.clientLogin || undefined,
+      },
+    })
+
+    return {
+      weekStart: toStringValue(data.week_start),
+      weekDates: Array.isArray(data.week_dates) ? data.week_dates.map((item) => toStringValue(item)) : [],
+      totalRealizedEstacas: Number(data.total_realized_estacas || 0),
+      totalGoalEstacas: Number(data.total_goal_estacas || 0),
+      totalRealizedLinearMeters: Number(data.total_realized_linear_meters || 0),
+      totalRealizedMeq: Number(data.total_realized_meq || 0),
+      totalApproxRevenueRealized: Number(data.total_approx_revenue_realized || 0),
+      totalProgressPercent: data.total_progress_percent == null ? null : Number(data.total_progress_percent || 0),
+      machines: Array.isArray(data.machines)
+        ? data.machines.map((item) => adaptProductionMachine(item as Record<string, unknown>))
+        : [],
+      ranking: Array.isArray(data.ranking)
+        ? data.ranking.map((item) => adaptProductionMachine(item as Record<string, unknown>))
+        : [],
+      topWorks: Array.isArray(data.top_works)
+        ? data.top_works.map((item) => adaptProductionWorkRanking(item as Record<string, unknown>))
+        : [],
+      accumulatedByDay: Array.isArray(data.accumulated_by_day)
+        ? data.accumulated_by_day.map((item) => {
+            const row = item as Record<string, unknown>
+            return {
+              date: toStringValue(row.date),
+              goalEstacas: Number(row.goal_estacas || 0),
+              realizedEstacas: Number(row.realized_estacas || 0),
+              realizedLinearMeters: Number(row.realized_linear_meters || 0),
+              realizedMeq: Number(row.realized_meq || 0),
+              approxRevenueRealized: Number(row.approx_revenue_realized || 0),
+              accumulatedEstacas: Number(row.accumulated_estacas || 0),
+              accumulatedLinearMeters: Number(row.accumulated_linear_meters || 0),
+              accumulatedMeq: Number(row.accumulated_meq || 0),
+              accumulatedApproxRevenueRealized: Number(row.accumulated_approx_revenue_realized || 0),
+              expectedAccumulatedEstacas: Number(row.expected_accumulated_estacas || 0),
+            }
+          })
+        : [],
+      timeline: Array.isArray(data.timeline)
+        ? data.timeline.map((item) => adaptProductionTimeline(item as Record<string, unknown>))
+        : [],
+      generatedAt: toStringValue(data.generated_at),
     }
   },
 }

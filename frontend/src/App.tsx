@@ -13,6 +13,7 @@ import ObraFormPage from '@/pages/obras/ObraForm'
 import EquipamentosPage from '@/pages/equipamentos/Equipamentos'
 import DiariosPage from '@/pages/diarios/Diarios'
 import DiarioFormPage from '@/pages/diarios/DiarioForm'
+import ProducaoPage from '@/pages/producao/Producao'
 
 function AppBootstrap() {
   const initialize = useAuth((state) => state.initialize)
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="obras/nova" element={<ObraFormPage />} />
           <Route path="obras/:id/editar" element={<ObraFormPage />} />
           <Route path="equipamentos" element={<EquipamentosPage />} />
+          <Route path="producao" element={<ProducaoPage />} />
           <Route path="diarios" element={<DiariosPage />} />
           <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
         </Route>

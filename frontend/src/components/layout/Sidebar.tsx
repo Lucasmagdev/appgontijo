@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, HardHat, Wrench,
-  FileText,
+  FileText, BarChart3,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ const navItems = [
   { label: 'Obras', to: '/obras', icon: HardHat },
   { label: 'Equipamentos', to: '/equipamentos', icon: Wrench },
   { type: 'divider', label: 'Operacional' },
+  { label: 'Producao', to: '/producao', icon: BarChart3 },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
 ]
 
