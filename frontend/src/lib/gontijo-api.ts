@@ -193,6 +193,21 @@ export type DiarioRecord = {
   equipamento: string
 }
 
+export type DiarioDetail = DiarioRecord & {
+  operadorId: number | null
+  operadorNome: string
+  clienteNome: string
+  dadosJson: Record<string, unknown> | null
+}
+
+export type DiarioPayload = {
+  dataDiario: string
+  status: 'rascunho' | 'pendente' | 'assinado'
+  equipamentoId: number | null
+  assinadoEm: string
+  dadosJson: Record<string, unknown> | null
+}
+
 export type DiarioFilters = {
   page?: number
   limit?: number
@@ -378,6 +393,20 @@ function adaptDiario(row: Record<string, unknown>): DiarioRecord {
     obraNumero: toStringValue(row.obra_numero),
     cliente: toStringValue(row.cliente),
     equipamento: toStringValue(row.equipamento),
+  }
+}
+
+function adaptDiarioDetail(row: Record<string, unknown>): DiarioDetail {
+  const base = adaptDiario(row)
+  return {
+    ...base,
+    operadorId: toNumberValue(row.operador_id),
+    operadorNome: toStringValue(row.operador_nome),
+    clienteNome: toStringValue(row.cliente),
+    dadosJson:
+      row.dados_json && typeof row.dados_json === 'object'
+        ? (row.dados_json as Record<string, unknown>)
+        : null,
   }
 }
 
@@ -654,5 +683,21 @@ export const diarioService = {
   },
   async remove(id: number) {
     await api.delete(`/gontijo/diarios/${id}`)
+  },
+  async getById(id: number) {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/diarios/${id}`)
+    return adaptDiarioDetail(data.data)
+  },
+  async update(id: number, payload: DiarioPayload) {
+    await api.put(`/gontijo/diarios/${id}`, {
+      data_diario: payload.dataDiario,
+      status: payload.status,
+      equipamento_id: payload.equipamentoId,
+      assinado_em: payload.assinadoEm || null,
+      dados_json: payload.dadosJson,
+    })
+  },
+  getPdfUrl(id: number) {
+    return `/api/gontijo/diarios/${id}/pdf`
   },
 }

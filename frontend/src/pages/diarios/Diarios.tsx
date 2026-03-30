@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Trash2 } from 'lucide-react'
+import { FileText, Pencil, Search, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -64,6 +65,10 @@ export default function DiariosPage() {
   async function handleDelete(id: number) {
     if (!window.confirm(`Excluir o diario ${id}?`)) return
     await deleteMutation.mutateAsync(id)
+  }
+
+  function handleOpenPdf(id: number) {
+    window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
   }
 
   function updateFilter(field: keyof typeof filters, value: string | number) {
@@ -233,6 +238,21 @@ export default function DiariosPage() {
                         </td>
                         <td>
                           <div className="action-row">
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-icon"
+                              onClick={() => handleOpenPdf(item.id)}
+                              title="Abrir PDF"
+                            >
+                              <FileText size={14} />
+                            </button>
+                            <Link
+                              to={`/diarios/${item.id}/editar`}
+                              className="btn btn-secondary btn-icon"
+                              title="Editar diario"
+                            >
+                              <Pencil size={14} />
+                            </Link>
                             <button
                               type="button"
                               className="btn btn-secondary btn-icon text-red-600"
