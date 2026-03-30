@@ -180,6 +180,31 @@ a {
   flex-wrap: wrap;
 }
 
+.tab-strip {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.4rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid #d7dde5;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 600;
+}
+
+.tab-button.is-active {
+  background: var(--brand-red);
+  border-color: var(--brand-red);
+  color: #ffffff;
+}
+
 .section-header-inline {
   display: flex;
   align-items: center;
@@ -445,6 +470,11 @@ a {
   color: #fff;
 }
 
+.status-warning {
+  background: #f59e0b;
+  color: #fff;
+}
+
 .status-neutral {
   background: #718096;
   color: #fff;
@@ -562,6 +592,40 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.live-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.live-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.live-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.86rem;
+  color: #475569;
+}
+
+.live-bar-track {
+  height: 0.85rem;
+  border-radius: 999px;
+  background: #e7ecf2;
+  overflow: hidden;
+}
+
+.live-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #c60926 0%, #ef4444 100%);
 }
 
 .span-12 {

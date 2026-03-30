@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
+import { Activity, ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -8,12 +8,15 @@ import {
   equipamentoService,
   extractApiErrorMessage,
   modalidadeService,
+  obraLiveService,
   obraService,
   type ObraContato,
   type ObraDetail,
+  type ObraLiveDashboard,
   type ObraProducao,
   type ObraResponsabilidade,
 } from '@/lib/gontijo-api'
+import { formatDate } from '@/lib/utils'
 
 const emptyProducao = (): ObraProducao => ({
   diametro: '',
@@ -83,6 +86,22 @@ function parseNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function getCurrentWeekStart() {
+  const today = new Date()
+  const day = today.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const weekStart = new Date(today)
+  weekStart.setDate(today.getDate() + diff)
+  return weekStart.toISOString().slice(0, 10)
+}
+
+function progressTone(value: number | null) {
+  if (value == null) return 'status-neutral'
+  if (value >= 100) return 'status-success'
+  if (value >= 70) return 'status-warning'
+  return 'status-danger'
+}
+
 export default function ObraFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -90,6 +109,8 @@ export default function ObraFormPage() {
   const isEditing = Boolean(id)
   const [form, setForm] = useState<ObraDetail>(initialForm)
   const [submitError, setSubmitError] = useState('')
+  const [activeTab, setActiveTab] = useState<'cadastro' | 'live'>('cadastro')
+  const [liveWeekStart, setLiveWeekStart] = useState(getCurrentWeekStart())
 
   const obraQuery = useQuery({
     queryKey: ['obra', id],
@@ -118,6 +139,36 @@ export default function ObraFormPage() {
       setForm(obraQuery.data)
     }
   }, [obraQuery.data])
+
+  const liveQuery = useQuery({
+    queryKey: ['obra-live', id, form.numero, liveWeekStart],
+    queryFn: () => obraLiveService.weeklyByObra({ weekStart: liveWeekStart, obraNumero: form.numero }),
+    enabled: isEditing && activeTab === 'live' && Boolean(form.numero.trim()),
+  })
+
+  const liveSummaryCards = useMemo(() => {
+    const live = liveQuery.data
+    if (!live) return []
+
+    return [
+      {
+        label: 'Estacas na semana',
+        value: String(live.totalRealizedEstacas),
+      },
+      {
+        label: 'Metros realizados',
+        value: `${live.totalRealizedLinearMeters.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`,
+      },
+      {
+        label: 'Maquinas com leitura',
+        value: String(live.machines.length),
+      },
+      {
+        label: 'Eventos recentes',
+        value: String(live.timeline.length),
+      },
+    ]
+  }, [liveQuery.data])
 
   const mutation = useMutation({
     mutationFn: async (payload: ObraDetail) => {
@@ -197,6 +248,8 @@ export default function ObraFormPage() {
     })
   }
 
+  const live = liveQuery.data as ObraLiveDashboard | undefined
+
   return (
     <div className="page-shell">
       <div className="flex items-center gap-3">
@@ -215,6 +268,22 @@ export default function ObraFormPage() {
 
       {(!isEditing || obraQuery.data) && (
         <form onSubmit={handleSubmit} className="space-y-4">
+          <section className="app-panel toolbar-panel">
+            <div className="tab-strip">
+              <button type="button" className={`tab-button ${activeTab === 'cadastro' ? 'is-active' : ''}`} onClick={() => setActiveTab('cadastro')}>
+                Cadastro
+              </button>
+              {isEditing ? (
+                <button type="button" className={`tab-button ${activeTab === 'live' ? 'is-active' : ''}`} onClick={() => setActiveTab('live')}>
+                  <Activity size={15} />
+                  Producao ao vivo
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          {activeTab === 'cadastro' ? (
+            <>
           <section className="app-panel section-panel">
             <h2 className="section-heading">Dados principais</h2>
             <div className="form-grid">
@@ -417,6 +486,138 @@ export default function ObraFormPage() {
             <Link to="/obras" className="btn btn-secondary">Cancelar</Link>
             <button type="submit" className="btn btn-primary" disabled={mutation.isPending}><Save size={15} />{mutation.isPending ? 'Salvando...' : 'Salvar obra'}</button>
           </div>
+            </>
+          ) : null}
+
+          {activeTab === 'live' && isEditing ? (
+            <>
+              <section className="app-panel section-panel">
+                <div className="section-header-inline">
+                  <div>
+                    <h2 className="section-heading !mb-0">Producao ao vivo da obra {form.numero || '-'}</h2>
+                    <p className="page-subtitle">Resumo reaproveitando o dashboard operacional ja existente, filtrado pela obra atual.</p>
+                  </div>
+                  <div className="inline-actions">
+                    <input type="date" value={liveWeekStart} onChange={(event) => setLiveWeekStart(event.target.value)} className="field-input" />
+                    <button type="button" className="btn btn-secondary" onClick={() => void liveQuery.refetch()}>
+                      Atualizar
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {liveQuery.isLoading ? (
+                <QueryFeedback type="loading" title="Carregando producao da obra" description="Buscando o dashboard semanal filtrado pela obra no backend existente." />
+              ) : null}
+
+              {liveQuery.isError ? (
+                <QueryFeedback type="error" title="Nao foi possivel carregar a producao ao vivo" description={extractApiErrorMessage(liveQuery.error)} />
+              ) : null}
+
+              {live ? (
+                <>
+                  <section className="stat-grid">
+                    {liveSummaryCards.map((card) => (
+                      <article key={card.label} className="app-panel stat-card">
+                        <div className="text-[0.78rem] font-semibold uppercase tracking-[0.12em] text-slate-500">{card.label}</div>
+                        <div className="stat-value">{card.value}</div>
+                      </article>
+                    ))}
+                  </section>
+
+                  <section className="grid gap-4 xl:grid-cols-[1.25fr_0.95fr]">
+                    <article className="app-panel section-panel">
+                      <div className="section-header-inline">
+                        <h2 className="section-heading !mb-0">Ritmo por dia</h2>
+                        <span className="pagination-summary">Semana iniciada em {formatDate(live.weekStart)}</span>
+                      </div>
+                      <div className="live-bars">
+                        {live.accumulatedByDay.map((day) => {
+                          const maxValue = Math.max(...live.accumulatedByDay.map((item) => item.realizedEstacas), 1)
+                          const width = `${Math.max((day.realizedEstacas / maxValue) * 100, day.realizedEstacas ? 8 : 0)}%`
+                          return (
+                            <div key={day.date} className="live-bar-row">
+                              <div className="live-bar-meta">
+                                <strong>{formatDate(day.date)}</strong>
+                                <span>{day.realizedEstacas} estacas</span>
+                              </div>
+                              <div className="live-bar-track">
+                                <span className="live-bar-fill" style={{ width }} />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </article>
+
+                    <article className="app-panel section-panel">
+                      <h2 className="section-heading">Maquinas da obra</h2>
+                      <div className="stack-list">
+                        {live.machines.length ? (
+                          live.machines.map((machine) => (
+                            <div key={`${machine.imei}-${machine.machineName}`} className="nested-card">
+                              <div className="section-header-inline">
+                                <div>
+                                  <strong>{machine.machineName}</strong>
+                                  <div className="pagination-summary">{machine.imei}</div>
+                                </div>
+                                <span className={`status-badge ${progressTone(machine.progressPercent)}`}>
+                                  {machine.progressPercent == null ? 'Sem meta' : `${machine.progressPercent.toFixed(0)}%`}
+                                </span>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-3">
+                                <div><div className="field-label">Estacas</div><div className="text-lg font-semibold text-slate-800">{machine.realizedEstacas}</div></div>
+                                <div><div className="field-label">Metros</div><div className="text-lg font-semibold text-slate-800">{machine.realizedLinearMeters.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m</div></div>
+                                <div><div className="field-label">Obra lida</div><div className="text-sm font-semibold text-slate-700">{machine.obraCode || machine.obraName || '-'}</div></div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <QueryFeedback type="empty" title="Sem producao para esta obra" description="Nenhuma maquina retornou leituras para o numero de obra filtrado nesta semana." />
+                        )}
+                      </div>
+                    </article>
+                  </section>
+
+                  <section className="app-panel section-panel">
+                    <h2 className="section-heading">Ultimos eventos de producao</h2>
+                    <div className="table-scroll">
+                      <table className="data-table min-w-[860px]">
+                        <thead>
+                          <tr>
+                            <th>Data</th>
+                            <th>Maquina</th>
+                            <th>Estaca</th>
+                            <th>Obra</th>
+                            <th>Metros</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {live.timeline.length ? (
+                            live.timeline.slice(0, 20).map((item, index) => (
+                              <tr key={`${item.date}-${item.machineName}-${item.estaca}-${index}`}>
+                                <td>{item.date ? `${formatDate(item.date)} ${item.finishedAt || ''}` : '-'}</td>
+                                <td>{item.machineName || '-'}</td>
+                                <td>{item.estaca || '-'}</td>
+                                <td>{item.obraCode || item.obraName || '-'}</td>
+                                <td>{item.realizedLinearMeters.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={5}>
+                                <QueryFeedback type="empty" title="Sem timeline" description="Nao houve eventos recentes para a obra filtrada." />
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
+              ) : null}
+            </>
+          ) : null}
         </form>
       )}
     </div>

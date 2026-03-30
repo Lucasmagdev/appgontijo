@@ -219,6 +219,47 @@ export type DiarioFilters = {
   status?: string
 }
 
+export type LiveDashboardMachine = {
+  imei: string
+  machineName: string
+  obraCode: string
+  obraName: string
+  realizedEstacas: number
+  realizedLinearMeters: number
+  realizedMeq: number
+  approxRevenueRealized: number
+  weeklyGoalEstacas: number
+  progressPercent: number | null
+}
+
+export type LiveDashboardTimelineItem = {
+  date: string
+  finishedAt: string
+  machineName: string
+  obraName: string
+  obraCode: string
+  estaca: string
+  realizedLinearMeters: number
+}
+
+export type ObraLiveDashboard = {
+  weekStart: string
+  weekDates: string[]
+  totalRealizedEstacas: number
+  totalGoalEstacas: number
+  totalRealizedLinearMeters: number
+  totalRealizedMeq: number
+  totalApproxRevenueRealized: number
+  machines: LiveDashboardMachine[]
+  timeline: LiveDashboardTimelineItem[]
+  accumulatedByDay: Array<{
+    date: string
+    realizedEstacas: number
+    expectedAccumulatedEstacas: number
+    accumulatedEstacas: number
+  }>
+}
+
 function listResult<T>(payload: ApiEnvelope<T[]>): ApiListResult<T> {
   return {
     items: payload.data,
@@ -699,5 +740,97 @@ export const diarioService = {
   },
   getPdfUrl(id: number) {
     return `/api/gontijo/diarios/${id}/pdf`
+  },
+}
+
+export const obraLiveService = {
+  async weeklyByObra(params: { weekStart: string; obraNumero: string }) {
+    const mappingsResponse = await api.get<{ ok: boolean; items: Array<Record<string, unknown>> }>('/admin/mappings', {
+      params: { includeInactive: false },
+    })
+
+    const machines = mappingsResponse.data.items
+      .map((item) => ({
+        name: toStringValue(item.machine_name),
+        imei: toStringValue(item.imei),
+      }))
+      .filter((item) => item.name && item.imei)
+
+    const { data } = await api.post<Record<string, unknown>>('/dashboard/weekly', {
+      weekStart: params.weekStart,
+      obraFilter: params.obraNumero,
+      machines,
+    })
+
+    return {
+      weekStart: toStringValue(data.weekStart),
+      weekDates: Array.isArray(data.weekDates) ? data.weekDates.map((item) => toStringValue(item)) : [],
+      totalRealizedEstacas: Number(data.total_realized_estacas || 0),
+      totalGoalEstacas: Number(data.total_goal_estacas || 0),
+      totalRealizedLinearMeters: Number(data.total_realized_linear_meters || 0),
+      totalRealizedMeq: Number(data.total_realized_meq || 0),
+      totalApproxRevenueRealized: Number(data.total_approx_revenue_realized || 0),
+      machines: Array.isArray(data.machines)
+        ? data.machines.map((item) => {
+            const machineRow = item as Record<string, unknown>
+            const machineInfo = (machineRow.machine as Record<string, unknown> | undefined) || {}
+
+            return {
+              imei: toStringValue(machineInfo.imei),
+              machineName: toStringValue(machineInfo.name),
+              obraCode: toStringValue(machineRow.obra_code),
+              obraName: toStringValue(machineRow.obra_name),
+              realizedEstacas: Number(machineRow.weeklyTotalCount || 0),
+              realizedLinearMeters: Number(machineRow.weeklyTotalMeters || 0),
+              realizedMeq: 0,
+              approxRevenueRealized: 0,
+              weeklyGoalEstacas: Number(machineRow.weekly_goal_estacas || 0),
+              progressPercent: machineRow.progress_percent == null ? null : Number(machineRow.progress_percent || 0),
+            }
+          })
+        : [],
+      timeline: Array.isArray(data.timeline)
+        ? data.timeline.map((item) => ({
+            date: toStringValue((item as Record<string, unknown>).date),
+            finishedAt: toStringValue((item as Record<string, unknown>).finishedAt),
+            machineName: toStringValue((item as Record<string, unknown>).machineName),
+            obraName: toStringValue((item as Record<string, unknown>).contrato),
+            obraCode: toStringValue((item as Record<string, unknown>).obra),
+            estaca: toStringValue((item as Record<string, unknown>).estaca),
+            realizedLinearMeters: Number((item as Record<string, unknown>).realizadoM || 0),
+          }))
+        : [],
+      accumulatedByDay: Array.isArray(data.weekDates)
+        ? (data.weekDates as unknown[]).reduce<Array<{ date: string; realizedEstacas: number; expectedAccumulatedEstacas: number; accumulatedEstacas: number }>>(
+            (acc, dateItem, index, source) => {
+              const date = toStringValue(dateItem)
+              const realizedEstacas = Array.isArray(data.machines)
+                ? (data.machines as Array<Record<string, unknown>>).reduce<number>((sum, machine) => {
+                    const daily = Array.isArray(machine.daily) ? machine.daily : []
+                    const current = daily.find((item) => toStringValue((item as Record<string, unknown>).date) === date) as
+                      | Record<string, unknown>
+                      | undefined
+
+                    return sum + Number(current?.totalCount || 0)
+                  }, 0)
+                : 0
+
+              const accumulatedEstacas = realizedEstacas + (acc[index - 1]?.accumulatedEstacas || 0)
+              const expectedAccumulatedEstacas =
+                source.length > 0 ? Number((((Number(data.total_goal_estacas || 0) / source.length) * (index + 1))).toFixed(2)) : 0
+
+              acc.push({
+                date,
+                realizedEstacas,
+                expectedAccumulatedEstacas,
+                accumulatedEstacas,
+              })
+
+              return acc
+            },
+            []
+          )
+        : [],
+    } satisfies ObraLiveDashboard
   },
 }
