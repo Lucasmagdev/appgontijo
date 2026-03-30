@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp:*)",
+      "Bash(claude --dangerously-skip-permissions -p \"/plugin marketplace add mksglu/context-mode\")",
+      "Bash(claude plugin:*)"
+    ]
+  }
+}

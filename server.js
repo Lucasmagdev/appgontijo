@@ -7,7 +7,11 @@ const dotenv = require("dotenv");
 const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const XLSX = require("xlsx");
+
+dotenv.config();
+
 const adminStore = require("./lib/admin-store");
+const gontijoRoutes = require("./lib/gontijo-routes");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
 const { resolveOfficialMachine, isOfficialGoalItem } = require("./lib/official-machine-catalog");
@@ -23,10 +27,11 @@ const {
   GetObjectCommand,
 } = require("@aws-sdk/client-s3");
 
-dotenv.config();
-
 const app = express();
 const port = Number(process.env.PORT || 3000);
+
+app.use(express.json());
+app.use('/api/gontijo', gontijoRoutes);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 let goalTargetSanitizePromise = null;
 
@@ -1559,6 +1564,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.post("/api/admin/session", (req, res) => {
   const password = String(req.body?.password || "");
+  const remember = Boolean(req.body?.remember);
   const configuredPassword = process.env.ADMIN_PASSWORD || "admin";
 
   if (password !== configuredPassword) {
@@ -1568,13 +1574,14 @@ app.post("/api/admin/session", (req, res) => {
     });
   }
 
-    const token = crypto.randomUUID();
+  const token = crypto.randomUUID();
   adminSessions.set(token, {
     createdAt: new Date().toISOString(),
+    remember,
   });
   setCookie(res, "admin_session", token, {
-    maxAge: 60 * 60 * 12,
     ...cookieOptionsForRequest(),
+    ...(remember ? { maxAge: 60 * 60 * 12 } : {}),
   });
 
   return res.json({
