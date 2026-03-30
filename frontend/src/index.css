@@ -540,6 +540,30 @@ a {
   align-items: end;
 }
 
+.diary-stakes-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.45fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.diary-stake-editor {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 0.9rem;
+}
+
+.diary-row-active {
+  background: #fff5f7;
+}
+
+.diary-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
 .span-12 {
   grid-column: span 12 / span 12;
 }
@@ -592,6 +616,11 @@ a {
 
   .selection-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diary-stakes-layout,
+  .diary-plan-grid {
+    grid-template-columns: 1fr;
   }
 }
 
