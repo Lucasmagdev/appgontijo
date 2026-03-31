@@ -1625,7 +1625,7 @@ app.post("/api/operador/session", async (req, res) => {
 
   try {
     const [[user]] = await db.query(
-      "SELECT id, nome, login, telefone, perfil, senha_hash FROM usuarios WHERE login = ? AND status = 'ativo'",
+      "SELECT id, name, document, phone, password, active FROM users WHERE document = ? AND active = 'S'",
       [cpf]
     );
 
@@ -1633,7 +1633,7 @@ app.post("/api/operador/session", async (req, res) => {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
 
-    const senhaOk = await bcrypt.compare(senha, user.senha_hash);
+    const senhaOk = await bcrypt.compare(senha, user.password);
     if (!senhaOk) {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
@@ -1641,14 +1641,14 @@ app.post("/api/operador/session", async (req, res) => {
     const token = crypto.randomUUID();
     operadorSessions.set(token, {
       userId: user.id,
-      cpf: user.login,
+      cpf: user.document,
       createdAt: new Date().toISOString(),
     });
     setCookie(res, "operador_session", token, cookieOptionsForRequest());
 
     return res.json({
       ok: true,
-      user: { id: user.id, nome: user.nome, cpf: user.login, perfil: user.perfil },
+      user: { id: user.id, nome: user.name, cpf: user.document, perfil: "operador" },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
@@ -1668,7 +1668,7 @@ app.get("/api/operador/status", async (req, res) => {
 
   try {
     const [[user]] = await db.query(
-      "SELECT id, nome, login, perfil FROM usuarios WHERE id = ? AND status = 'ativo'",
+      "SELECT id, name, document FROM users WHERE id = ? AND active = 'S'",
       [session.userId]
     );
     if (!user) {
@@ -1679,7 +1679,7 @@ app.get("/api/operador/status", async (req, res) => {
     return res.json({
       ok: true,
       authenticated: true,
-      user: { id: user.id, nome: user.nome, cpf: user.login, perfil: user.perfil },
+      user: { id: user.id, nome: user.name, cpf: user.document, perfil: "operador" },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });

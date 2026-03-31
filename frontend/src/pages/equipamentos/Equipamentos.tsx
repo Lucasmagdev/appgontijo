@@ -21,6 +21,8 @@ function createDraft(): DraftEquipamento {
     computadorGeo: '',
     modalidadeId: null,
     status: 'ativo',
+    imei: '',
+    obraNumero: '',
   }
 }
 
@@ -50,6 +52,8 @@ export default function EquipamentosPage() {
           computadorGeo: item.computadorGeo,
           modalidadeId: item.modalidadeId,
           status: item.status,
+          imei: item.imei,
+          obraNumero: item.obraNumero,
         }))
       )
     }
@@ -62,6 +66,8 @@ export default function EquipamentosPage() {
         computadorGeo: draft.computadorGeo.trim(),
         modalidadeId: draft.modalidadeId,
         status: draft.status,
+        imei: draft.imei?.trim(),
+        obraNumero: draft.obraNumero?.trim(),
       }
 
       if (draft.id) {
@@ -74,6 +80,7 @@ export default function EquipamentosPage() {
     onSuccess: async () => {
       setSaveError('')
       await queryClient.invalidateQueries({ queryKey: ['equipamentos'] })
+      await queryClient.invalidateQueries({ queryKey: ['equipamentos-parametrizados'] })
       await queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
     },
     onError: (error) => {
@@ -172,6 +179,28 @@ export default function EquipamentosPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="field-label">Numero da obra</label>
+                  <input
+                    type="text"
+                    value={card.obraNumero || ''}
+                    onChange={(event) => updateDraft(card.localId, 'obraNumero', event.target.value)}
+                    className="field-input"
+                    placeholder="Ex: 1042"
+                  />
+                </div>
+
+                <div>
+                  <label className="field-label">IMEI</label>
+                  <input
+                    type="text"
+                    value={card.imei || ''}
+                    onChange={(event) => updateDraft(card.localId, 'imei', event.target.value)}
+                    className="field-input"
+                    placeholder="Ex: 352099001761481"
+                  />
                 </div>
 
                 <div>

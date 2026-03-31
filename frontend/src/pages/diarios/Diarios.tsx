@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Pencil, Search, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -14,15 +13,25 @@ import { formatDate } from '@/lib/utils'
 
 export default function DiariosPage() {
   const queryClient = useQueryClient()
-  const [filters, setFilters] = useState({
+
+  const [pendingFilters, setPendingFilters] = useState({
+    dataInicio: '',
+    dataFim: '',
+    obra: '',
+    ot: '',
+    modalidadeId: '',
+    equipamentoId: '',
+  })
+
+  const [appliedFilters, setAppliedFilters] = useState({
     dataInicio: '',
     dataFim: '',
     obra: '',
     modalidadeId: '',
     equipamentoId: '',
-    status: '',
     page: 1,
   })
+
   const [deleteError, setDeleteError] = useState('')
 
   const modalidadesQuery = useQuery({
@@ -36,17 +45,16 @@ export default function DiariosPage() {
   })
 
   const diariosQuery = useQuery({
-    queryKey: ['diarios', filters],
+    queryKey: ['diarios', appliedFilters],
     queryFn: () =>
       diarioService.list({
-        page: filters.page,
+        page: appliedFilters.page,
         limit: 20,
-        dataInicio: filters.dataInicio || undefined,
-        dataFim: filters.dataFim || undefined,
-        obra: filters.obra || undefined,
-        modalidadeId: filters.modalidadeId ? Number(filters.modalidadeId) : null,
-        equipamentoId: filters.equipamentoId ? Number(filters.equipamentoId) : null,
-        status: filters.status || undefined,
+        dataInicio: appliedFilters.dataInicio || undefined,
+        dataFim: appliedFilters.dataFim || undefined,
+        obra: appliedFilters.obra || undefined,
+        modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
+        equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
       }),
   })
 
@@ -62,6 +70,17 @@ export default function DiariosPage() {
     },
   })
 
+  function handleApplyFilters() {
+    setAppliedFilters({
+      dataInicio: pendingFilters.dataInicio,
+      dataFim: pendingFilters.dataFim,
+      obra: pendingFilters.obra,
+      modalidadeId: pendingFilters.modalidadeId,
+      equipamentoId: pendingFilters.equipamentoId,
+      page: 1,
+    })
+  }
+
   async function handleDelete(id: number) {
     if (!window.confirm(`Excluir o diario ${id}?`)) return
     await deleteMutation.mutateAsync(id)
@@ -71,64 +90,67 @@ export default function DiariosPage() {
     window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
   }
 
-  function updateFilter(field: keyof typeof filters, value: string | number) {
-    setFilters((prev) => ({ ...prev, [field]: value, page: field === 'page' ? Number(value) : 1 }))
+  function updatePending(field: keyof typeof pendingFilters, value: string) {
+    setPendingFilters((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
     <div className="page-shell">
-      <div>
-        <h1 className="page-heading">Diarios</h1>
-        <p className="page-subtitle">Listagem real dos diarios de obra ja migrados para o MySQL.</p>
-      </div>
+      <h1 className="page-heading">Diários</h1>
 
+      {/* Filter bar */}
       <section className="app-panel toolbar-panel">
-        <div className="filter-grid">
-          <div className="filter-col-2">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
             <label className="field-label">De</label>
             <input
               type="date"
-              value={filters.dataInicio}
-              onChange={(event) => updateFilter('dataInicio', event.target.value)}
-              className="field-input"
+              value={pendingFilters.dataInicio}
+              onChange={(e) => updatePending('dataInicio', e.target.value)}
+              className="field-input w-36"
             />
           </div>
 
-          <div className="filter-col-2">
-            <label className="field-label">Ate</label>
+          <div className="flex flex-col gap-1">
+            <label className="field-label">Até</label>
             <input
               type="date"
-              value={filters.dataFim}
-              onChange={(event) => updateFilter('dataFim', event.target.value)}
-              className="field-input"
+              value={pendingFilters.dataFim}
+              onChange={(e) => updatePending('dataFim', e.target.value)}
+              className="field-input w-36"
             />
           </div>
 
-          <div className="filter-col-2">
-            <label className="field-label">N da Obra</label>
-            <div className="relative">
-              <Search
-                size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-              <input
-                type="text"
-                value={filters.obra}
-                onChange={(event) => updateFilter('obra', event.target.value)}
-                placeholder="Numero da obra"
-                className="field-input pl-9"
-              />
-            </div>
+          <div className="flex flex-col gap-1">
+            <label className="field-label">N° da Obra</label>
+            <input
+              type="text"
+              value={pendingFilters.obra}
+              onChange={(e) => updatePending('obra', e.target.value)}
+              placeholder="N° da Obra"
+              className="field-input w-28"
+            />
           </div>
 
-          <div className="filter-col-2">
-            <label className="field-label">Modalidade</label>
+          <div className="flex flex-col gap-1">
+            <label className="field-label">N° da OS</label>
+            <input
+              type="text"
+              value={pendingFilters.ot}
+              onChange={(e) => updatePending('ot', e.target.value)}
+              placeholder="N° da OS"
+              className="field-input w-28"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="field-label">Modalidade da Obra</label>
             <select
-              value={filters.modalidadeId}
-              onChange={(event) => updateFilter('modalidadeId', event.target.value)}
-              className="field-select"
+              value={pendingFilters.modalidadeId}
+              onChange={(e) => updatePending('modalidadeId', e.target.value)}
+              className="field-select w-44"
             >
-              <option value="">Todas</option>
+              <option value="">Selecione</option>
               {modalidadesQuery.data?.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.nome}
@@ -137,14 +159,14 @@ export default function DiariosPage() {
             </select>
           </div>
 
-          <div className="filter-col-2">
+          <div className="flex flex-col gap-1">
             <label className="field-label">Equipamento</label>
             <select
-              value={filters.equipamentoId}
-              onChange={(event) => updateFilter('equipamentoId', event.target.value)}
-              className="field-select"
+              value={pendingFilters.equipamentoId}
+              onChange={(e) => updatePending('equipamentoId', e.target.value)}
+              className="field-select w-36"
             >
-              <option value="">Todos</option>
+              <option value="">Selec.</option>
               {equipamentosQuery.data?.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.nome}
@@ -153,19 +175,23 @@ export default function DiariosPage() {
             </select>
           </div>
 
-          <div className="filter-col-2">
-            <label className="field-label">Status</label>
-            <select
-              value={filters.status}
-              onChange={(event) => updateFilter('status', event.target.value)}
-              className="field-select"
-            >
-              <option value="">Todos</option>
-              <option value="rascunho">Rascunho</option>
-              <option value="pendente">Pendente</option>
-              <option value="assinado">Assinado</option>
-            </select>
-          </div>
+          <button
+            type="button"
+            onClick={handleApplyFilters}
+            className="btn"
+            style={{ backgroundColor: '#e53e3e', color: '#fff', alignSelf: 'flex-end' }}
+          >
+            Filtrar
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            style={{ backgroundColor: '#2d3748', color: '#fff', alignSelf: 'flex-end' }}
+            disabled
+          >
+            Baixar todos
+          </button>
         </div>
       </section>
 
@@ -174,11 +200,7 @@ export default function DiariosPage() {
       ) : null}
 
       {diariosQuery.isLoading ? (
-        <QueryFeedback
-          type="loading"
-          title="Carregando diarios"
-          description="Aplicando os filtros reais na base migrada."
-        />
+        <QueryFeedback type="loading" title="Carregando diarios" description="" />
       ) : null}
 
       {diariosQuery.isError ? (
@@ -195,15 +217,19 @@ export default function DiariosPage() {
 
           <section className="app-panel table-shell">
             <div className="table-scroll">
-              <table className="data-table min-w-[920px]">
+              <table className="data-table min-w-[900px]">
                 <thead>
                   <tr>
-                    <th>N da Obra</th>
+                    <th>N° da Obra</th>
                     <th>Cliente</th>
-                    <th>Data</th>
+                    <th>
+                      <span className="flex items-center gap-1">
+                        Data <span className="text-slate-400">↓</span>
+                      </span>
+                    </th>
                     <th>Equipamento</th>
                     <th>Assinatura</th>
-                    <th>Acoes</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -215,51 +241,59 @@ export default function DiariosPage() {
                         <td>{item.dataDiario ? formatDate(item.dataDiario) : '-'}</td>
                         <td>{item.equipamento || '-'}</td>
                         <td>
-                          <div className="status-stack">
+                          <div className="flex flex-col gap-1 items-start">
                             <span
-                              className={`status-badge ${
+                              className="text-xs font-semibold px-2 py-0.5 rounded"
+                              style={
                                 item.status === 'assinado'
-                                  ? 'status-success'
+                                  ? { backgroundColor: '#c6f6d5', color: '#276749' }
                                   : item.status === 'pendente'
-                                    ? 'status-danger'
-                                    : 'status-neutral'
-                              }`}
+                                    ? { backgroundColor: '#fed7d7', color: '#9b2c2c' }
+                                    : { backgroundColor: '#fed7d7', color: '#9b2c2c' }
+                              }
                             >
-                              {item.status === 'assinado'
-                                ? 'Assinado'
-                                : item.status === 'pendente'
-                                  ? 'Pendente'
-                                  : 'Rascunho'}
+                              {item.status === 'assinado' ? 'Assinado' : 'Não assinado'}
                             </span>
-                            {item.assinadoEm ? (
+                            {item.status !== 'assinado' && (
+                              <button
+                                type="button"
+                                className="text-xs font-semibold px-3 py-1 rounded"
+                                style={{ backgroundColor: '#38a169', color: '#fff' }}
+                              >
+                                Enviar
+                              </button>
+                            )}
+                            {item.status === 'assinado' && item.assinadoEm ? (
                               <span className="text-xs text-slate-400">{formatDate(item.assinadoEm)}</span>
                             ) : null}
                           </div>
                         </td>
                         <td>
-                          <div className="action-row">
+                          <div className="flex flex-col gap-1 items-start">
+                            <div className="flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPdf(item.id)}
+                                className="text-xs font-semibold px-3 py-1 rounded"
+                                style={{ backgroundColor: '#319795', color: '#fff' }}
+                              >
+                                Abrir PDF
+                              </button>
+                              <Link
+                                to={`/diarios/${item.id}/editar`}
+                                className="text-xs font-semibold px-3 py-1 rounded"
+                                style={{ backgroundColor: '#38a169', color: '#fff' }}
+                              >
+                                Editar
+                              </Link>
+                            </div>
                             <button
                               type="button"
-                              className="btn btn-secondary btn-icon"
-                              onClick={() => handleOpenPdf(item.id)}
-                              title="Abrir PDF"
-                            >
-                              <FileText size={14} />
-                            </button>
-                            <Link
-                              to={`/diarios/${item.id}/editar`}
-                              className="btn btn-secondary btn-icon"
-                              title="Editar diario"
-                            >
-                              <Pencil size={14} />
-                            </Link>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-icon text-red-600"
                               onClick={() => void handleDelete(item.id)}
-                              title="Excluir diario"
+                              className="text-xs font-semibold px-3 py-1 rounded"
+                              style={{ backgroundColor: '#e53e3e', color: '#fff' }}
                             >
-                              <Trash2 size={14} />
+                              Excluir
                             </button>
                           </div>
                         </td>
@@ -285,7 +319,9 @@ export default function DiariosPage() {
             page={diariosQuery.data.page}
             total={diariosQuery.data.total}
             limit={diariosQuery.data.limit}
-            onPageChange={(page) => updateFilter('page', page)}
+            onPageChange={(page) =>
+              setAppliedFilters((prev) => ({ ...prev, page }))
+            }
           />
         </>
       ) : null}

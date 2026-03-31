@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS equipamentos (
   nome            VARCHAR(60)  NOT NULL,
   computador_geo  VARCHAR(60),
   modalidade_id   INT UNSIGNED,
+  imei            VARCHAR(30),
+  obra_numero     VARCHAR(50),
   status          ENUM('ativo','inativo') NOT NULL DEFAULT 'ativo',
   criado_em       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   atualizado_em   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -197,6 +199,18 @@ CREATE TABLE IF NOT EXISTS diarios (
   FOREIGN KEY (obra_id)        REFERENCES obras(id)        ON DELETE RESTRICT,
   FOREIGN KEY (equipamento_id) REFERENCES equipamentos(id) ON DELETE SET NULL,
   FOREIGN KEY (operador_id)    REFERENCES usuarios(id)     ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS diarios_staff (
+  id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  diario_id    INT UNSIGNED NOT NULL,
+  usuario_id   INT UNSIGNED NULL,
+  nome_membro  VARCHAR(160) NULL,
+  ordem        TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  criado_em    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (diario_id) REFERENCES diarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
 );
 
 -- ------------------------------------------------------------

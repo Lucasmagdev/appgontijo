@@ -14,6 +14,7 @@ import {
   type ObraProducao,
   type ObraResponsabilidade,
 } from '@/lib/gontijo-api'
+import { calculateSegmentMeq, parseDiameterCm } from '@/lib/meq'
 
 const emptyProducao = (): ObraProducao => ({
   diametro: '',
@@ -81,6 +82,14 @@ function parseNumberInput(value: string) {
   if (!value.trim()) return null
   const parsed = Number(value.replace(',', '.'))
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatDecimal(value: number | null | undefined, digits = 2) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-'
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
 }
 
 export default function ObraFormPage() {
@@ -172,6 +181,11 @@ export default function ObraFormPage() {
       return { ...prev, contatos: next }
     })
   }
+
+  const totalMetaMeq = form.producao.reduce((sum, item) => {
+    const meq = calculateSegmentMeq(item.qtdEstacas, item.profundidade, parseDiameterCm(item.diametro))
+    return sum + Number(meq.metaMeqSegmento || 0)
+  }, 0)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -355,22 +369,46 @@ export default function ObraFormPage() {
 
           <section className="app-panel section-panel">
             <div className="section-header-inline">
-              <h2 className="section-heading !mb-0">Producao</h2>
-              <button type="button" className="btn btn-secondary" onClick={() => setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] }))}><Plus size={15} />Adicionar linha</button>
+              <div>
+                <h2 className="section-heading !mb-0">Producao</h2>
+                <p className="page-subtitle">MEQ calculado com a mesma regra do outro sistema: estacas x profundidade x fator do diametro.</p>
+              </div>
+              <div className="inline-actions">
+                <span className="pagination-chip">Meta MEQ total: {formatDecimal(totalMetaMeq)}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] }))}><Plus size={15} />Adicionar linha</button>
+              </div>
             </div>
             <div className="stack-list">
-              {form.producao.length ? form.producao.map((item, index) => (
-                <div key={`producao-${index}`} className="nested-card">
-                  <div className="form-grid">
-                    <div className="span-2"><label className="field-label">Diametro</label><input type="text" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} className="field-input" /></div>
-                    <div className="span-2"><label className="field-label">Profundidade</label><input type="number" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                    <div className="span-2"><label className="field-label">Qtd. estacas</label><input type="number" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} className="field-input" /></div>
-                    <div className="span-2"><label className="field-label">Preco</label><input type="number" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                    <div className="span-3"><label className="field-label">Subtotal</label><input type="number" value={item.subtotal ?? ''} onChange={(event) => updateProducao(index, 'subtotal', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                    <div className="span-1 nested-actions"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, producao: prev.producao.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 size={14} /></button></div>
+              {form.producao.length ? form.producao.map((item, index) => {
+                const diametroCm = parseDiameterCm(item.diametro)
+                const meq = calculateSegmentMeq(item.qtdEstacas, item.profundidade, diametroCm)
+
+                return (
+                  <div key={`producao-${index}`} className="nested-card">
+                    <div className="form-grid">
+                      <div className="span-2"><label className="field-label">Diametro</label><input type="text" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} className="field-input" /></div>
+                      <div className="span-2"><label className="field-label">Profundidade</label><input type="number" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
+                      <div className="span-2"><label className="field-label">Qtd. estacas</label><input type="number" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} className="field-input" /></div>
+                      <div className="span-2"><label className="field-label">Preco</label><input type="number" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
+                      <div className="span-2"><label className="field-label">Subtotal</label><input type="number" value={item.subtotal ?? ''} onChange={(event) => updateProducao(index, 'subtotal', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
+                      <div className="span-2 nested-actions"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, producao: prev.producao.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 size={14} /></button></div>
+
+                      <div className="span-3">
+                        <label className="field-label">Diametro convertido</label>
+                        <div className="pagination-chip w-full justify-center">{diametroCm == null ? '-' : `${formatDecimal(diametroCm, 1)} cm`}</div>
+                      </div>
+                      <div className="span-3">
+                        <label className="field-label">Fator MEQ</label>
+                        <div className="pagination-chip w-full justify-center">{formatDecimal(meq.meqFactor, 4)}</div>
+                      </div>
+                      <div className="span-3">
+                        <label className="field-label">Meta MEQ segmento</label>
+                        <div className="pagination-chip w-full justify-center">{formatDecimal(meq.metaMeqSegmento)}</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )) : <QueryFeedback type="empty" title="Nenhuma linha de producao" description="Adicione as faixas de diametro e volume da obra." />}
+                )
+              }) : <QueryFeedback type="empty" title="Nenhuma linha de producao" description="Adicione as faixas de diametro e volume da obra." />}
             </div>
           </section>
 

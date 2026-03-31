@@ -95,6 +95,8 @@ export type EquipamentoRecord = {
   modalidadeId: number | null
   modalidadeNome: string
   status: 'ativo' | 'inativo'
+  imei: string
+  obraNumero: string
 }
 
 export type EquipamentoPayload = {
@@ -102,6 +104,8 @@ export type EquipamentoPayload = {
   computadorGeo: string
   modalidadeId: number | null
   status?: 'ativo' | 'inativo'
+  imei?: string
+  obraNumero?: string
 }
 
 export type ObraResumo = {
@@ -122,6 +126,9 @@ export type ObraProducao = {
   qtdEstacas: number | null
   preco: number | null
   subtotal: number | null
+  diametroCm?: number | null
+  meqFactor?: number | null
+  metaMeqSegmento?: number | null
 }
 
 export type ObraResponsabilidade = {
@@ -216,6 +223,7 @@ export type DiarioFilters = {
   obra?: string
   modalidadeId?: number | null
   equipamentoId?: number | null
+  operadorId?: number | null
   status?: string
 }
 
@@ -380,6 +388,13 @@ function toBooleanValue(value: unknown): boolean {
   return value === true || value === 1 || value === '1'
 }
 
+function toDateOnly(value: unknown): string {
+  const text = toStringValue(value)
+  if (!text) return ''
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/)
+  return match ? match[1] : text
+}
+
 function adaptUsuario(row: Record<string, unknown>): UsuarioRecord {
   return {
     id: Number(row.id),
@@ -420,6 +435,8 @@ function adaptEquipamento(row: Record<string, unknown>): EquipamentoRecord {
     modalidadeId: toNumberValue(row.modalidade_id),
     modalidadeNome: toStringValue(row.modalidade_nome),
     status: row.status === 'inativo' ? 'inativo' : 'ativo',
+    imei: toStringValue(row.imei),
+    obraNumero: toStringValue(row.obra_numero),
   }
 }
 
@@ -445,6 +462,9 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
         qtdEstacas: toNumberValue((item as Record<string, unknown>).qtd_estacas),
         preco: toNumberValue((item as Record<string, unknown>).preco),
         subtotal: toNumberValue((item as Record<string, unknown>).subtotal),
+        diametroCm: toNumberValue((item as Record<string, unknown>).diametro_cm),
+        meqFactor: toNumberValue((item as Record<string, unknown>).meq_factor),
+        metaMeqSegmento: toNumberValue((item as Record<string, unknown>).meta_meq_segmento),
       }))
     : []
 
@@ -525,7 +545,7 @@ function adaptDiario(row: Record<string, unknown>): DiarioRecord {
     id: Number(row.id),
     obraId: Number(row.obra_id),
     equipamentoId: toNumberValue(row.equipamento_id),
-    dataDiario: toStringValue(row.data_diario),
+    dataDiario: toDateOnly(row.data_diario),
     status: (toStringValue(row.status) || 'pendente') as DiarioRecord['status'],
     assinadoEm: toStringValue(row.assinado_em),
     obraNumero: toStringValue(row.obra_numero),
@@ -899,6 +919,12 @@ export const equipamentoService = {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/equipamentos')
     return data.data.map(adaptEquipamento)
   },
+  async listParametrizados() {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/equipamentos', {
+      params: { parametrizados: 1 },
+    })
+    return data.data.map(adaptEquipamento)
+  },
   async listOptions(): Promise<OptionItem[]> {
     const rows = await equipamentoService.list()
     return rows.map((item) => ({ id: item.id, nome: item.nome }))
@@ -908,6 +934,8 @@ export const equipamentoService = {
       nome: payload.nome,
       computador_geo: payload.computadorGeo,
       modalidade_id: payload.modalidadeId,
+      imei: payload.imei,
+      obra_numero: payload.obraNumero,
     })
     return data.id
   },
@@ -917,6 +945,8 @@ export const equipamentoService = {
       computador_geo: payload.computadorGeo,
       modalidade_id: payload.modalidadeId,
       status: payload.status,
+      imei: payload.imei,
+      obra_numero: payload.obraNumero,
     })
   },
 }
@@ -959,6 +989,7 @@ export const diarioService = {
         obra: filters.obra,
         modalidade_id: filters.modalidadeId,
         equipamento_id: filters.equipamentoId,
+        operador_id: filters.operadorId,
         status: filters.status,
       },
     })
@@ -972,9 +1003,29 @@ export const diarioService = {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/diarios/${id}`)
     return adaptDiarioDetail(data.data)
   },
+  async create(payload: {
+    obraId: number
+    operadorId: number | null
+    dataDiario: string
+    status: 'rascunho' | 'pendente' | 'assinado'
+    equipamentoId: number | null
+    assinadoEm: string
+    dadosJson: Record<string, unknown> | null
+  }) {
+    const { data } = await api.post<{ id: number }>('/gontijo/diarios', {
+      obra_id: payload.obraId,
+      operador_id: payload.operadorId,
+      data_diario: toDateOnly(payload.dataDiario),
+      status: payload.status,
+      equipamento_id: payload.equipamentoId,
+      assinado_em: payload.assinadoEm || null,
+      dados_json: payload.dadosJson,
+    })
+    return data.id
+  },
   async update(id: number, payload: DiarioPayload) {
     await api.put(`/gontijo/diarios/${id}`, {
-      data_diario: payload.dataDiario,
+      data_diario: toDateOnly(payload.dataDiario),
       status: payload.status,
       equipamento_id: payload.equipamentoId,
       assinado_em: payload.assinadoEm || null,

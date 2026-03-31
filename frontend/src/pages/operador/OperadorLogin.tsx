@@ -37,7 +37,7 @@ export default function OperadorLoginPage() {
     const cpfRaw = cpfDisplay.replace(/\D/g, '')
     try {
       await login(cpfRaw, senha)
-      navigate('/operador', { replace: true })
+      navigate('/operador/carregando', { replace: true })
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||

@@ -6,6 +6,13 @@ import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/Login'
 import OperadorLoginPage from '@/pages/operador/OperadorLogin'
 import OperadorHomePage from '@/pages/operador/OperadorHome'
+import OperadorSplashPage from '@/pages/operador/OperadorSplash'
+import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
+import DiarioMenu from '@/pages/operador/diarios/DiarioMenu'
+import DiarioPesquisar from '@/pages/operador/diarios/DiarioPesquisar'
+import DiarioNovoObra from '@/pages/operador/diarios/DiarioNovoObra'
+import DiarioPainel from '@/pages/operador/diarios/DiarioPainel'
+import DiarioModuloPage from '@/pages/operador/diarios/DiarioModuloPage'
 import HomePage from '@/pages/Home'
 import UsuariosPage from '@/pages/usuarios/Usuarios'
 import UsuarioFormPage from '@/pages/usuarios/UsuarioForm'
@@ -99,7 +106,9 @@ export default function App() {
           <Route path="diarios" element={<DiariosPage />} />
           <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
         </Route>
+
         <Route path="/operador/login" element={<OperadorLoginRoute />} />
+        <Route path="/operador/carregando" element={<OperadorSplashPage />} />
         <Route
           path="/operador"
           element={
@@ -108,6 +117,15 @@ export default function App() {
             </OperadorPrivateRoute>
           }
         />
+        <Route path="/operador/diario-de-obras" element={<OperadorPrivateRoute><DiarioMenu /></OperadorPrivateRoute>} />
+        <Route path="/operador/diario-de-obras/pesquisar" element={<OperadorPrivateRoute><DiarioPesquisar /></OperadorPrivateRoute>} />
+        <Route path="/operador/diario-de-obras/novo" element={<OperadorPrivateRoute><DiarioNovoObra /></OperadorPrivateRoute>} />
+        <Route path="/operador/diario-de-obras/novo/:equipamentoId" element={<OperadorPrivateRoute><DiarioPainel /></OperadorPrivateRoute>} />
+        <Route path="/operador/diario-de-obras/novo/:equipamentoId/:modulo" element={<OperadorPrivateRoute><DiarioModuloPage /></OperadorPrivateRoute>} />
+        <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Indique uma Obra" /></OperadorPrivateRoute>} />
+        <Route path="/operador/mapa-de-obras" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Mapa de Obras" /></OperadorPrivateRoute>} />
+        <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Fato Observado" /></OperadorPrivateRoute>} />
+        <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Configuracoes" /></OperadorPrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
