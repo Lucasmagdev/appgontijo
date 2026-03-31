@@ -10,7 +10,9 @@ const XLSX = require("xlsx");
 
 dotenv.config();
 
+const bcrypt = require("bcrypt");
 const adminStore = require("./lib/admin-store");
+const db = require("./lib/db");
 const gontijoRoutes = require("./lib/gontijo-routes");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
@@ -68,6 +70,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "15mb" }));
 
 const adminSessions = new Map();
+const operadorSessions = new Map();
 
 const requiredEnv = [
   "AWS_ACCESS_KEY_ID",
@@ -1602,6 +1605,85 @@ app.get("/api/admin/status", (req, res) => {
     authenticated: Boolean(session),
     mode: adminStore.getMode(),
   });
+});
+
+function getOperadorSession(req) {
+  const token = parseCookies(req).operador_session;
+  if (!token) return null;
+  const session = operadorSessions.get(token);
+  if (!session) return null;
+  return { token, ...session };
+}
+
+app.post("/api/operador/session", async (req, res) => {
+  const cpf = String(req.body?.cpf || "").replace(/\D/g, "");
+  const senha = String(req.body?.senha || "");
+
+  if (!cpf || !senha) {
+    return res.status(400).json({ ok: false, message: "CPF e senha sao obrigatorios." });
+  }
+
+  try {
+    const [[user]] = await db.query(
+      "SELECT id, nome, login, telefone, perfil, senha_hash FROM usuarios WHERE login = ? AND status = 'ativo'",
+      [cpf]
+    );
+
+    if (!user) {
+      return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
+    }
+
+    const senhaOk = await bcrypt.compare(senha, user.senha_hash);
+    if (!senhaOk) {
+      return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
+    }
+
+    const token = crypto.randomUUID();
+    operadorSessions.set(token, {
+      userId: user.id,
+      cpf: user.login,
+      createdAt: new Date().toISOString(),
+    });
+    setCookie(res, "operador_session", token, cookieOptionsForRequest());
+
+    return res.json({
+      ok: true,
+      user: { id: user.id, nome: user.nome, cpf: user.login, perfil: user.perfil },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.post("/api/operador/logout", (req, res) => {
+  const session = getOperadorSession(req);
+  if (session) operadorSessions.delete(session.token);
+  clearCookie(res, "operador_session");
+  return res.json({ ok: true });
+});
+
+app.get("/api/operador/status", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) return res.json({ ok: true, authenticated: false });
+
+  try {
+    const [[user]] = await db.query(
+      "SELECT id, nome, login, perfil FROM usuarios WHERE id = ? AND status = 'ativo'",
+      [session.userId]
+    );
+    if (!user) {
+      operadorSessions.delete(session.token);
+      clearCookie(res, "operador_session");
+      return res.json({ ok: true, authenticated: false });
+    }
+    return res.json({
+      ok: true,
+      authenticated: true,
+      user: { id: user.id, nome: user.nome, cpf: user.login, perfil: user.perfil },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
 });
 
 app.get("/api/admin/machines", requireAdmin, async (_req, res) => {

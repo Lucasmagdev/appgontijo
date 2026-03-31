@@ -1,8 +1,11 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/Login'
+import OperadorLoginPage from '@/pages/operador/OperadorLogin'
+import OperadorHomePage from '@/pages/operador/OperadorHome'
 import HomePage from '@/pages/Home'
 import UsuariosPage from '@/pages/usuarios/Usuarios'
 import UsuarioFormPage from '@/pages/usuarios/UsuarioForm'
@@ -16,13 +19,27 @@ import DiarioFormPage from '@/pages/diarios/DiarioForm'
 import ProducaoPage from '@/pages/producao/Producao'
 
 function AppBootstrap() {
-  const initialize = useAuth((state) => state.initialize)
+  const initAdmin = useAuth((state) => state.initialize)
+  const initOperador = useOperadorAuth((state) => state.initialize)
 
   useEffect(() => {
-    void initialize()
-  }, [initialize])
+    void initAdmin()
+    void initOperador()
+  }, [initAdmin, initOperador])
 
   return null
+}
+
+function OperadorPrivateRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isReady } = useOperadorAuth()
+  if (!isReady) return null
+  return isAuthenticated ? <>{children}</> : <Navigate to="/operador/login" replace />
+}
+
+function OperadorLoginRoute() {
+  const { isAuthenticated, isReady } = useOperadorAuth()
+  if (!isReady) return null
+  return isAuthenticated ? <Navigate to="/operador" replace /> : <OperadorLoginPage />
 }
 
 function AppLoading() {
@@ -82,6 +99,15 @@ export default function App() {
           <Route path="diarios" element={<DiariosPage />} />
           <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
         </Route>
+        <Route path="/operador/login" element={<OperadorLoginRoute />} />
+        <Route
+          path="/operador"
+          element={
+            <OperadorPrivateRoute>
+              <OperadorHomePage />
+            </OperadorPrivateRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
