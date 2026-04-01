@@ -919,6 +919,12 @@ export const equipamentoService = {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/equipamentos')
     return data.data.map(adaptEquipamento)
   },
+  async listAtivos() {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/equipamentos', {
+      params: { status: 'ativo' },
+    })
+    return data.data.map(adaptEquipamento)
+  },
   async listParametrizados() {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/equipamentos', {
       params: { parametrizados: 1 },
@@ -1034,6 +1040,24 @@ export const diarioService = {
   },
   getPdfUrl(id: number) {
     return `/api/gontijo/diarios/${id}/pdf`
+  },
+}
+
+export type EstacaSyncItem = {
+  s3Key: string
+  pilar: string
+  diametro: string
+  realizado: number | null
+  finishedAt: string | null
+  obra: string
+}
+
+export const estacaService = {
+  async sync(params: { imei: string; date: string }): Promise<EstacaSyncItem[]> {
+    const { data } = await api.get<{ ok: boolean; data: EstacaSyncItem[] }>('/estacas/sync', {
+      params: { imei: params.imei, date: params.date },
+    })
+    return data.data || []
   },
 }
 

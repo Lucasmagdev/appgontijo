@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import DiarioEquipamentoPage from '@/pages/operador/diarios/DiarioEquipamentoPage'
 import DiarioEquipePage from '@/pages/operador/diarios/DiarioEquipePage'
+import DiarioEstacasPage from '@/pages/operador/diarios/DiarioEstacasPage'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
@@ -40,11 +42,21 @@ export default function DiarioModuloPage() {
   const diarioId = Number(searchParams.get('diario') || '')
   const moduloParam = String(modulo || '')
   const isEquipeModule = moduloParam === 'equipe'
+  const isEquipamentoModule = moduloParam === 'equipamento'
+  const isEstacasModule = moduloParam === 'estacas'
   const supportedModule = isSupportedModule(moduloParam)
   const config = supportedModule ? FIELD_CONFIG[moduloParam] : null
 
   if (isEquipeModule) {
     return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isEquipamentoModule) {
+    return <DiarioEquipamentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isEstacasModule) {
+    return <DiarioEstacasPage diarioId={diarioId} equipamentoId={equipamentoId} />
   }
 
   const diarioQuery = useQuery({
@@ -63,7 +75,9 @@ export default function DiarioModuloPage() {
     const dados = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
     const current =
       moduloParam === 'data'
-        ? String(dados.date || diarioQuery.data.dataDiario || '')
+        ? dados.date_confirmed === true
+          ? String(dados.date || '')
+          : ''
         : String(dados[config.jsonKey] || '')
     setValue(current)
   }, [config, diarioQuery.data, moduloParam, supportedModule])
@@ -117,6 +131,10 @@ export default function DiarioModuloPage() {
       const nextJson = {
         ...currentJson,
         [config.jsonKey]: value,
+      }
+
+      if (moduloParam === 'data') {
+        nextJson.date_confirmed = true
       }
 
       if (moduloParam === 'saida') {

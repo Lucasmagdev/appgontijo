@@ -1914,6 +1914,43 @@ app.get("/api/display/config", (req, res) => {
   });
 });
 
+app.get("/api/estacas/sync", async (req, res) => {
+  try {
+    const imei = String(req.query.imei || "").trim();
+    const date = String(req.query.date || "").trim();
+
+    if (!imei) {
+      return res.status(400).json({ ok: false, message: "IMEI obrigatorio." });
+    }
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ ok: false, message: "Data invalida. Use YYYY-MM-DD." });
+    }
+
+    const missing = missingEnvVars();
+    if (missing.length > 0) {
+      return res.json({ ok: true, data: [], noS3: true, message: "Configuracao S3 ausente." });
+    }
+
+    const clientLogin = getClientLogin(req.query.clientLogin);
+    const client = buildS3Client();
+    const prefix = buildPrefix(clientLogin, imei, date);
+    const summaries = await buildOperationalSummaries(client, prefix);
+
+    const data = summaries.map((item) => ({
+      s3Key: item.key,
+      pilar: item.estaca || "",
+      diametro: item.diametroCm != null ? String(item.diametroCm) : "",
+      realizado: item.realizadoLinearM ?? null,
+      finishedAt: item.finishedAt || null,
+      obra: item.obra || "",
+    }));
+
+    return res.json({ ok: true, data });
+  } catch (e) {
+    return res.status(500).json({ ok: false, message: e.message });
+  }
+});
+
 app.get("/api/dashboard/daily", async (req, res) => {
   const missing = missingEnvVars();
   if (missing.length > 0) {

@@ -153,13 +153,13 @@ export default function EquipamentosPage() {
                 </div>
 
                 <div>
-                  <label className="field-label">Computador Geodigitus</label>
+                  <label className="field-label">Computador Geodigitus / IMEI</label>
                   <input
                     type="text"
                     value={card.computadorGeo}
                     onChange={(event) => updateDraft(card.localId, 'computadorGeo', event.target.value)}
                     className="field-input"
-                    placeholder="ID do computador"
+                    placeholder="Ex: 352622021184705"
                   />
                 </div>
 
@@ -199,7 +199,7 @@ export default function EquipamentosPage() {
                     value={card.imei || ''}
                     onChange={(event) => updateDraft(card.localId, 'imei', event.target.value)}
                     className="field-input"
-                    placeholder="Ex: 352099001761481"
+                    placeholder="Mesmo valor do Computador Geodigitus"
                   />
                 </div>
 

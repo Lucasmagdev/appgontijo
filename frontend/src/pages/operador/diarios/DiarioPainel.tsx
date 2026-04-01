@@ -360,8 +360,8 @@ function DatePickerModal(_props: {
         </div>
 
         <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center' }}>
-          {WEEKDAY_LABELS.map((item) => (
-            <div key={item} style={{ fontSize: '13px', color: '#6b7280', fontWeight: 600, paddingBottom: '4px' }}>
+          {WEEKDAY_LABELS.map((item, index) => (
+            <div key={`${item}-${index}`} style={{ fontSize: '13px', color: '#6b7280', fontWeight: 600, paddingBottom: '4px' }}>
               {item}
             </div>
           ))}
@@ -828,6 +828,10 @@ export default function DiarioPainel() {
         [key === 'data' ? 'date' : key === 'entrada' ? 'start' : 'end']: value,
       }
 
+      if (key === 'data') {
+        nextJson.date_confirmed = true
+      }
+
       if (key === 'saida') {
         const entrada = String(currentJson.start || '')
         if (entrada && value && value < entrada) {
@@ -867,13 +871,14 @@ export default function DiarioPainel() {
     ? buildAddress(obraDetailQuery.data)
     : 'Endereco da obra em carregamento'
   const draftJson = (draftQuery.data?.dadosJson as Record<string, unknown> | null) || {}
+  const isDateConfirmed = draftJson.date_confirmed === true
   const topCompletion = {
-    data: Boolean(draftJson.date),
+    data: isDateConfirmed && Boolean(draftJson.date),
     entrada: Boolean(draftJson.start),
     saida: Boolean(draftJson.end),
   }
   const topValues = {
-    data: formatDateLabel(draftJson.date),
+    data: isDateConfirmed ? formatDateLabel(draftJson.date) : '',
     entrada: formatTimeLabel(draftJson.start),
     saida: formatTimeLabel(draftJson.end),
   }
@@ -888,6 +893,8 @@ export default function DiarioPainel() {
         }
         return false
       }),
+    equipamento: draftJson.equipment_confirmed === true,
+    estacas: draftJson.estacas_confirmed === true,
   }
 
   function openTopModal(key: TopFieldKey) {
@@ -896,9 +903,9 @@ export default function DiarioPainel() {
     setActiveTopModal(key)
 
     if (key === 'data') {
-      const currentDate = String(draftJson.date || draftQuery.data.dataDiario || new Date().toISOString().slice(0, 10))
-      setTopModalValue(currentDate)
-      setCalendarMonth(parseIsoDate(currentDate) || new Date())
+      const anchorDate = String(draftJson.date || draftQuery.data.dataDiario || new Date().toISOString().slice(0, 10))
+      setTopModalValue(isDateConfirmed ? String(draftJson.date || '') : '')
+      setCalendarMonth(parseIsoDate(anchorDate) || new Date())
       return
     }
 
@@ -919,7 +926,8 @@ export default function DiarioPainel() {
   }
 
   function openModulo(modulo: string) {
-    navigate(`/operador/diario-de-obras/novo/${selectedId}/${modulo}?diario=${draftQuery.data?.id || ''}`)
+    if (!draftQuery.data?.id) return
+    navigate(`/operador/diario-de-obras/novo/${selectedId}/${modulo}?diario=${draftQuery.data.id}`)
   }
 
   if (equipamentosQuery.isLoading) {
@@ -1191,7 +1199,12 @@ export default function DiarioPainel() {
                 key={item.key}
                 label={item.label}
                 icon={item.icon}
-                complete={item.key === 'equipe' ? Boolean(moduleCompletion.equipe) : false}
+                complete={
+                  item.key === 'equipe' ? Boolean(moduleCompletion.equipe) :
+                  item.key === 'equipamento' ? Boolean(moduleCompletion.equipamento) :
+                  item.key === 'estacas' ? Boolean(moduleCompletion.estacas) :
+                  false
+                }
                 onClick={() => openModulo(item.key)}
               />
             ))}
