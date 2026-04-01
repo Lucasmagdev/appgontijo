@@ -239,6 +239,46 @@ export type OperadorProfile = {
   perfil: 'operador'
 }
 
+export type DiarySignatureLinkStatus = {
+  diaryId: number
+  status: 'nao_gerado' | 'aguardando_assinatura' | 'assinado' | 'expirado'
+  publicUrl: string
+  expiresAt: string
+  sentAt: string
+  signedAt: string
+  clientName: string
+  clientDocument: string
+  hasOperatorSignature: boolean
+  hasClientSignature: boolean
+  operatorName: string
+  operatorDocument: string
+  operatorSignature: string
+  obraNumero: string
+  cliente: string
+  equipamento: string
+  dataDiario: string
+  reviewConfirmed: boolean
+  whatsappText?: string
+}
+
+export type PublicDiarySignatureDetail = {
+  tokenStatus: 'active' | 'signed' | 'expired' | 'revoked' | string
+  diaryId: number
+  obraNumero: string
+  cliente: string
+  equipamento: string
+  dataDiario: string
+  pdfUrl: string
+  operatorName: string
+  operatorDocument: string
+  operatorSignature: string
+  clientName: string
+  clientDocument: string
+  clientSignature: string
+  signedAt: string
+  expiresAt: string
+}
+
 export type LiveDashboardMachine = {
   imei: string
   machineName: string
@@ -1083,6 +1123,79 @@ export const operadorProfileService = {
     await api.put('/operador/profile', {
       assinatura: payload.assinatura,
     })
+  },
+}
+
+function adaptDiarySignatureLinkStatus(row: Record<string, unknown>): DiarySignatureLinkStatus {
+  return {
+    diaryId: Number(row.diaryId || row.diary_id || 0),
+    status: (toStringValue(row.status) || 'nao_gerado') as DiarySignatureLinkStatus['status'],
+    publicUrl: toStringValue(row.publicUrl),
+    expiresAt: toStringValue(row.expiresAt),
+    sentAt: toStringValue(row.sentAt),
+    signedAt: toStringValue(row.signedAt),
+    clientName: toStringValue(row.clientName),
+    clientDocument: toStringValue(row.clientDocument),
+    hasOperatorSignature: toBooleanValue(row.hasOperatorSignature),
+    hasClientSignature: toBooleanValue(row.hasClientSignature),
+    operatorName: toStringValue(row.operatorName),
+    operatorDocument: toStringValue(row.operatorDocument),
+    operatorSignature: toStringValue(row.operatorSignature),
+    obraNumero: toStringValue(row.obraNumero),
+    cliente: toStringValue(row.cliente),
+    equipamento: toStringValue(row.equipamento),
+    dataDiario: toDateOnly(row.dataDiario),
+    reviewConfirmed: toBooleanValue(row.reviewConfirmed),
+    whatsappText: toStringValue(row.whatsappText),
+  }
+}
+
+function adaptPublicDiarySignatureDetail(row: Record<string, unknown>): PublicDiarySignatureDetail {
+  return {
+    tokenStatus: toStringValue(row.tokenStatus) || 'expired',
+    diaryId: Number(row.diaryId || 0),
+    obraNumero: toStringValue(row.obraNumero),
+    cliente: toStringValue(row.cliente),
+    equipamento: toStringValue(row.equipamento),
+    dataDiario: toDateOnly(row.dataDiario),
+    pdfUrl: toStringValue(row.pdfUrl),
+    operatorName: toStringValue(row.operatorName),
+    operatorDocument: toStringValue(row.operatorDocument),
+    operatorSignature: toStringValue(row.operatorSignature),
+    clientName: toStringValue(row.clientName),
+    clientDocument: toStringValue(row.clientDocument),
+    clientSignature: toStringValue(row.clientSignature),
+    signedAt: toStringValue(row.signedAt),
+    expiresAt: toStringValue(row.expiresAt),
+  }
+}
+
+export const diarioSignatureService = {
+  async getStatus(diarioId: number): Promise<DiarySignatureLinkStatus> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/operador/diarios/${diarioId}/signature-link`)
+    return adaptDiarySignatureLinkStatus(data.data)
+  },
+  async generate(diarioId: number): Promise<DiarySignatureLinkStatus> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/operador/diarios/${diarioId}/signature-link`)
+    return adaptDiarySignatureLinkStatus(data.data)
+  },
+  async getPublic(token: string): Promise<PublicDiarySignatureDetail> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/public/diarios/signature/${token}`)
+    return adaptPublicDiarySignatureDetail(data.data)
+  },
+  async submitPublic(
+    token: string,
+    payload: { nome: string; documento: string; assinatura: string }
+  ): Promise<{ diaryId: number; signedAt: string }> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/public/diarios/signature/${token}`, {
+      nome: payload.nome,
+      documento: payload.documento,
+      assinatura: payload.assinatura,
+    })
+    return {
+      diaryId: Number(data.data.diaryId || 0),
+      signedAt: toStringValue(data.data.signedAt),
+    }
   },
 }
 

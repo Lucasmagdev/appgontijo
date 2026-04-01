@@ -943,7 +943,17 @@ export default function DiarioPainel() {
           (draftJson.clima as Record<string, unknown>).item
         )
       ),
+    assinatura:
+      String(draftQuery.data?.status || '') === 'assinado' ||
+      Boolean(String(draftJson.signature || '').trim()) ||
+      Boolean(
+        draftJson.signature_request &&
+        typeof draftJson.signature_request === 'object' &&
+        ((draftJson.signature_request as Record<string, unknown>).status === 'assinado' ||
+          (draftJson.signature_request as Record<string, unknown>).status === 'signed')
+      ),
     revisao: draftJson.revisao_confirmed === true || draftJson.review_confirmed === true,
+    finalizacao: String(draftQuery.data?.status || '') === 'assinado',
   }
 
   function openTopModal(key: TopFieldKey) {
@@ -1305,6 +1315,7 @@ export default function DiarioPainel() {
                   item.key === 'planejamento-diario' ? Boolean(moduleCompletion.planejamentoDiario) :
                   item.key === 'planejamento-final' ? Boolean(moduleCompletion.planejamentoFinal) :
                   item.key === 'clima' ? Boolean(moduleCompletion.clima) :
+                  item.key === 'assinatura' ? Boolean(moduleCompletion.assinatura) :
                   false
                 }
                 onClick={() => openModulo(item.key)}
@@ -1318,14 +1329,18 @@ export default function DiarioPainel() {
               style={{
                 border: 'none',
                 borderRadius: '20px',
-                background: 'linear-gradient(180deg, #5b6470 0%, #434b56 100%)',
+                background: moduleCompletion.finalizacao
+                  ? 'linear-gradient(180deg, #16a34a 0%, #15803d 100%)'
+                  : 'linear-gradient(180deg, #5b6470 0%, #434b56 100%)',
                 color: '#fff',
                 minHeight: '60px',
                 fontSize: '18px',
                 fontWeight: 600,
                 letterSpacing: '0.01em',
                 cursor: 'pointer',
-                boxShadow: '0 12px 24px rgba(67,75,86,0.18)',
+                boxShadow: moduleCompletion.finalizacao
+                  ? '0 12px 24px rgba(22,163,74,0.18)'
+                  : '0 12px 24px rgba(67,75,86,0.18)',
               }}
             >
               Finalizar Diario

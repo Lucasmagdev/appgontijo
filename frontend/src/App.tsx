@@ -9,6 +9,7 @@ import OperadorHomePage from '@/pages/operador/OperadorHome'
 import OperadorSplashPage from '@/pages/operador/OperadorSplash'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import OperadorConfiguracoesPage from '@/pages/operador/OperadorConfiguracoes'
+import AssinaturaClientePage from '@/pages/public/AssinaturaClientePage'
 import DiarioMenu from '@/pages/operador/diarios/DiarioMenu'
 import DiarioPesquisar from '@/pages/operador/diarios/DiarioPesquisar'
 import DiarioNovoObra from '@/pages/operador/diarios/DiarioNovoObra'
@@ -110,6 +111,7 @@ export default function App() {
 
         <Route path="/operador/login" element={<OperadorLoginRoute />} />
         <Route path="/operador/carregando" element={<OperadorSplashPage />} />
+        <Route path="/assinatura/diario/:token" element={<AssinaturaClientePage />} />
         <Route
           path="/operador"
           element={

@@ -10,6 +10,8 @@ import DiarioHorimetroPage from '@/pages/operador/diarios/DiarioHorimetroPage'
 import DiarioPlanejamentoPage from '@/pages/operador/diarios/DiarioPlanejamentoPage'
 import DiarioClimaPage from '@/pages/operador/diarios/DiarioClimaPage'
 import DiarioRevisaoPage from '@/pages/operador/diarios/DiarioRevisaoPage'
+import DiarioAssinaturaClientePage from '@/pages/operador/diarios/DiarioAssinaturaClientePage'
+import DiarioFinalizacaoPage from '@/pages/operador/diarios/DiarioFinalizacaoPage'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
@@ -57,6 +59,8 @@ export default function DiarioModuloPage() {
   const isPlanejamentoFinalModule = moduloParam === 'planejamento-final'
   const isClimaModule = moduloParam === 'clima'
   const isRevisaoModule = moduloParam === 'revisao'
+  const isAssinaturaModule = moduloParam === 'assinatura'
+  const isFinalizarModule = moduloParam === 'finalizar'
   const supportedModule = isSupportedModule(moduloParam)
   const config = supportedModule ? FIELD_CONFIG[moduloParam] : null
 
@@ -98,6 +102,14 @@ export default function DiarioModuloPage() {
 
   if (isRevisaoModule) {
     return <DiarioRevisaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isAssinaturaModule) {
+    return <DiarioAssinaturaClientePage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isFinalizarModule) {
+    return <DiarioFinalizacaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
   }
 
   const diarioQuery = useQuery({

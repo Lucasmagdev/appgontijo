@@ -1615,6 +1615,217 @@ function getOperadorSession(req) {
   return { token, ...session };
 }
 
+function safeParseJsonObject(value) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) return { ...value };
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? { ...parsed } : {};
+  } catch {
+    return {};
+  }
+}
+
+function firstFilledText(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null) continue;
+    const text = String(value).trim();
+    if (text && text !== "null" && text !== "undefined") return text;
+  }
+  return "";
+}
+
+function formatSqlDateTime(date = new Date()) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function addHours(date, hours) {
+  const next = new Date(date);
+  next.setTime(next.getTime() + hours * 60 * 60 * 1000);
+  return next;
+}
+
+function buildDiarySignatureBaseUrl(req) {
+  const configured =
+    process.env.SIGNATURE_PUBLIC_BASE_URL ||
+    process.env.PUBLIC_WEB_BASE_URL ||
+    process.env.APP_PUBLIC_URL ||
+    "";
+  const origin = String(req.headers.origin || "").trim();
+
+  if (configured) return configured.replace(/\/+$/, "");
+  if (/^https?:\/\/.+/i.test(origin)) return origin.replace(/\/+$/, "");
+
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  const host = req.headers["x-forwarded-host"] || req.get("host") || "localhost:3000";
+  return `${protocol}://${host}`.replace(/\/+$/, "");
+}
+
+function buildDiarySignatureShareText({ diary, publicUrl }) {
+  const obra = firstFilledText(diary.obra_numero, diary.data?.construction_number, "-");
+  const equipamento = firstFilledText(
+    diary.equipamento,
+    diary.data?.equipment_name,
+    diary.data?.equipment,
+    "-"
+  );
+  const dataDiario = firstFilledText(diary.data_diario, diary.data?.date, "-");
+
+  return `Ola! Segue o link para assinatura do diario da obra ${obra}, maquina ${equipamento}, referente ao dia ${dataDiario}: ${publicUrl}\n\nEste link expira em 24 horas.`;
+}
+
+function isSignatureLinkExpired(link) {
+  if (!link?.expires_at) return false;
+  return new Date(link.expires_at).getTime() <= Date.now();
+}
+
+async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null } = {}) {
+  const params = [diaryId];
+  let where = "WHERE d.id = ?";
+
+  if (operatorUserId) {
+    where += " AND d.user_id = ?";
+    params.push(operatorUserId);
+  }
+
+  const [rows] = await db.query(
+    `SELECT d.id,
+            d.user_id,
+            d.data,
+            u.name AS operator_name,
+            u.document AS operator_document,
+            u.signature AS operator_signature,
+            COALESCE(c.construction_number, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number'))) AS obra_numero,
+            COALESCE(cl.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.client'))) AS cliente,
+            COALESCE(e.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')), JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))) AS equipamento,
+            COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS data_diario
+     FROM diaries d
+     LEFT JOIN users u ON u.id = d.user_id
+     LEFT JOIN constructions c ON c.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED)
+     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN equipments e ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+     ${where}
+     LIMIT 1`,
+    params
+  );
+
+  const row = rows[0] || null;
+  if (!row) return null;
+
+  return {
+    id: Number(row.id),
+    user_id: Number(row.user_id),
+    obra_numero: firstFilledText(row.obra_numero),
+    cliente: firstFilledText(row.cliente),
+    equipamento: firstFilledText(row.equipamento),
+    data_diario: firstFilledText(row.data_diario),
+    operator_name: firstFilledText(row.operator_name),
+    operator_document: firstFilledText(row.operator_document),
+    operator_signature: firstFilledText(row.operator_signature),
+    data: safeParseJsonObject(row.data),
+  };
+}
+
+async function fetchLatestDiarySignatureLink(diaryId) {
+  const [rows] = await db.query(
+    `SELECT id, diary_id, token, status, expires_at, sent_at, signed_at, client_name, client_document, created_at, updated_at
+     FROM diary_signature_links
+     WHERE diary_id = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [diaryId]
+  );
+
+  return rows[0] || null;
+}
+
+async function expireDiarySignatureLinkIfNeeded(link, diary = null) {
+  if (!link || link.status !== "active" || !isSignatureLinkExpired(link)) return link;
+
+  await db.query(
+    "UPDATE diary_signature_links SET status = 'expired', updated_at = NOW() WHERE id = ?",
+    [link.id]
+  );
+
+  if (diary) {
+    const nextData = {
+      ...diary.data,
+      signature_request: {
+        ...(diary.data.signature_request && typeof diary.data.signature_request === "object" ? diary.data.signature_request : {}),
+        status: "expirado",
+        expiresAt: link.expires_at,
+      },
+    };
+
+    await db.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+      JSON.stringify(nextData),
+      diary.id,
+    ]);
+    diary.data = nextData;
+  }
+
+  return { ...link, status: "expired" };
+}
+
+function buildSignatureStatusPayload({ diary, link, publicUrl }) {
+  const requestMeta =
+    diary.data.signature_request && typeof diary.data.signature_request === "object"
+      ? diary.data.signature_request
+      : {};
+  const signed =
+    firstFilledText(diary.data.signature, diary.data.clientSignature?.signature) !== "" ||
+    String(diary.data.status || "") === "assinado";
+  const operatorSignature = firstFilledText(
+    diary.data.operatorSignature,
+    diary.operator_signature
+  );
+  const operatorName = firstFilledText(
+    diary.data.operatorSignatureName,
+    diary.operator_name
+  );
+  const operatorDocument = firstFilledText(
+    diary.data.operatorSignatureDoc,
+    diary.operator_document
+  );
+
+  const computedStatus = signed
+    ? "assinado"
+    : link?.status === "active"
+      ? "aguardando_assinatura"
+      : link?.status === "expired"
+        ? "expirado"
+        : "nao_gerado";
+
+  const finalPublicUrl = publicUrl || firstFilledText(requestMeta.publicUrl);
+
+  return {
+    diaryId: diary.id,
+    status: computedStatus,
+    publicUrl: finalPublicUrl,
+    expiresAt: firstFilledText(link?.expires_at, requestMeta.expiresAt),
+    sentAt: firstFilledText(link?.sent_at, requestMeta.sentAt),
+    signedAt: firstFilledText(
+      link?.signed_at,
+      requestMeta.signedAt,
+      diary.data.assinado_em
+    ),
+    clientName: firstFilledText(diary.data.signatureName, requestMeta.clientName),
+    clientDocument: firstFilledText(diary.data.signatureDoc, requestMeta.clientDocument),
+    hasOperatorSignature: Boolean(operatorSignature),
+    hasClientSignature: Boolean(firstFilledText(diary.data.signature)),
+    operatorName,
+    operatorDocument,
+    operatorSignature,
+    obraNumero: diary.obra_numero,
+    cliente: diary.cliente,
+    equipamento: diary.equipamento,
+    dataDiario: diary.data_diario,
+    reviewConfirmed:
+      diary.data.revisao_confirmed === true || diary.data.review_confirmed === true,
+  };
+}
+
 app.post("/api/operador/session", async (req, res) => {
   const cpf = String(req.body?.cpf || "").replace(/\D/g, "");
   const senha = String(req.body?.senha || "");
@@ -1740,6 +1951,385 @@ app.put("/api/operador/profile", async (req, res) => {
     return res.json({ ok: true });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.get("/api/operador/diarios/:id/signature-link", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) {
+    return res.status(401).json({ ok: false, message: "Sessao do operador nao encontrada." });
+  }
+
+  try {
+    const diary = await fetchDiaryForSignatureFlow(req.params.id, { operatorUserId: session.userId });
+    if (!diary) {
+      return res.status(404).json({ ok: false, message: "Diario nao encontrado para este operador." });
+    }
+
+    let link = await fetchLatestDiarySignatureLink(diary.id);
+    link = await expireDiarySignatureLinkIfNeeded(link, diary);
+
+    return res.json({
+      ok: true,
+      data: buildSignatureStatusPayload({ diary, link }),
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) {
+    return res.status(401).json({ ok: false, message: "Sessao do operador nao encontrada." });
+  }
+
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
+      `SELECT d.id,
+              d.user_id,
+              d.data,
+              u.name AS operator_name,
+              u.document AS operator_document,
+              u.signature AS operator_signature,
+              COALESCE(c.construction_number, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number'))) AS obra_numero,
+              COALESCE(cl.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.client'))) AS cliente,
+              COALESCE(e.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')), JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))) AS equipamento,
+              COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS data_diario
+       FROM diaries d
+       LEFT JOIN users u ON u.id = d.user_id
+       LEFT JOIN constructions c ON c.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED)
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       LEFT JOIN equipments e ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+       WHERE d.id = ? AND d.user_id = ?
+       LIMIT 1`,
+      [req.params.id, session.userId]
+    );
+
+    const row = rows[0] || null;
+    if (!row) {
+      await conn.rollback();
+      return res.status(404).json({ ok: false, message: "Diario nao encontrado para este operador." });
+    }
+
+    const diary = {
+      id: Number(row.id),
+      user_id: Number(row.user_id),
+      obra_numero: firstFilledText(row.obra_numero),
+      cliente: firstFilledText(row.cliente),
+      equipamento: firstFilledText(row.equipamento),
+      data_diario: firstFilledText(row.data_diario),
+      operator_name: firstFilledText(row.operator_name),
+      operator_document: firstFilledText(row.operator_document),
+      operator_signature: firstFilledText(row.operator_signature),
+      data: safeParseJsonObject(row.data),
+    };
+
+    if (!diary.operator_signature) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "Cadastre a assinatura do operador no perfil antes de enviar para o cliente.",
+      });
+    }
+
+    if (String(diary.data.status || "") === "assinado") {
+      await conn.rollback();
+      return res.status(400).json({ ok: false, message: "Este diario ja foi assinado pelo cliente." });
+    }
+
+    await conn.query(
+      "UPDATE diary_signature_links SET status = 'revoked', updated_at = NOW() WHERE diary_id = ? AND status = 'active'",
+      [diary.id]
+    );
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const now = new Date();
+    const expiresAtDate = addHours(now, 24);
+    const sentAtSql = formatSqlDateTime(now);
+    const expiresAtSql = formatSqlDateTime(expiresAtDate);
+    const publicUrl = `${buildDiarySignatureBaseUrl(req)}/assinatura/diario/${token}`;
+
+    await conn.query(
+      `INSERT INTO diary_signature_links
+       (diary_id, token, status, expires_at, sent_at, created_by_user_id, created_at, updated_at)
+       VALUES (?, ?, 'active', ?, ?, ?, NOW(), NOW())`,
+      [diary.id, token, expiresAtSql, sentAtSql, session.userId]
+    );
+
+    const nextData = {
+      ...diary.data,
+      status: diary.data.status === "assinado" ? "assinado" : "pendente",
+      operatorSignature: diary.operator_signature,
+      operatorSignatureName: diary.operator_name,
+      operatorSignatureDoc: diary.operator_document,
+      signature_request: {
+        ...(diary.data.signature_request && typeof diary.data.signature_request === "object" ? diary.data.signature_request : {}),
+        status: "aguardando_assinatura",
+        publicUrl,
+        sentAt: sentAtSql,
+        expiresAt: expiresAtSql,
+        signedAt: null,
+        clientName: "",
+        clientDocument: "",
+      },
+    };
+
+    await conn.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+      JSON.stringify(nextData),
+      diary.id,
+    ]);
+
+    await conn.commit();
+
+    const payload = buildSignatureStatusPayload({
+      diary: { ...diary, data: nextData },
+      link: {
+        status: "active",
+        expires_at: expiresAtSql,
+        sent_at: sentAtSql,
+        signed_at: null,
+      },
+      publicUrl,
+    });
+
+    return res.json({
+      ok: true,
+      data: {
+        ...payload,
+        whatsappText: buildDiarySignatureShareText({
+          diary: { ...diary, data: nextData },
+          publicUrl,
+        }),
+      },
+    });
+  } catch (error) {
+    await conn.rollback();
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  } finally {
+    conn.release();
+  }
+});
+
+app.get("/api/public/diarios/signature/:token", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT l.id AS link_id,
+              l.diary_id,
+              l.token,
+              l.status AS link_status,
+              l.expires_at,
+              l.sent_at,
+              l.signed_at,
+              l.client_name,
+              l.client_document,
+              d.data,
+              COALESCE(c.construction_number, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number'))) AS obra_numero,
+              COALESCE(cl.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.client'))) AS cliente,
+              COALESCE(e.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')), JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))) AS equipamento,
+              COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS data_diario,
+              u.name AS operator_name,
+              u.document AS operator_document,
+              u.signature AS operator_signature
+       FROM diary_signature_links l
+       INNER JOIN diaries d ON d.id = l.diary_id
+       LEFT JOIN users u ON u.id = d.user_id
+       LEFT JOIN constructions c ON c.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED)
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       LEFT JOIN equipments e ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+       WHERE l.token = ?
+       LIMIT 1`,
+      [req.params.token]
+    );
+
+    const row = rows[0] || null;
+    if (!row) {
+      return res.status(404).json({ ok: false, message: "Link de assinatura nao encontrado." });
+    }
+
+    const diary = {
+      id: Number(row.diary_id),
+      obra_numero: firstFilledText(row.obra_numero),
+      cliente: firstFilledText(row.cliente),
+      equipamento: firstFilledText(row.equipamento),
+      data_diario: firstFilledText(row.data_diario),
+      operator_name: firstFilledText(row.operator_name),
+      operator_document: firstFilledText(row.operator_document),
+      operator_signature: firstFilledText(row.operator_signature),
+      data: safeParseJsonObject(row.data),
+    };
+
+    let link = {
+      id: Number(row.link_id),
+      status: firstFilledText(row.link_status),
+      expires_at: row.expires_at,
+      sent_at: row.sent_at,
+      signed_at: row.signed_at,
+      client_name: firstFilledText(row.client_name),
+      client_document: firstFilledText(row.client_document),
+    };
+
+    if (link.status === "active" && isSignatureLinkExpired(link)) {
+      await db.query(
+        "UPDATE diary_signature_links SET status = 'expired', updated_at = NOW() WHERE id = ?",
+        [link.id]
+      );
+
+      const nextData = {
+        ...diary.data,
+        signature_request: {
+          ...(diary.data.signature_request && typeof diary.data.signature_request === "object" ? diary.data.signature_request : {}),
+          status: "expirado",
+          expiresAt: row.expires_at,
+        },
+      };
+
+      await db.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+        JSON.stringify(nextData),
+        diary.id,
+      ]);
+      diary.data = nextData;
+      link = { ...link, status: "expired" };
+    }
+
+    const requestMeta =
+      diary.data.signature_request && typeof diary.data.signature_request === "object"
+        ? diary.data.signature_request
+        : {};
+
+    return res.json({
+      ok: true,
+      data: {
+        tokenStatus: String(link.status || ""),
+        diaryId: diary.id,
+        obraNumero: diary.obra_numero,
+        cliente: diary.cliente,
+        equipamento: diary.equipamento,
+        dataDiario: diary.data_diario,
+        pdfUrl: `/api/gontijo/diarios/${diary.id}/pdf`,
+        operatorName: firstFilledText(diary.data.operatorSignatureName, diary.operator_name),
+        operatorDocument: firstFilledText(diary.data.operatorSignatureDoc, diary.operator_document),
+        operatorSignature: firstFilledText(diary.data.operatorSignature, diary.operator_signature),
+        clientName: firstFilledText(diary.data.signatureName, link.client_name, requestMeta.clientName),
+        clientDocument: firstFilledText(diary.data.signatureDoc, link.client_document, requestMeta.clientDocument),
+        clientSignature: firstFilledText(diary.data.signature),
+        signedAt: firstFilledText(link.signed_at, diary.data.assinado_em, requestMeta.signedAt),
+        expiresAt: firstFilledText(link.expires_at, requestMeta.expiresAt),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.post("/api/public/diarios/signature/:token", async (req, res) => {
+  const nome = String(req.body?.nome || "").trim();
+  const documento = String(req.body?.documento || "").trim();
+  const assinatura = String(req.body?.assinatura || "").trim();
+
+  if (!nome || !documento || !assinatura) {
+    return res.status(400).json({
+      ok: false,
+      message: "Nome, documento e assinatura do cliente sao obrigatorios.",
+    });
+  }
+
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
+      `SELECT l.id AS link_id,
+              l.diary_id,
+              l.status AS link_status,
+              l.expires_at,
+              d.data
+       FROM diary_signature_links l
+       INNER JOIN diaries d ON d.id = l.diary_id
+       WHERE l.token = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [req.params.token]
+    );
+
+    const row = rows[0] || null;
+    if (!row) {
+      await conn.rollback();
+      return res.status(404).json({ ok: false, message: "Link de assinatura nao encontrado." });
+    }
+
+    if (String(row.link_status) === "signed") {
+      await conn.rollback();
+      return res.status(400).json({ ok: false, message: "Este link ja foi utilizado." });
+    }
+
+    if (String(row.link_status) !== "active") {
+      await conn.rollback();
+      return res.status(400).json({ ok: false, message: "Este link nao esta mais disponivel." });
+    }
+
+    if (isSignatureLinkExpired(row)) {
+      await conn.query(
+        "UPDATE diary_signature_links SET status = 'expired', updated_at = NOW() WHERE id = ?",
+        [row.link_id]
+      );
+      await conn.rollback();
+      return res.status(400).json({ ok: false, message: "Este link de assinatura expirou." });
+    }
+
+    const diaryData = safeParseJsonObject(row.data);
+    const signedAt = formatSqlDateTime();
+    const nextData = {
+      ...diaryData,
+      status: "assinado",
+      assinado_em: signedAt,
+      signatureName: nome,
+      signatureDoc: documento,
+      signature: assinatura,
+      clientSignature: {
+        name: nome,
+        document: documento,
+        signature: assinatura,
+        signedAt,
+      },
+      signature_request: {
+        ...(diaryData.signature_request && typeof diaryData.signature_request === "object" ? diaryData.signature_request : {}),
+        status: "assinado",
+        signedAt,
+        clientName: nome,
+        clientDocument: documento,
+      },
+    };
+
+    await conn.query(
+      "UPDATE diary_signature_links SET status = 'signed', signed_at = ?, client_name = ?, client_document = ?, updated_at = NOW() WHERE id = ?",
+      [signedAt, nome, documento, row.link_id]
+    );
+
+    await conn.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+      JSON.stringify(nextData),
+      row.diary_id,
+    ]);
+
+    await conn.commit();
+
+    return res.json({
+      ok: true,
+      data: {
+        signedAt,
+        diaryId: Number(row.diary_id),
+      },
+    });
+  } catch (error) {
+    await conn.rollback();
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  } finally {
+    conn.release();
   }
 });
 

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS diary_signature_links (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  diary_id BIGINT UNSIGNED NOT NULL,
+  token VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  status ENUM('active', 'signed', 'expired', 'revoked') CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+  expires_at DATETIME NOT NULL,
+  sent_at DATETIME NULL DEFAULT NULL,
+  signed_at DATETIME NULL DEFAULT NULL,
+  created_by_user_id BIGINT UNSIGNED NULL DEFAULT NULL,
+  client_name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL,
+  client_document VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY diary_signature_links_token_unique (token),
+  KEY diary_signature_links_diary_id_index (diary_id),
+  KEY diary_signature_links_status_index (status),
+  KEY diary_signature_links_created_by_user_id_index (created_by_user_id),
+  CONSTRAINT diary_signature_links_diary_id_foreign FOREIGN KEY (diary_id) REFERENCES diaries (id),
+  CONSTRAINT diary_signature_links_created_by_user_id_foreign FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
