@@ -227,6 +227,18 @@ export type DiarioFilters = {
   status?: string
 }
 
+export type OperadorProfile = {
+  id: number
+  nome: string
+  apelido: string
+  email: string
+  telefone: string
+  foto: string
+  assinatura: string
+  documento: string
+  perfil: 'operador'
+}
+
 export type LiveDashboardMachine = {
   imei: string
   machineName: string
@@ -1009,6 +1021,15 @@ export const diarioService = {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/diarios/${id}`)
     return adaptDiarioDetail(data.data)
   },
+  async resolveDraft(payload: { obraId?: number | null; obraNumero?: string; operadorId: number; equipamentoId: number }) {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>('/gontijo/operador/diarios/resolve-draft', {
+      obra_id: payload.obraId ?? null,
+      obra_numero: payload.obraNumero || null,
+      operador_id: payload.operadorId,
+      equipamento_id: payload.equipamentoId,
+    })
+    return adaptDiarioDetail(data.data)
+  },
   async create(payload: {
     obraId: number
     operadorId: number | null
@@ -1040,6 +1061,28 @@ export const diarioService = {
   },
   getPdfUrl(id: number) {
     return `/api/gontijo/diarios/${id}/pdf`
+  },
+}
+
+export const operadorProfileService = {
+  async getProfile(): Promise<OperadorProfile> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/operador/profile')
+    return {
+      id: Number(data.data.id),
+      nome: toStringValue(data.data.nome),
+      apelido: toStringValue(data.data.apelido),
+      email: toStringValue(data.data.email),
+      telefone: toStringValue(data.data.telefone),
+      foto: toStringValue(data.data.foto),
+      assinatura: toStringValue(data.data.assinatura),
+      documento: toStringValue(data.data.documento),
+      perfil: 'operador',
+    }
+  },
+  async updateProfile(payload: Pick<OperadorProfile, 'assinatura'>) {
+    await api.put('/operador/profile', {
+      assinatura: payload.assinatura,
+    })
   },
 }
 

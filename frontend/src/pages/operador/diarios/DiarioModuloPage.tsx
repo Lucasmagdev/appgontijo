@@ -4,6 +4,12 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import DiarioEquipamentoPage from '@/pages/operador/diarios/DiarioEquipamentoPage'
 import DiarioEquipePage from '@/pages/operador/diarios/DiarioEquipePage'
 import DiarioEstacasPage from '@/pages/operador/diarios/DiarioEstacasPage'
+import DiarioOcorrenciasPage from '@/pages/operador/diarios/DiarioOcorrenciasPage'
+import DiarioAbastecimentoPage from '@/pages/operador/diarios/DiarioAbastecimentoPage'
+import DiarioHorimetroPage from '@/pages/operador/diarios/DiarioHorimetroPage'
+import DiarioPlanejamentoPage from '@/pages/operador/diarios/DiarioPlanejamentoPage'
+import DiarioClimaPage from '@/pages/operador/diarios/DiarioClimaPage'
+import DiarioRevisaoPage from '@/pages/operador/diarios/DiarioRevisaoPage'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
@@ -44,6 +50,13 @@ export default function DiarioModuloPage() {
   const isEquipeModule = moduloParam === 'equipe'
   const isEquipamentoModule = moduloParam === 'equipamento'
   const isEstacasModule = moduloParam === 'estacas'
+  const isOcorrenciasModule = moduloParam === 'ocorrencias'
+  const isAbastecimentoModule = moduloParam === 'abastecimento'
+  const isHorimetroModule = moduloParam === 'horimetro'
+  const isPlanejamentoDiarioModule = moduloParam === 'planejamento-diario'
+  const isPlanejamentoFinalModule = moduloParam === 'planejamento-final'
+  const isClimaModule = moduloParam === 'clima'
+  const isRevisaoModule = moduloParam === 'revisao'
   const supportedModule = isSupportedModule(moduloParam)
   const config = supportedModule ? FIELD_CONFIG[moduloParam] : null
 
@@ -57,6 +70,34 @@ export default function DiarioModuloPage() {
 
   if (isEstacasModule) {
     return <DiarioEstacasPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isOcorrenciasModule) {
+    return <DiarioOcorrenciasPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isAbastecimentoModule) {
+    return <DiarioAbastecimentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isHorimetroModule) {
+    return <DiarioHorimetroPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isPlanejamentoDiarioModule) {
+    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="planning" />
+  }
+
+  if (isPlanejamentoFinalModule) {
+    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="endConstruction" />
+  }
+
+  if (isClimaModule) {
+    return <DiarioClimaPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isRevisaoModule) {
+    return <DiarioRevisaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
   }
 
   const diarioQuery = useQuery({

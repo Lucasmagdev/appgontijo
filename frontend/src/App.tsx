@@ -8,6 +8,7 @@ import OperadorLoginPage from '@/pages/operador/OperadorLogin'
 import OperadorHomePage from '@/pages/operador/OperadorHome'
 import OperadorSplashPage from '@/pages/operador/OperadorSplash'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
+import OperadorConfiguracoesPage from '@/pages/operador/OperadorConfiguracoes'
 import DiarioMenu from '@/pages/operador/diarios/DiarioMenu'
 import DiarioPesquisar from '@/pages/operador/diarios/DiarioPesquisar'
 import DiarioNovoObra from '@/pages/operador/diarios/DiarioNovoObra'
@@ -125,7 +126,7 @@ export default function App() {
         <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Indique uma Obra" /></OperadorPrivateRoute>} />
         <Route path="/operador/mapa-de-obras" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Mapa de Obras" /></OperadorPrivateRoute>} />
         <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Fato Observado" /></OperadorPrivateRoute>} />
-        <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Configuracoes" /></OperadorPrivateRoute>} />
+        <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorConfiguracoesPage /></OperadorPrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

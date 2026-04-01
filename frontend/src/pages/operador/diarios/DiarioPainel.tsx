@@ -146,6 +146,52 @@ function addMinutes(value: string, delta: number) {
   return `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`
 }
 
+function OpeningDiaryLoading() {
+  return (
+    <div
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+        padding: '24px',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '320px',
+          borderRadius: '24px',
+          background: '#fff',
+          padding: '28px 24px',
+          boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '14px',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '999px',
+            border: '4px solid #f3d4d4',
+            borderTopColor: '#a72727',
+            animation: 'spin 0.9s linear infinite',
+          }}
+        />
+        <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Abrindo diario...</div>
+        <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+          Preparando informacoes da obra e da maquina.
+        </div>
+      </div>
+      <style>{'@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }'}</style>
+    </div>
+  )
+}
+
 function SectionLabel({ text }: { text: string }) {
   return (
     <div
@@ -768,54 +814,21 @@ export default function DiarioPainel() {
 
   const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
 
-  const obraResumoQuery = useQuery({
-    queryKey: ['obra-resumo-por-numero', equipamento?.obraNumero],
-    enabled: Boolean(equipamento?.obraNumero),
-    queryFn: async () => {
-      const result = await obraService.list({ busca: equipamento!.obraNumero, page: 1, limit: 20 })
-      return result.items.find((item) => item.numero === equipamento!.obraNumero) ?? result.items[0] ?? null
-    },
+  const draftQuery = useQuery({
+    queryKey: ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id],
+    enabled: Boolean(selectedId && equipamento?.obraNumero && user?.id),
+    queryFn: () =>
+      diarioService.resolveDraft({
+        equipamentoId: selectedId,
+        operadorId: user!.id,
+        obraNumero: equipamento!.obraNumero,
+      }),
   })
 
   const obraDetailQuery = useQuery({
-    queryKey: ['obra-detail-operador', obraResumoQuery.data?.id],
-    enabled: Boolean(obraResumoQuery.data?.id),
-    queryFn: () => obraService.getById(obraResumoQuery.data!.id),
-  })
-
-  const draftQuery = useQuery({
-    queryKey: ['operador-diario-draft', selectedId, obraResumoQuery.data?.id, user?.id],
-    enabled: Boolean(selectedId && obraResumoQuery.data?.id && user?.id),
-    queryFn: async () => {
-      const drafts = await diarioService.list({
-        obra: equipamento!.obraNumero,
-        equipamentoId: selectedId,
-        operadorId: user!.id,
-        status: 'rascunho',
-        page: 1,
-        limit: 1,
-      })
-
-      if (drafts.items[0]) {
-        return diarioService.getById(drafts.items[0].id)
-      }
-
-      const today = new Date().toISOString().slice(0, 10)
-      const createdId = await diarioService.create({
-        obraId: obraResumoQuery.data!.id,
-        operadorId: user!.id,
-        dataDiario: today,
-        status: 'rascunho',
-        equipamentoId: selectedId,
-        assinadoEm: '',
-        dadosJson: {
-          construction_number: equipamento!.obraNumero,
-          equipment: selectedId,
-        },
-      })
-
-      return diarioService.getById(createdId)
-    },
+    queryKey: ['obra-detail-operador', draftQuery.data?.obraId],
+    enabled: Boolean(draftQuery.data?.obraId),
+    queryFn: () => obraService.getById(draftQuery.data!.obraId),
   })
 
   const topSaveMutation = useMutation({
@@ -864,9 +877,11 @@ export default function DiarioPainel() {
     },
   })
 
-  const obraTitulo = equipamento
-    ? `${equipamento.obraNumero} - ${obraResumoQuery.data?.cliente || 'Obra selecionada'}`
-    : 'Diario de obras'
+  const obraTitulo = draftQuery.data
+    ? `${draftQuery.data.obraNumero} - ${draftQuery.data.cliente || 'Obra selecionada'}`
+    : equipamento
+      ? `${equipamento.obraNumero} - Obra selecionada`
+      : 'Diario de obras'
   const endereco = obraDetailQuery.data
     ? buildAddress(obraDetailQuery.data)
     : 'Endereco da obra em carregamento'
@@ -895,6 +910,40 @@ export default function DiarioPainel() {
       }),
     equipamento: draftJson.equipment_confirmed === true,
     estacas: draftJson.estacas_confirmed === true,
+    ocorrencias:
+      draftJson.ocorrencias_confirmed === true ||
+      draftJson.occurrences_confirmed === true ||
+      (Array.isArray(draftJson.ocorrencias) && draftJson.ocorrencias.length > 0) ||
+      (Array.isArray(draftJson.occurrences) && draftJson.occurrences.length > 0),
+    abastecimento:
+      Boolean(
+        draftJson.supply &&
+        typeof draftJson.supply === 'object' &&
+        (
+          (draftJson.supply as Record<string, unknown>).litrosTanqueAntes ||
+          (draftJson.supply as Record<string, unknown>).litrosGalaoAntes ||
+          (draftJson.supply as Record<string, unknown>).litrosTanque ||
+          (draftJson.supply as Record<string, unknown>).litrosGalao ||
+          (draftJson.supply as Record<string, unknown>).chegouDiesel
+        )
+      ),
+    horimetro: Boolean(String(draftJson.horimetro || '').trim()),
+    planejamentoDiario: Array.isArray(draftJson.planning) && draftJson.planning.length > 0,
+    planejamentoFinal:
+      Boolean(String(draftJson.endDate || '').trim()) ||
+      (Array.isArray(draftJson.endConstruction) && draftJson.endConstruction.length > 0),
+    clima:
+      Boolean(
+        draftJson.clima &&
+        typeof draftJson.clima === 'object' &&
+        (
+          (draftJson.clima as Record<string, unknown>).id ||
+          (draftJson.clima as Record<string, unknown>).name ||
+          (draftJson.clima as Record<string, unknown>).label ||
+          (draftJson.clima as Record<string, unknown>).item
+        )
+      ),
+    revisao: draftJson.revisao_confirmed === true || draftJson.review_confirmed === true,
   }
 
   function openTopModal(key: TopFieldKey) {
@@ -922,7 +971,8 @@ export default function DiarioPainel() {
 
   function saveTopModal() {
     if (!activeTopModal || !topModalValue) return
-    void topSaveMutation.mutateAsync({ key: activeTopModal, value: topModalValue })
+    setTopModalError('')
+    topSaveMutation.mutate({ key: activeTopModal, value: topModalValue })
   }
 
   function openModulo(modulo: string) {
@@ -930,7 +980,11 @@ export default function DiarioPainel() {
     navigate(`/operador/diario-de-obras/novo/${selectedId}/${modulo}?diario=${draftQuery.data.id}`)
   }
 
-  if (equipamentosQuery.isLoading) {
+  if (equipamentosQuery.isLoading || draftQuery.isLoading) {
+    return <OpeningDiaryLoading />
+  }
+
+  if (equipamentosQuery.isError) {
     return (
       <div
         style={{
@@ -943,15 +997,18 @@ export default function DiarioPainel() {
       >
         <div
           style={{
-            borderRadius: '20px',
+            maxWidth: '340px',
+            borderRadius: '24px',
             background: '#fff',
-            padding: '22px 24px',
-            boxShadow: '0 14px 28px rgba(15,23,42,0.08)',
-            color: '#6b7280',
-            fontSize: '14px',
+            padding: '24px',
+            boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+            textAlign: 'center',
           }}
         >
-          Carregando diario da maquina...
+          <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Nao foi possivel abrir o diario</div>
+          <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+            {extractApiErrorMessage(equipamentosQuery.error)}
+          </div>
         </div>
       </div>
     )
@@ -981,6 +1038,51 @@ export default function DiarioPainel() {
           <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Maquina nao encontrada</div>
           <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
             Volte e escolha uma maquina parametrizada para iniciar o diario.
+          </div>
+          <button
+            onClick={() => navigate('/operador/diario-de-obras/novo')}
+            style={{
+              marginTop: '18px',
+              border: 'none',
+              borderRadius: '14px',
+              background: '#a72727',
+              color: '#fff',
+              padding: '13px 18px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (draftQuery.isError || !draftQuery.data) {
+    return (
+      <div
+        style={{
+          minHeight: '100dvh',
+          display: 'grid',
+          placeItems: 'center',
+          background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+          padding: '24px',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '340px',
+            borderRadius: '24px',
+            background: '#fff',
+            padding: '24px',
+            boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Nao foi possivel abrir o diario</div>
+          <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+            {draftQuery.isError ? extractApiErrorMessage(draftQuery.error) : 'Diario indisponivel para esta maquina.'}
           </div>
           <button
             onClick={() => navigate('/operador/diario-de-obras/novo')}
@@ -1161,12 +1263,6 @@ export default function DiarioPainel() {
             ))}
           </div>
 
-          {draftQuery.isLoading ? (
-            <div style={{ marginTop: '-2px', color: '#6b7280', fontSize: '12px', fontWeight: 600 }}>
-              Preparando o diario para salvamento...
-            </div>
-          ) : null}
-
           {topModalError ? (
             <div
               style={{
@@ -1203,6 +1299,12 @@ export default function DiarioPainel() {
                   item.key === 'equipe' ? Boolean(moduleCompletion.equipe) :
                   item.key === 'equipamento' ? Boolean(moduleCompletion.equipamento) :
                   item.key === 'estacas' ? Boolean(moduleCompletion.estacas) :
+                  item.key === 'ocorrencias' ? Boolean(moduleCompletion.ocorrencias) :
+                  item.key === 'abastecimento' ? Boolean(moduleCompletion.abastecimento) :
+                  item.key === 'horimetro' ? Boolean(moduleCompletion.horimetro) :
+                  item.key === 'planejamento-diario' ? Boolean(moduleCompletion.planejamentoDiario) :
+                  item.key === 'planejamento-final' ? Boolean(moduleCompletion.planejamentoFinal) :
+                  item.key === 'clima' ? Boolean(moduleCompletion.clima) :
                   false
                 }
                 onClick={() => openModulo(item.key)}
@@ -1233,14 +1335,18 @@ export default function DiarioPainel() {
               style={{
                 border: 'none',
                 borderRadius: '18px',
-                background: 'linear-gradient(180deg, #b42b2b 0%, #9b2121 100%)',
+                background: moduleCompletion.revisao
+                  ? 'linear-gradient(180deg, #16a34a 0%, #15803d 100%)'
+                  : 'linear-gradient(180deg, #b42b2b 0%, #9b2121 100%)',
                 color: '#fff',
                 minHeight: '60px',
                 fontSize: '18px',
                 fontWeight: 700,
                 letterSpacing: '0.01em',
                 cursor: 'pointer',
-                boxShadow: '0 14px 28px rgba(167,39,39,0.2)',
+                boxShadow: moduleCompletion.revisao
+                  ? '0 14px 28px rgba(22,163,74,0.2)'
+                  : '0 14px 28px rgba(167,39,39,0.2)',
               }}
             >
               Revisao do Diario

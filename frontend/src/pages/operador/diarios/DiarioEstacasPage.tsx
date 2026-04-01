@@ -7,7 +7,7 @@ import { diarioService, equipamentoService, estacaService, extractApiErrorMessag
 // ── Types ──────────────────────────────────────────────────────────────────
 type DiarioEstaca = {
   id: string
-  source: 'manual' | 'sync'
+  source: 'manual' | 'sync' | 'hybrid'
   s3Key?: string
   pilar: string
   diametro: string
@@ -38,6 +38,15 @@ function genId() {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function normalizeStakeLookup(value: string) {
+  return String(value || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '')
+    .toLowerCase()
+}
+
 function isHeliceContinua(nome: string) {
   const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   return n.includes('helice') && n.includes('continua')
@@ -50,6 +59,65 @@ const emptyForm: FormState = {
   usoBits: false,
   icamentoArmacao: false,
   metrosIcamento: '',
+}
+
+function normalizeStakeRow(input: Partial<DiarioEstaca>): DiarioEstaca {
+  const source = input.source === 'sync' || input.source === 'hybrid' ? input.source : 'manual'
+  return {
+    id: String(input.id || genId()),
+    source,
+    s3Key: input.s3Key || undefined,
+    pilar: String(input.pilar || ''),
+    diametro: String(input.diametro || ''),
+    realizado: typeof input.realizado === 'number' ? input.realizado : input.realizado == null ? null : Number(input.realizado) || null,
+    usoBits: Boolean(input.usoBits),
+    icamentoArmacao: Boolean(input.icamentoArmacao),
+    metrosIcamento:
+      typeof input.metrosIcamento === 'number'
+        ? input.metrosIcamento
+        : input.metrosIcamento == null
+          ? null
+          : Number(input.metrosIcamento) || null,
+    finishedAt: input.finishedAt || null,
+    createdAt: String(input.createdAt || new Date().toISOString()),
+  }
+}
+
+function mergeStakeSources(current: DiarioEstaca, incoming: DiarioEstaca): DiarioEstaca {
+  const shouldBeHybrid = current.source === 'manual' || current.source === 'hybrid'
+  return {
+    ...current,
+    source: shouldBeHybrid ? 'hybrid' : 'sync',
+    s3Key: incoming.s3Key || current.s3Key,
+    pilar: incoming.pilar || current.pilar,
+    diametro: incoming.diametro || current.diametro,
+    realizado: incoming.realizado ?? current.realizado,
+    finishedAt: incoming.finishedAt ?? current.finishedAt,
+  }
+}
+
+function mergeSyncedStakes(existing: DiarioEstaca[], synced: DiarioEstaca[]) {
+  const next = [...existing]
+  let added = 0
+  let merged = 0
+
+  for (const syncedItem of synced) {
+    const syncKey = normalizeStakeLookup(syncedItem.pilar)
+    const matchIndex = next.findIndex((item) => {
+      if (syncedItem.s3Key && item.s3Key && syncedItem.s3Key === item.s3Key) return true
+      return Boolean(syncKey) && normalizeStakeLookup(item.pilar) === syncKey
+    })
+
+    if (matchIndex >= 0) {
+      next[matchIndex] = mergeStakeSources(next[matchIndex], syncedItem)
+      merged += 1
+    } else {
+      next.push(syncedItem)
+      added += 1
+    }
+  }
+
+  return { items: next, added, merged }
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
@@ -91,6 +159,33 @@ function toggleBtnStyle(active: boolean): CSSProperties {
   }
 }
 
+function getStakeSourceStyles(source: DiarioEstaca['source']) {
+  if (source === 'sync') {
+    return {
+      rail: '#16a34a',
+      badgeBg: '#f0fdf4',
+      badgeColor: '#166534',
+      badgeText: 'Sinc.',
+    }
+  }
+
+  if (source === 'hybrid') {
+    return {
+      rail: '#0f766e',
+      badgeBg: '#ecfeff',
+      badgeColor: '#0f766e',
+      badgeText: 'Manual + Sinc.',
+    }
+  }
+
+  return {
+    rail: '#a72727',
+    badgeBg: '#fff1f1',
+    badgeColor: '#a72727',
+    badgeText: 'Manual',
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   const navigate = useNavigate()
@@ -124,7 +219,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
     const raw = diarioQuery.data?.dadosJson
     if (!raw || typeof raw !== 'object') return []
     const list = (raw as Record<string, unknown>).stakes
-    return Array.isArray(list) ? (list as DiarioEstaca[]) : []
+    return Array.isArray(list) ? list.map((item) => normalizeStakeRow(item as Partial<DiarioEstaca>)) : []
   }, [diarioQuery.data?.dadosJson])
 
   // ── Save mutation ──
@@ -170,9 +265,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
         return stakes
       }
 
-      const existingKeys = new Set(stakes.filter((s) => s.s3Key).map((s) => s.s3Key!))
-      const newItems: DiarioEstaca[] = synced
-        .filter((item) => !existingKeys.has(item.s3Key))
+      const incomingItems: DiarioEstaca[] = synced
         .map((item) => ({
           id: genId(),
           source: 'sync' as const,
@@ -187,16 +280,21 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
           createdAt: new Date().toISOString(),
         }))
 
-      setSyncMsg(
-        newItems.length
-          ? `${newItems.length} estaca${newItems.length !== 1 ? 's' : ''} sincronizada${newItems.length !== 1 ? 's' : ''}.`
-          : 'Todas as estacas ja estavam sincronizadas.'
-      )
-      return [...stakes, ...newItems]
+      const merged = mergeSyncedStakes(stakes, incomingItems)
+      if (!merged.added && !merged.merged) {
+        setSyncMsg('Todas as estacas ja estavam sincronizadas.')
+      } else if (merged.added && merged.merged) {
+        setSyncMsg(`${merged.added} adicionada(s) e ${merged.merged} unida(s) com estacas ja registradas.`)
+      } else if (merged.added) {
+        setSyncMsg(`${merged.added} estaca${merged.added !== 1 ? 's' : ''} sincronizada${merged.added !== 1 ? 's' : ''}.`)
+      } else {
+        setSyncMsg(`${merged.merged} estaca${merged.merged !== 1 ? 's' : ''} unida${merged.merged !== 1 ? 's' : ''} com registros ja existentes.`)
+      }
+      return merged.items
     },
     onSuccess: async (nextStakes) => {
       setSyncErr('')
-      await saveMutation.mutateAsync(nextStakes)
+      saveMutation.mutate(nextStakes)
     },
     onError: (err) => {
       setSyncErr(extractApiErrorMessage(err))
@@ -226,11 +324,31 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
       createdAt: existing?.createdAt || new Date().toISOString(),
     }
 
-    const next = editingId ? stakes.map((s) => (s.id === editingId ? item : s)) : [...stakes, item]
+    const matchIndex = !editingId
+      ? stakes.findIndex((s) => normalizeStakeLookup(s.pilar) === normalizeStakeLookup(pilar))
+      : -1
+
+    const next =
+      editingId
+        ? stakes.map((s) => (s.id === editingId ? item : s))
+        : matchIndex >= 0
+          ? stakes.map((s, index) => {
+              if (index !== matchIndex) return s
+              return {
+                ...s,
+                ...item,
+                id: s.id,
+                s3Key: s.s3Key,
+                finishedAt: s.finishedAt,
+                createdAt: s.createdAt,
+                source: s.source === 'sync' ? 'hybrid' : s.source,
+              }
+            })
+          : [...stakes, item]
     setSubmitErr('')
     setEditingId(null)
     setForm(emptyForm)
-    void saveMutation.mutateAsync(next)
+    saveMutation.mutate(next)
   }
 
   function startEdit(estaca: DiarioEstaca) {
@@ -255,7 +373,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   function handleDelete(id: string) {
     const next = stakes.filter((s) => s.id !== id)
     if (editingId === id) cancelEdit()
-    void saveMutation.mutateAsync(next)
+    saveMutation.mutate(next)
   }
 
   const isBusy = saveMutation.isPending || syncMutation.isPending
@@ -436,12 +554,16 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
                     background: editingId === estaca.id ? '#fff7f7' : 'transparent',
                   }}
                 >
+                  {(() => {
+                    const sourceStyle = getStakeSourceStyles(estaca.source)
+                    return (
+                      <>
                   <div style={{
                     width: '3px',
                     borderRadius: '4px',
                     alignSelf: 'stretch',
                     minHeight: '40px',
-                    background: estaca.source === 'sync' ? '#16a34a' : '#a72727',
+                    background: sourceStyle.rail,
                     flexShrink: 0,
                   }} />
 
@@ -455,10 +577,10 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
                         fontWeight: 800,
                         padding: '2px 7px',
                         borderRadius: '999px',
-                        background: estaca.source === 'sync' ? '#f0fdf4' : '#fff1f1',
-                        color: estaca.source === 'sync' ? '#166534' : '#a72727',
+                        background: sourceStyle.badgeBg,
+                        color: sourceStyle.badgeColor,
                       }}>
-                        {estaca.source === 'sync' ? 'Sinc.' : 'Manual'}
+                        {sourceStyle.badgeText}
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -498,6 +620,9 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
                       <Trash2 size={13} color="#b91c1c" />
                     </button>
                   </div>
+                      </>
+                    )
+                  })()}
                 </div>
               ))}
             </div>

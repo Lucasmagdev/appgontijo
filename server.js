@@ -1686,6 +1686,63 @@ app.get("/api/operador/status", async (req, res) => {
   }
 });
 
+app.get("/api/operador/profile", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) {
+    return res.status(401).json({ ok: false, message: "Sessao do operador nao encontrada." });
+  }
+
+  try {
+    const [[user]] = await db.query(
+      "SELECT id, name, alias, email, phone, photo, signature, document, active FROM users WHERE id = ? AND active = 'S'",
+      [session.userId]
+    );
+
+    if (!user) {
+      operadorSessions.delete(session.token);
+      clearCookie(res, "operador_session");
+      return res.status(401).json({ ok: false, message: "Operador nao encontrado." });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        id: user.id,
+        nome: user.name,
+        apelido: user.alias || "",
+        email: user.email || "",
+        telefone: user.phone || "",
+        foto: user.photo || "",
+        assinatura: user.signature || "",
+        documento: user.document || "",
+        perfil: "operador",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.put("/api/operador/profile", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) {
+    return res.status(401).json({ ok: false, message: "Sessao do operador nao encontrada." });
+  }
+
+  const assinatura = String(req.body?.assinatura || "").trim();
+
+  try {
+    await db.query(
+      "UPDATE users SET signature = ?, updated_at = NOW() WHERE id = ?",
+      [assinatura || null, session.userId]
+    );
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
 app.get("/api/admin/machines", requireAdmin, async (_req, res) => {
   try {
     return res.json({
