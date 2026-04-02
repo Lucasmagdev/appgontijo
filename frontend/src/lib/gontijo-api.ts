@@ -279,6 +279,21 @@ export type PublicDiarySignatureDetail = {
   expiresAt: string
 }
 
+export type ClientPortalAccessRecord = {
+  id: number
+  constructionId: number
+  obraNumero: string
+  cliente: string
+  cidade: string
+  estado: string
+  tipoObra: string
+  login: string
+  status: 'ativo' | 'inativo'
+  lastLoginAt: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type LiveDashboardMachine = {
   imei: string
   machineName: string
@@ -1170,6 +1185,23 @@ function adaptPublicDiarySignatureDetail(row: Record<string, unknown>): PublicDi
   }
 }
 
+function adaptClientPortalAccess(row: Record<string, unknown>): ClientPortalAccessRecord {
+  return {
+    id: Number(row.id || 0),
+    constructionId: Number(row.construction_id || row.constructionId || 0),
+    obraNumero: toStringValue(row.construction_number || row.obraNumero),
+    cliente: toStringValue(row.client_name || row.cliente),
+    cidade: toStringValue(row.city_name || row.city || row.cidade),
+    estado: toStringValue(row.state || row.estado),
+    tipoObra: toStringValue(row.construction_type || row.tipoObra),
+    login: toStringValue(row.login),
+    status: toStringValue(row.active) === 'N' ? 'inativo' : 'ativo',
+    lastLoginAt: toStringValue(row.last_login_at || row.lastLoginAt),
+    createdAt: toStringValue(row.created_at || row.createdAt),
+    updatedAt: toStringValue(row.updated_at || row.updatedAt),
+  }
+}
+
 export const diarioSignatureService = {
   async getStatus(diarioId: number): Promise<DiarySignatureLinkStatus> {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/operador/diarios/${diarioId}/signature-link`)
@@ -1196,6 +1228,30 @@ export const diarioSignatureService = {
       diaryId: Number(data.data.diaryId || 0),
       signedAt: toStringValue(data.data.signedAt),
     }
+  },
+}
+
+export const clientPortalAdminService = {
+  async list(): Promise<ClientPortalAccessRecord[]> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/admin/client-portals')
+    return Array.isArray(data.data) ? data.data.map(adaptClientPortalAccess) : []
+  },
+  async create(payload: { constructionId: number; login: string; password: string; active: boolean }) {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>('/admin/client-portals', {
+      construction_id: payload.constructionId,
+      login: payload.login,
+      password: payload.password,
+      active: payload.active,
+    })
+    return adaptClientPortalAccess(data.data)
+  },
+  async update(id: number, payload: { login: string; password?: string; active: boolean }) {
+    const { data } = await api.put<ApiEnvelope<Record<string, unknown>>>(`/admin/client-portals/${id}`, {
+      login: payload.login,
+      password: payload.password,
+      active: payload.active,
+    })
+    return adaptClientPortalAccess(data.data)
   },
 }
 
@@ -1306,5 +1362,250 @@ export const obraLiveService = {
           )
         : [],
     } satisfies ObraLiveDashboard
+  },
+}
+
+// ============================================================
+// CURSOS E PROVAS
+// ============================================================
+
+export type CursoRecord = {
+  id: number
+  titulo: string
+  descricao: string | null
+  thumbnail_url: string | null
+  video_url: string | null
+  ativo: number
+  criado_em: string
+  atualizado_em: string
+  total_provas?: number
+  total_atribuicoes?: number
+}
+
+export type ProvaRecord = {
+  id: number
+  curso_id: number
+  titulo: string
+  percentual_aprovacao: number
+  ativo: number
+  criado_em: string
+  total_questoes?: number
+}
+
+export type AlternativaRecord = {
+  id: number
+  questao_id: number
+  texto: string
+  correta: boolean
+  ordem: number
+}
+
+export type QuestaoRecord = {
+  id: number
+  prova_id: number
+  enunciado: string
+  ordem: number
+  alternativas: AlternativaRecord[]
+}
+
+export type AtribuicaoRecord = {
+  id: number
+  curso_id: number
+  tipo: 'setor' | 'usuario'
+  setor_id: number | null
+  usuario_id: number | null
+  setor_nome: string | null
+  usuario_nome: string | null
+  tipo_acesso: 'curso_e_prova' | 'so_curso' | 'so_prova'
+  criado_em: string
+}
+
+export type TentativaRecord = {
+  id: number
+  prova_id: number
+  usuario_id: number
+  acertos: number
+  total_questoes: number
+  percentual: number
+  aprovado: number
+  realizado_em: string
+  usuario_nome?: string
+  prova_titulo?: string
+  curso_id?: number
+  curso_titulo?: string
+  percentual_aprovacao?: number
+}
+
+export type OperadorCurso = CursoRecord & {
+  tem_prova: number
+  ja_aprovado: number | null
+  tentativas: number
+  tipo_acesso?: 'curso_e_prova' | 'so_curso' | 'so_prova'
+  prova?: Pick<ProvaRecord, 'id' | 'titulo' | 'percentual_aprovacao'> | null
+  ultima_tentativa?: TentativaRecord | null
+}
+
+export type ResultadoMatrizColumn = {
+  curso_id: number
+  curso_titulo: string
+  prova_id: number | null
+  prova_titulo: string | null
+  percentual_aprovacao: number
+}
+
+export type ResultadoMatrizCell = {
+  curso_id: number
+  tipo_acesso: 'curso_e_prova' | 'so_curso' | 'so_prova' | null
+  assigned: boolean
+  has_prova: boolean
+  tentativas: number
+  aprovado: number
+  melhor_percentual: number | null
+  ultimo_realizado_em: string | null
+  status: 'nao_atribuido' | 'somente_curso' | 'pendente' | 'aprovado' | 'reprovado'
+}
+
+export type ResultadoMatrizRow = {
+  id: number
+  nome: string
+  apelido: string | null
+  documento: string
+  setor_nome: string | null
+  cells: ResultadoMatrizCell[]
+}
+
+export type ResultadoMatriz = {
+  columns: ResultadoMatrizColumn[]
+  rows: ResultadoMatrizRow[]
+  total: number
+  page: number
+  limit: number
+}
+
+export const cursosApi = {
+  list: async (page = 1, limit = 20) => {
+    const res = await api.get<ApiEnvelope<null> & { items: CursoRecord[]; total: number }>(
+      `/gontijo/cursos?page=${page}&limit=${limit}`
+    )
+    return res.data
+  },
+
+  get: async (id: number) => {
+    const res = await api.get<ApiEnvelope<CursoRecord & { provas: ProvaRecord[] }>>(`/gontijo/cursos/${id}`)
+    return res.data.data
+  },
+
+  create: async (payload: Omit<CursoRecord, 'id' | 'criado_em' | 'atualizado_em' | 'ativo' | 'total_provas' | 'total_atribuicoes'>) => {
+    const res = await api.post<ApiEnvelope<CursoRecord>>('/gontijo/cursos', payload)
+    return res.data.data
+  },
+
+  update: async (id: number, payload: Partial<CursoRecord>) => {
+    const res = await api.put<ApiEnvelope<CursoRecord>>(`/gontijo/cursos/${id}`, payload)
+    return res.data.data
+  },
+
+  remove: async (id: number) => {
+    await api.delete(`/gontijo/cursos/${id}`)
+  },
+
+  // Provas
+  createProva: async (cursoId: number, payload: { titulo: string; percentual_aprovacao: number }) => {
+    const res = await api.post<ApiEnvelope<ProvaRecord>>(`/gontijo/cursos/${cursoId}/provas`, payload)
+    return res.data.data
+  },
+
+  updateProva: async (id: number, payload: Partial<ProvaRecord>) => {
+    const res = await api.put<ApiEnvelope<ProvaRecord>>(`/gontijo/provas/${id}`, payload)
+    return res.data.data
+  },
+
+  deleteProva: async (id: number) => {
+    await api.delete(`/gontijo/provas/${id}`)
+  },
+
+  // Questões
+  getQuestoes: async (provaId: number) => {
+    const res = await api.get<ApiEnvelope<ProvaRecord & { questoes: QuestaoRecord[] }>>(`/gontijo/provas/${provaId}/questoes`)
+    return res.data.data
+  },
+
+  createQuestao: async (provaId: number, payload: { enunciado: string; ordem?: number; alternativas: { texto: string; correta: boolean }[] }) => {
+    const res = await api.post<ApiEnvelope<QuestaoRecord>>(`/gontijo/provas/${provaId}/questoes`, payload)
+    return res.data.data
+  },
+
+  updateQuestao: async (id: number, payload: { enunciado: string; ordem?: number; alternativas: { texto: string; correta: boolean }[] }) => {
+    const res = await api.put<ApiEnvelope<QuestaoRecord>>(`/gontijo/questoes/${id}`, payload)
+    return res.data.data
+  },
+
+  deleteQuestao: async (id: number) => {
+    await api.delete(`/gontijo/questoes/${id}`)
+  },
+
+  // Atribuições
+  getAtribuicoes: async (cursoId: number) => {
+    const res = await api.get<ApiEnvelope<AtribuicaoRecord[]>>(`/gontijo/cursos/${cursoId}/atribuicoes`)
+    return res.data.data
+  },
+
+  createAtribuicao: async (cursoId: number, payload: { tipo: 'setor' | 'usuario'; setor_id?: number; usuario_id?: number; tipo_acesso?: string }) => {
+    const res = await api.post<ApiEnvelope<AtribuicaoRecord>>(`/gontijo/cursos/${cursoId}/atribuicoes`, payload)
+    return res.data.data
+  },
+
+  deleteAtribuicao: async (id: number) => {
+    await api.delete(`/gontijo/cursos/atribuicoes/${id}`)
+  },
+
+  // Resultados
+  getResultados: async (params?: { curso_id?: number; usuario_id?: number; page?: number; limit?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.curso_id) q.set('curso_id', String(params.curso_id))
+    if (params?.usuario_id) q.set('usuario_id', String(params.usuario_id))
+    q.set('page', String(params?.page ?? 1))
+    q.set('limit', String(params?.limit ?? 20))
+    const res = await api.get<ApiEnvelope<null> & { items: TentativaRecord[]; total: number }>(`/gontijo/cursos/resultados?${q}`)
+    return res.data
+  },
+
+  getResultadosMatriz: async (params?: { busca?: string; page?: number; limit?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.busca) q.set('busca', params.busca)
+    q.set('page', String(params?.page ?? 1))
+    q.set('limit', String(params?.limit ?? 20))
+    const res = await api.get<ApiEnvelope<ResultadoMatriz>>(`/gontijo/cursos/resultados/matriz?${q}`)
+    return res.data.data
+  },
+}
+
+export const operadorCursosApi = {
+  list: async () => {
+    const res = await api.get<ApiEnvelope<OperadorCurso[]>>('/gontijo/operador/cursos')
+    return res.data.data
+  },
+
+  pendencias: async () => {
+    const res = await api.get<ApiEnvelope<{ pendencias: number }>>('/gontijo/operador/cursos/pendencias')
+    return res.data.data
+  },
+
+  get: async (id: number) => {
+    const res = await api.get<ApiEnvelope<OperadorCurso>>(`/gontijo/operador/cursos/${id}`)
+    return res.data.data
+  },
+
+  getQuestoes: async (provaId: number) => {
+    const res = await api.get<ApiEnvelope<ProvaRecord & { questoes: QuestaoRecord[] }>>(`/gontijo/operador/provas/${provaId}/questoes`)
+    return res.data.data
+  },
+
+  submitTentativa: async (provaId: number, respostas: { questao_id: number; alternativa_id: number }[]) => {
+    const res = await api.post<ApiEnvelope<{
+      id: number; acertos: number; total_questoes: number;
+      percentual: number; aprovado: boolean; percentual_aprovacao: number
+    }>>(`/gontijo/operador/provas/${provaId}/tentativa`, { respostas })
+    return res.data.data
   },
 }

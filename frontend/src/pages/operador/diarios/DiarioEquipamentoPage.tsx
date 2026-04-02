@@ -1,8 +1,9 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Tractor } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { SkeletonBlock } from '@/components/ui/Skeleton'
 
 type Props = {
   diarioId: number
@@ -113,11 +114,14 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
     queryKey: ['operador-diario', diarioId],
     enabled: diarioId > 0,
     queryFn: () => diarioService.getById(diarioId),
+    placeholderData: keepPreviousData,
   })
 
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados-operador'],
     queryFn: equipamentoService.listParametrizados,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const routeEquipmentId = Number(equipamentoId || '') || null
@@ -316,7 +320,11 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
             </div>
 
             {diarioQuery.isLoading || equipamentosQuery.isLoading ? (
-              <div style={{ color: '#6b7280', fontSize: '14px' }}>Carregando maquinas disponiveis...</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <SkeletonBlock height="72px" style={{ borderRadius: '16px' }} />
+                <SkeletonBlock height="72px" style={{ borderRadius: '16px' }} />
+                <SkeletonBlock height="72px" style={{ borderRadius: '16px' }} />
+              </div>
             ) : null}
 
             {diarioQuery.isError ? (

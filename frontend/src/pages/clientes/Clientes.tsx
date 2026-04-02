@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { clienteService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
 export default function ClientesPage() {
@@ -11,16 +12,36 @@ export default function ClientesPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [deleteError, setDeleteError] = useState('')
+  const debouncedSearch = useDebouncedValue(search)
 
   const clientesQuery = useQuery({
-    queryKey: ['clientes', { search, page }],
+    queryKey: ['clientes', { search: debouncedSearch, page }],
     queryFn: () =>
       clienteService.list({
-        busca: search || undefined,
+        busca: debouncedSearch || undefined,
         page,
         limit: 20,
       }),
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 15,
   })
+
+  useEffect(() => {
+    if (!clientesQuery.data) return
+    const hasNextPage = clientesQuery.data.page * clientesQuery.data.limit < clientesQuery.data.total
+    if (!hasNextPage) return
+
+    void queryClient.prefetchQuery({
+      queryKey: ['clientes', { search: debouncedSearch, page: page + 1 }],
+      queryFn: () =>
+        clienteService.list({
+          busca: debouncedSearch || undefined,
+          page: page + 1,
+          limit: 20,
+        }),
+      staleTime: 1000 * 60 * 15,
+    })
+  }, [clientesQuery.data, debouncedSearch, page, queryClient])
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => clienteService.remove(id),

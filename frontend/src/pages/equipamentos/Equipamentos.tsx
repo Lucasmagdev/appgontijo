@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Save } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -34,11 +34,15 @@ export default function EquipamentosPage() {
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos'],
     queryFn: equipamentoService.list,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const modalidadesQuery = useQuery({
     queryKey: ['modalidades'],
     queryFn: modalidadeService.list,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   useEffect(() => {

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -37,11 +37,15 @@ export default function DiariosPage() {
   const modalidadesQuery = useQuery({
     queryKey: ['modalidades'],
     queryFn: modalidadeService.list,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos'],
     queryFn: equipamentoService.list,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const diariosQuery = useQuery({
@@ -56,7 +60,30 @@ export default function DiariosPage() {
         modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
         equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
       }),
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 5,
   })
+
+  useEffect(() => {
+    if (!diariosQuery.data) return
+    const hasNextPage = diariosQuery.data.page * diariosQuery.data.limit < diariosQuery.data.total
+    if (!hasNextPage) return
+
+    void queryClient.prefetchQuery({
+      queryKey: ['diarios', { ...appliedFilters, page: appliedFilters.page + 1 }],
+      queryFn: () =>
+        diarioService.list({
+          page: appliedFilters.page + 1,
+          limit: 20,
+          dataInicio: appliedFilters.dataInicio || undefined,
+          dataFim: appliedFilters.dataFim || undefined,
+          obra: appliedFilters.obra || undefined,
+          modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
+          equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
+        }),
+      staleTime: 1000 * 60 * 5,
+    })
+  }, [appliedFilters, diariosQuery.data, queryClient])
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => diarioService.remove(id),

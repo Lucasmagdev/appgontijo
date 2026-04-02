@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, FileText, HardHat, TrendingUp, Wrench } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { dashboardService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
@@ -37,6 +37,7 @@ export default function HomePage() {
   const overviewQuery = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: dashboardService.overview,
+    placeholderData: keepPreviousData,
   })
 
   const overview = overviewQuery.data

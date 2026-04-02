@@ -1,9 +1,14 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, HardHat, Wrench,
-  FileText, BarChart3,
+  FileText, BarChart3, KeyRound, BookOpen,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  clienteService, dashboardService, diarioService,
+  equipamentoService, modalidadeService, obraService, usuarioService,
+} from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -16,6 +21,9 @@ const navItems = [
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
+  { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
+  { type: 'divider', label: 'Treinamento' },
+  { label: 'Cursos e Provas', to: '/cursos', icon: BookOpen },
 ]
 
 interface SidebarProps {
@@ -24,6 +32,28 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onToggle }: SidebarProps) {
+  const queryClient = useQueryClient()
+
+  function prefetch(to: string) {
+    if (to === '/') {
+      void queryClient.prefetchQuery({ queryKey: ['dashboard-overview'], queryFn: dashboardService.overview })
+    } else if (to === '/usuarios') {
+      void queryClient.prefetchQuery({ queryKey: ['usuarios', { search: '', statusFilter: '', page: 1 }], queryFn: () => usuarioService.list({ page: 1, limit: 20 }) })
+    } else if (to === '/clientes') {
+      void queryClient.prefetchQuery({ queryKey: ['clientes', { search: '', page: 1 }], queryFn: () => clienteService.list({ page: 1, limit: 20 }) })
+    } else if (to === '/obras') {
+      void queryClient.prefetchQuery({ queryKey: ['obras', { search: '', status: '', clienteId: '', page: 1 }], queryFn: () => obraService.list({ page: 1, limit: 20 }) })
+      void queryClient.prefetchQuery({ queryKey: ['cliente-options'], queryFn: clienteService.listOptions })
+    } else if (to === '/equipamentos') {
+      void queryClient.prefetchQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
+      void queryClient.prefetchQuery({ queryKey: ['modalidades'], queryFn: modalidadeService.list })
+    } else if (to === '/diarios') {
+      void queryClient.prefetchQuery({ queryKey: ['diarios', { dataInicio: '', dataFim: '', obra: '', modalidadeId: '', equipamentoId: '', page: 1 }], queryFn: () => diarioService.list({ page: 1, limit: 20 }) })
+      void queryClient.prefetchQuery({ queryKey: ['modalidades'], queryFn: modalidadeService.list })
+      void queryClient.prefetchQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
+    }
+  }
+
   return (
     <aside
       className={cn(
@@ -86,6 +116,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
               key={item.to}
               to={item.to!}
               end={item.exact}
+              onMouseEnter={() => prefetch(item.to!)}
               className={({ isActive }) =>
                 cn(
                   'mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors',

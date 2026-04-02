@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Pencil, Plus, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
@@ -23,6 +23,8 @@ export default function ObrasPage() {
   const clientesQuery = useQuery({
     queryKey: ['cliente-options'],
     queryFn: clienteService.listOptions,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const obrasQuery = useQuery({
@@ -35,6 +37,7 @@ export default function ObrasPage() {
         page,
         limit: 20,
       }),
+    placeholderData: keepPreviousData,
   })
 
   return (

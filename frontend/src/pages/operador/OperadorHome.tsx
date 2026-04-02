@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
+import { operadorCursosApi } from '@/lib/gontijo-api'
 
 const ATALHOS = [
   {
@@ -48,6 +50,16 @@ const ATALHOS = [
     ),
   },
   {
+    label: 'Cursos e Provas',
+    rota: '/operador/cursos',
+    icon: (
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+        <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+      </svg>
+    ),
+  },
+  {
     label: 'Configurações',
     rota: '/operador/configuracoes',
     icon: (
@@ -92,6 +104,13 @@ function Avatar({ nome }: { nome: string }) {
 export default function OperadorHomePage() {
   const navigate = useNavigate()
   const { user, logout } = useOperadorAuth()
+
+  const { data: pendenciasData } = useQuery({
+    queryKey: ['operador-pendencias'],
+    queryFn: operadorCursosApi.pendencias,
+    staleTime: 60_000,
+  })
+  const pendencias = pendenciasData?.pendencias ?? 0
 
   const firstName = user?.nome?.split(' ')[0] ?? 'Operador'
 
@@ -155,6 +174,37 @@ export default function OperadorHomePage() {
           </div>
           <Avatar nome={user?.nome ?? 'Operador'} />
         </div>
+
+        {/* Banner de pendências de cursos */}
+        {pendencias > 0 && (
+          <div style={{ padding: '0 16px 12px' }}>
+            <button
+              onClick={() => navigate('/operador/cursos')}
+              style={{
+                width: '100%', background: '#fff', borderRadius: '12px',
+                padding: '12px 16px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                border: '1.5px solid #fecaca', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '12px',
+              }}
+            >
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>
+                  {pendencias} prova{pendencias > 1 ? 's' : ''} pendente{pendencias > 1 ? 's' : ''}
+                </p>
+                <p style={{ margin: '1px 0 0', fontSize: '11px', color: '#94a3b8' }}>Toque para ver os cursos atribuídos</p>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Card comunicação interna */}
         <div style={{ padding: '0 16px 16px' }}>

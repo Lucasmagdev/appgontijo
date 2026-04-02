@@ -1,8 +1,10 @@
 import { type CSSProperties, useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Layers, Pencil, Plus, RefreshCcw, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, estacaService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
+import DiarioEstacasBatePage from '@/pages/operador/diarios/DiarioEstacasBatePage'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type DiarioEstaca = {
@@ -50,6 +52,11 @@ function normalizeStakeLookup(value: string) {
 function isHeliceContinua(nome: string) {
   const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   return n.includes('helice') && n.includes('continua')
+}
+
+function isBateEstaca(nome: string) {
+  const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return n.includes('bate') && n.includes('estaca')
 }
 
 const emptyForm: FormState = {
@@ -202,17 +209,21 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
     queryKey: ['operador-diario', diarioId],
     enabled: diarioId > 0,
     queryFn: () => diarioService.getById(diarioId),
+    placeholderData: keepPreviousData,
   })
 
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
   })
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
   const equipment = equipamentosQuery.data?.find((e) => e.id === currentEquipmentId) ?? null
   const isHC = equipment ? isHeliceContinua(equipment.modalidadeNome) : null
+  const isBE = equipment ? isBateEstaca(equipment.modalidadeNome) : null
 
   // ── Parse stakes from dadosJson ──
   const stakes: DiarioEstaca[] = useMemo(() => {
@@ -379,6 +390,10 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   const isBusy = saveMutation.isPending || syncMutation.isPending
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
 
+  if (!diarioQuery.isLoading && !equipamentosQuery.isLoading && isBE) {
+    return <DiarioEstacasBatePage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div style={{
@@ -430,13 +445,16 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
 
       {/* Loading */}
       {(diarioQuery.isLoading || equipamentosQuery.isLoading) ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
-          Carregando...
+        <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <SkeletonLine width="45%" height="13px" />
+          <SkeletonBlock height="80px" style={{ borderRadius: '16px' }} />
+          <SkeletonBlock height="80px" style={{ borderRadius: '16px' }} />
+          <SkeletonBlock height="80px" style={{ borderRadius: '16px' }} />
         </div>
       ) : null}
 
       {/* Modalidade nao suportada */}
-      {!diarioQuery.isLoading && !equipamentosQuery.isLoading && isHC === false ? (
+      {!diarioQuery.isLoading && !equipamentosQuery.isLoading && isHC === false && isBE === false ? (
         <div style={{ padding: '24px 18px' }}>
           <div style={{
             borderRadius: '20px',
@@ -450,8 +468,8 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
               Modalidade nao suportada
             </div>
             <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.6' }}>
-              Esta aba de estacas e exclusiva para maquinas da modalidade{' '}
-              <strong>Helice Continua</strong>.<br />
+              Esta aba de estacas esta preparada para as modalidades{' '}
+              <strong>Helice Continua</strong> e <strong>Bate Estaca</strong>.<br />
               A modalidade desta maquina e{' '}
               <strong>{equipment?.modalidadeNome || 'nao definida'}</strong>.
             </div>

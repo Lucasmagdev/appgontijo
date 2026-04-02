@@ -1,27 +1,50 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Search, UserPlus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
+import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { extractApiErrorMessage, usuarioService } from '@/lib/gontijo-api'
 import { cn, formatDate } from '@/lib/utils'
 
 export default function UsuariosPage() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
+  const debouncedSearch = useDebouncedValue(search)
 
   const usuariosQuery = useQuery({
-    queryKey: ['usuarios', { search, statusFilter, page }],
+    queryKey: ['usuarios', { search: debouncedSearch, statusFilter, page }],
     queryFn: () =>
       usuarioService.list({
-        busca: search || undefined,
+        busca: debouncedSearch || undefined,
         status: statusFilter || undefined,
         page,
         limit: 20,
       }),
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 15,
   })
+
+  useEffect(() => {
+    if (!usuariosQuery.data) return
+    const hasNextPage = usuariosQuery.data.page * usuariosQuery.data.limit < usuariosQuery.data.total
+    if (!hasNextPage) return
+
+    void queryClient.prefetchQuery({
+      queryKey: ['usuarios', { search: debouncedSearch, statusFilter, page: page + 1 }],
+      queryFn: () =>
+        usuarioService.list({
+          busca: debouncedSearch || undefined,
+          status: statusFilter || undefined,
+          page: page + 1,
+          limit: 20,
+        }),
+      staleTime: 1000 * 60 * 15,
+    })
+  }, [debouncedSearch, page, queryClient, statusFilter, usuariosQuery.data])
 
   return (
     <div className="page-shell">

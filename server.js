@@ -33,7 +33,6 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 
 app.use(express.json());
-app.use('/api/gontijo', gontijoRoutes);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 let goalTargetSanitizePromise = null;
 
@@ -71,6 +70,7 @@ app.use(express.json({ limit: "15mb" }));
 
 const adminSessions = new Map();
 const operadorSessions = new Map();
+const clientPortalSessions = new Map();
 
 const requiredEnv = [
   "AWS_ACCESS_KEY_ID",
@@ -609,6 +609,14 @@ function getAdminSession(req) {
   return { token, ...session };
 }
 
+function getClientPortalSession(req) {
+  const token = parseCookies(req).client_portal_session;
+  if (!token) return null;
+  const session = clientPortalSessions.get(token);
+  if (!session) return null;
+  return { token, ...session };
+}
+
 function requireAdmin(req, res, next) {
   const session = getAdminSession(req);
   if (!session) {
@@ -618,6 +626,18 @@ function requireAdmin(req, res, next) {
     });
   }
   req.adminSession = session;
+  return next();
+}
+
+function requireClientPortal(req, res, next) {
+  const session = getClientPortalSession(req);
+  if (!session) {
+    return res.status(401).json({
+      ok: false,
+      message: "Sessao do portal do cliente obrigatoria.",
+    });
+  }
+  req.clientPortalSession = session;
   return next();
 }
 
@@ -1607,12 +1627,314 @@ app.get("/api/admin/status", (req, res) => {
   });
 });
 
+app.get("/api/admin/client-portals", requireAdmin, async (_req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT a.id,
+              a.construction_id,
+              a.login,
+              a.active,
+              a.last_login_at,
+              a.created_at,
+              a.updated_at,
+              c.construction_number,
+              c.type AS construction_type,
+              c.state,
+              cl.name AS client_name,
+              ci.name AS city_name
+       FROM client_portal_accesses a
+       INNER JOIN constructions c ON c.id = a.construction_id AND c.status = '1'
+       LEFT JOIN clients cl ON cl.id = c.client_id
+       LEFT JOIN cities ci ON ci.id = c.city_id
+       ORDER BY c.construction_number ASC, a.id DESC`
+    );
+
+    return res.json({ ok: true, data: rows });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao carregar acessos do portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/admin/client-portals", requireAdmin, async (req, res) => {
+  const constructionId = parsePositiveInteger(req.body?.construction_id);
+  const login = normalizePortalLogin(req.body?.login);
+  const password = String(req.body?.password || "");
+  const active = req.body?.active === false ? "N" : "Y";
+
+  if (!constructionId) {
+    return res.status(400).json({ ok: false, message: "Selecione uma obra ativa." });
+  }
+  if (!login) {
+    return res.status(400).json({ ok: false, message: "Informe o login do cliente." });
+  }
+  if (!password.trim()) {
+    return res.status(400).json({ ok: false, message: "Informe uma senha para o acesso do cliente." });
+  }
+
+  try {
+    const construction = await fetchActiveConstructionById(constructionId);
+    if (!construction) {
+      return res.status(400).json({ ok: false, message: "A obra selecionada nao esta ativa ou nao foi encontrada." });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const [result] = await db.query(
+      `INSERT INTO client_portal_accesses
+       (construction_id, login, password_hash, active, created_by_user_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, NOW(), NOW())`,
+      [constructionId, login, passwordHash, active]
+    );
+
+    const access = await fetchClientPortalAccessById(result.insertId);
+    return res.status(201).json({ ok: true, data: access });
+  } catch (error) {
+    if (error && error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        ok: false,
+        message: "Ja existe um acesso para essa obra ou o login informado ja esta em uso.",
+      });
+    }
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao criar acesso do portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.put("/api/admin/client-portals/:id", requireAdmin, async (req, res) => {
+  const accessId = parsePositiveInteger(req.params.id);
+  const login = normalizePortalLogin(req.body?.login);
+  const password = String(req.body?.password || "");
+  const active = req.body?.active === false ? "N" : "Y";
+
+  if (!accessId) {
+    return res.status(400).json({ ok: false, message: "Acesso invalido." });
+  }
+  if (!login) {
+    return res.status(400).json({ ok: false, message: "Informe o login do cliente." });
+  }
+
+  try {
+    const current = await fetchClientPortalAccessById(accessId);
+    if (!current || String(current.construction_status) !== "1") {
+      return res.status(404).json({ ok: false, message: "Acesso nao encontrado para obra ativa." });
+    }
+
+    if (password.trim()) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      await db.query(
+        `UPDATE client_portal_accesses
+         SET login = ?, password_hash = ?, active = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [login, passwordHash, active, accessId]
+      );
+    } else {
+      await db.query(
+        `UPDATE client_portal_accesses
+         SET login = ?, active = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [login, active, accessId]
+      );
+    }
+
+    const access = await fetchClientPortalAccessById(accessId);
+    return res.json({ ok: true, data: access });
+  } catch (error) {
+    if (error && error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        ok: false,
+        message: "Ja existe um acesso para essa obra ou o login informado ja esta em uso.",
+      });
+    }
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao atualizar acesso do portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/client-portal/session", async (req, res) => {
+  const login = normalizePortalLogin(req.body?.login);
+  const password = String(req.body?.password || "");
+
+  if (!login || !password) {
+    return res.status(400).json({ ok: false, message: "Login e senha sao obrigatorios." });
+  }
+
+  try {
+    const access = await fetchClientPortalAccessByLogin(login);
+    if (!access || String(access.active || "N") !== "Y" || String(access.construction_status || "") !== "1") {
+      return res.status(401).json({ ok: false, message: "Acesso do cliente invalido ou inativo." });
+    }
+
+    const passwordOk = await bcrypt.compare(password, String(access.password_hash || ""));
+    if (!passwordOk) {
+      return res.status(401).json({ ok: false, message: "Acesso do cliente invalido ou inativo." });
+    }
+
+    const token = crypto.randomUUID();
+    clientPortalSessions.set(token, {
+      accessId: Number(access.id),
+      constructionId: Number(access.construction_id),
+      login: access.login,
+      createdAt: new Date().toISOString(),
+    });
+    setCookie(res, "client_portal_session", token, {
+      ...cookieOptionsForRequest(),
+      maxAge: 60 * 60 * 12,
+    });
+
+    await db.query(
+      "UPDATE client_portal_accesses SET last_login_at = NOW(), updated_at = NOW() WHERE id = ?",
+      [access.id]
+    );
+
+    return res.json({
+      ok: true,
+      user: {
+        accessId: Number(access.id),
+        login: access.login,
+        obraNumero: firstFilledText(access.construction_number),
+        cliente: firstFilledText(access.client_name),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao autenticar portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.post("/api/client-portal/logout", (req, res) => {
+  const session = getClientPortalSession(req);
+  if (session) clientPortalSessions.delete(session.token);
+  clearCookie(res, "client_portal_session");
+  return res.json({ ok: true });
+});
+
+app.get("/api/client-portal/status", async (req, res) => {
+  const session = getClientPortalSession(req);
+  if (!session) {
+    return res.json({ ok: true, authenticated: false });
+  }
+
+  try {
+    const access = await fetchClientPortalAccessById(session.accessId);
+    if (!access || String(access.active || "N") !== "Y" || String(access.construction_status || "") !== "1") {
+      clientPortalSessions.delete(session.token);
+      clearCookie(res, "client_portal_session");
+      return res.json({ ok: true, authenticated: false });
+    }
+
+    return res.json({
+      ok: true,
+      authenticated: true,
+      user: {
+        accessId: Number(access.id),
+        login: firstFilledText(access.login),
+        obraNumero: firstFilledText(access.construction_number),
+        cliente: firstFilledText(access.client_name),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao validar sessao do portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.get("/api/client-portal/dashboard", requireClientPortal, async (req, res) => {
+  try {
+    const payload = await fetchClientPortalDashboard(req.clientPortalSession.constructionId);
+    if (!payload) {
+      clientPortalSessions.delete(req.clientPortalSession.token);
+      clearCookie(res, "client_portal_session");
+      return res.status(404).json({ ok: false, message: "Obra ativa nao encontrada para este acesso." });
+    }
+
+    return res.json({ ok: true, data: payload });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao carregar portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.get("/api/client-portal/diarios/:id/pdf", requireClientPortal, async (req, res) => {
+  const diaryId = parsePositiveInteger(req.params.id);
+  if (!diaryId) {
+    return res.status(400).json({ ok: false, message: "Diario invalido." });
+  }
+
+  try {
+    const dashboard = await fetchClientPortalDashboard(req.clientPortalSession.constructionId);
+    const allowed = dashboard?.diarios?.some((item) => Number(item.id) === diaryId);
+    if (!allowed) {
+      return res.status(404).json({ ok: false, message: "Diario nao encontrado para esta obra." });
+    }
+
+    return res.redirect(302, `/api/gontijo/diarios/${diaryId}/pdf`);
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao abrir PDF do diario.",
+      details: error.message,
+    });
+  }
+});
+
 function getOperadorSession(req) {
   const token = parseCookies(req).operador_session;
   if (!token) return null;
   const session = operadorSessions.get(token);
   if (!session) return null;
   return { token, ...session };
+}
+
+app.use("/api/gontijo", (req, _res, next) => {
+  const operadorSession = getOperadorSession(req);
+
+  if (operadorSession?.userId) {
+    req.session = {
+      ...(req.session || {}),
+      operador: {
+        ...((req.session && req.session.operador) || {}),
+        id: operadorSession.userId,
+      },
+    };
+  }
+
+  next();
+});
+
+app.use('/api/gontijo', gontijoRoutes);
+
+function normalizePortalLogin(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function parsePositiveInteger(value) {
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric <= 0) return null;
+  return numeric;
 }
 
 function safeParseJsonObject(value) {
@@ -1644,6 +1966,186 @@ function addHours(date, hours) {
   const next = new Date(date);
   next.setTime(next.getTime() + hours * 60 * 60 * 1000);
   return next;
+}
+
+function countDiaryStakeRows(data) {
+  const source = data && typeof data === "object" ? data : {};
+  const hc = Array.isArray(source.stakes) ? source.stakes.length : 0;
+  const be = Array.isArray(source.stakesBE) ? source.stakesBE.length : 0;
+  return hc + be;
+}
+
+function sumConstructionPlanning(endConstruction) {
+  if (!Array.isArray(endConstruction)) return 0;
+
+  return endConstruction.reduce((total, item) => {
+    if (!item || typeof item !== "object") return total;
+    const rawValue =
+      item.numeroEstacas ??
+      item.numero_estacas ??
+      item.qtdEstacas ??
+      item.piles ??
+      0;
+    const numeric = Number(String(rawValue).replace(",", "."));
+    return total + (Number.isFinite(numeric) ? numeric : 0);
+  }, 0);
+}
+
+async function fetchActiveConstructionById(constructionId) {
+  const [rows] = await db.query(
+    `SELECT c.id,
+            c.client_id,
+            c.construction_number,
+            c.type,
+            c.state,
+            c.street,
+            c.number,
+            c.neighborhood,
+            c.complement,
+            c.status,
+            cl.name AS client_name,
+            ci.name AS city_name
+     FROM constructions c
+     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN cities ci ON ci.id = c.city_id
+     WHERE c.id = ? AND c.status = '1'
+     LIMIT 1`,
+    [constructionId]
+  );
+
+  return rows[0] || null;
+}
+
+async function fetchClientPortalAccessById(accessId) {
+  const [rows] = await db.query(
+    `SELECT a.id,
+            a.construction_id,
+            a.login,
+            a.active,
+            a.last_login_at,
+            a.created_at,
+            a.updated_at,
+            c.construction_number,
+            c.type AS construction_type,
+            c.state,
+            c.status AS construction_status,
+            cl.name AS client_name,
+            ci.name AS city_name
+     FROM client_portal_accesses a
+     INNER JOIN constructions c ON c.id = a.construction_id
+     LEFT JOIN clients cl ON cl.id = c.client_id
+     LEFT JOIN cities ci ON ci.id = c.city_id
+     WHERE a.id = ?
+     LIMIT 1`,
+    [accessId]
+  );
+
+  return rows[0] || null;
+}
+
+async function fetchClientPortalAccessByLogin(login) {
+  const [rows] = await db.query(
+    `SELECT a.id,
+            a.construction_id,
+            a.login,
+            a.password_hash,
+            a.active,
+            c.construction_number,
+            c.status AS construction_status,
+            cl.name AS client_name
+     FROM client_portal_accesses a
+     INNER JOIN constructions c ON c.id = a.construction_id
+     LEFT JOIN clients cl ON cl.id = c.client_id
+     WHERE a.login = ?
+     LIMIT 1`,
+    [login]
+  );
+
+  return rows[0] || null;
+}
+
+async function fetchClientPortalDashboard(constructionId) {
+  const construction = await fetchActiveConstructionById(constructionId);
+  if (!construction) return null;
+
+  const [rows] = await db.query(
+    `SELECT d.id,
+            d.created_at,
+            d.data,
+            u.name AS operator_name,
+            COALESCE(
+              e.name,
+              JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')),
+              JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))
+            ) AS equipment_name,
+            COALESCE(
+              NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''),
+              DATE_FORMAT(d.created_at, '%Y-%m-%d')
+            ) AS data_diario
+     FROM diaries d
+     LEFT JOIN users u ON u.id = d.user_id
+     LEFT JOIN equipments e
+       ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+     WHERE (
+       CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) = ?
+       OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')), '') = ?
+     )
+     ORDER BY data_diario DESC, d.id DESC`,
+    [constructionId, String(construction.construction_number || "")]
+  );
+
+  let estacasExecutadas = 0;
+  let estacasPlanejadas = 0;
+  let latestPlanningCursor = "";
+
+  const diarios = rows.map((row) => {
+    const data = safeParseJsonObject(row.data);
+    const estacasNoDia = countDiaryStakeRows(data);
+    estacasExecutadas += estacasNoDia;
+
+    const planned = sumConstructionPlanning(data.endConstruction);
+    const diaryDate = firstFilledText(row.data_diario);
+    const planningCursor = `${diaryDate}|${String(row.id).padStart(12, "0")}`;
+    if (planned > 0 && planningCursor >= latestPlanningCursor) {
+      latestPlanningCursor = planningCursor;
+      estacasPlanejadas = planned;
+    }
+
+    return {
+      id: Number(row.id),
+      dataDiario: diaryDate,
+      status: firstFilledText(data.status, "rascunho"),
+      assinadoEm: firstFilledText(data.assinado_em),
+      equipamento: firstFilledText(row.equipment_name),
+      operadorNome: firstFilledText(row.operator_name),
+      estacasNoDia,
+      reviewConfirmed: data.review_confirmed === true || data.revisao_confirmed === true,
+      pdfUrl: `/api/client-portal/diarios/${row.id}/pdf`,
+    };
+  });
+
+  return {
+    obra: {
+      id: Number(construction.id),
+      numero: firstFilledText(construction.construction_number),
+      cliente: firstFilledText(construction.client_name),
+      tipo: firstFilledText(construction.type),
+      cidade: firstFilledText(construction.city_name),
+      estado: firstFilledText(construction.state),
+      endereco: [construction.street, construction.number, construction.neighborhood, construction.complement]
+        .map((value) => firstFilledText(value))
+        .filter(Boolean)
+        .join(", "),
+      status: "em andamento",
+    },
+    resumo: {
+      totalDiarios: diarios.length,
+      estacasExecutadas,
+      estacasPlanejadas,
+      estacasRestantes: Math.max(estacasPlanejadas - estacasExecutadas, 0),
+    },
+    diarios,
+  };
 }
 
 function buildDiarySignatureBaseUrl(req) {

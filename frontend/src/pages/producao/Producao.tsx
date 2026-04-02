@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { CalendarDays, RefreshCcw, TrendingUp } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -422,12 +422,14 @@ export default function ProducaoPage() {
     queryKey: ['production-daily', date, clientLogin],
     queryFn: () => productionService.daily({ date, clientLogin }),
     enabled: view === 'daily',
+    placeholderData: keepPreviousData,
   })
 
   const weeklyQuery = useQuery({
     queryKey: ['production-weekly', weekStart, clientLogin],
     queryFn: () => productionService.weekly({ weekStart, clientLogin }),
     enabled: view === 'weekly',
+    placeholderData: keepPreviousData,
   })
 
   const activeMetric = metricConfigs[metric]

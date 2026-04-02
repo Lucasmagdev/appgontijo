@@ -1,8 +1,9 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud, CloudDrizzle, CloudRain, CloudSun } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
 
 type Props = {
   diarioId: number
@@ -54,6 +55,7 @@ export default function DiarioClimaPage({ diarioId, equipamentoId }: Props) {
     queryKey: ['operador-diario', diarioId],
     enabled: diarioId > 0,
     queryFn: () => diarioService.getById(diarioId),
+    placeholderData: keepPreviousData,
   })
 
   const routeEquipmentId = Number(equipamentoId || '') || null
@@ -97,7 +99,18 @@ export default function DiarioClimaPage({ diarioId, equipamentoId }: Props) {
       <div style={{ padding: '22px 18px 28px', display: 'grid', gap: '18px' }}>
         <div style={{ fontSize: '24px', fontWeight: 900, color: '#a72727' }}>Condições Climáticas</div>
 
-        {diarioQuery.isLoading ? <div style={loadingTextStyle}>Carregando dados do diario...</div> : null}
+        {diarioQuery.isLoading ? (
+          <div style={panelStyle}>
+            <SkeletonLine width="70%" height="14px" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+              <SkeletonBlock height="96px" />
+              <SkeletonBlock height="96px" />
+              <SkeletonBlock height="96px" />
+              <SkeletonBlock height="96px" />
+            </div>
+            <SkeletonBlock height="64px" style={{ borderRadius: '22px' }} />
+          </div>
+        ) : null}
         {diarioQuery.isError ? <FeedbackBox>{extractApiErrorMessage(diarioQuery.error)}</FeedbackBox> : null}
 
         {!diarioQuery.isLoading && !diarioQuery.isError ? (
@@ -176,10 +189,6 @@ const panelStyle: CSSProperties = {
   gap: '16px',
 }
 
-const loadingTextStyle: CSSProperties = {
-  color: '#6b7280',
-  fontSize: '14px',
-}
 
 function Header({ onBack }: { onBack: () => void }) {
   return (

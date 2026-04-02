@@ -1,8 +1,9 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fuel } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
 
 type SupplyForm = {
   litrosTanqueAntes: string
@@ -75,6 +76,7 @@ export default function DiarioAbastecimentoPage({ diarioId, equipamentoId }: Pro
     queryKey: ['operador-diario', diarioId],
     enabled: diarioId > 0,
     queryFn: () => diarioService.getById(diarioId),
+    placeholderData: keepPreviousData,
   })
 
   const routeEquipmentId = Number(equipamentoId || '') || null
@@ -197,7 +199,28 @@ export default function DiarioAbastecimentoPage({ diarioId, equipamentoId }: Pro
         </div>
 
         {diarioQuery.isLoading ? (
-          <div style={{ color: '#6b7280', fontSize: '14px' }}>Carregando dados do diario...</div>
+          <div style={{ display: 'grid', gap: '18px' }}>
+            <div style={{ borderRadius: '22px', background: '#fff', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 10px 22px rgba(15,23,42,0.05)', padding: '18px 16px', display: 'grid', gap: '14px' }}>
+              <SkeletonLine width="60%" height="22px" style={{ margin: '0 auto' }} />
+              <SkeletonLine width="40%" height="13px" style={{ margin: '0 auto' }} />
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <SkeletonLine width="50%" height="12px" />
+                <SkeletonBlock height="56px" style={{ borderRadius: '18px' }} />
+              </div>
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <SkeletonLine width="50%" height="12px" />
+                <SkeletonBlock height="56px" style={{ borderRadius: '18px' }} />
+              </div>
+            </div>
+            <div style={{ borderRadius: '22px', background: '#fff', border: '1px solid rgba(15,23,42,0.06)', boxShadow: '0 10px 22px rgba(15,23,42,0.05)', padding: '18px 16px', display: 'grid', gap: '14px' }}>
+              <SkeletonLine width="60%" height="22px" style={{ margin: '0 auto' }} />
+              <SkeletonLine width="40%" height="13px" style={{ margin: '0 auto' }} />
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <SkeletonLine width="50%" height="12px" />
+                <SkeletonBlock height="56px" style={{ borderRadius: '18px' }} />
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {diarioQuery.isError ? (
