@@ -35,6 +35,7 @@ import CursoFormPage from '@/pages/cursos/CursoForm'
 import CursoProvaPage from '@/pages/cursos/CursoProva'
 import CursoAtribuicoesPage from '@/pages/cursos/CursoAtribuicoes'
 import CursosResultadosPage from '@/pages/cursos/CursosResultados'
+import PontoVerificacaoPage from '@/pages/ponto/PontoVerificacaoPage'
 import OperadorCursosPage from '@/pages/operador/cursos/OperadorCursos'
 import OperadorCursoDetalhePage from '@/pages/operador/cursos/OperadorCursoDetalhe'
 import OperadorProvaPage from '@/pages/operador/cursos/OperadorProva'
@@ -131,6 +132,7 @@ export default function App() {
           <Route path="obras/:id/editar" element={<ObraFormPage />} />
           <Route path="equipamentos" element={<EquipamentosPage />} />
           <Route path="producao" element={<ProducaoPage />} />
+          <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
           <Route path="diarios" element={<DiariosPage />} />
           <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
           <Route path="portal-clientes" element={<PortalClientesPage />} />

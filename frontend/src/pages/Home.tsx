@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, FileText, HardHat, TrendingUp, Wrench } from 'lucide-react'
+import { AlertCircle, CheckSquare2, HardHat, TrendingUp, Wrench } from 'lucide-react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { dashboardService, extractApiErrorMessage } from '@/lib/gontijo-api'
@@ -13,22 +13,16 @@ const metricCards = [
     chipClass: 'bg-red-50 text-red-700',
   },
   {
-    key: 'obrasFinalizadas',
-    label: 'Obras finalizadas',
-    icon: CheckCircle2,
-    chipClass: 'bg-emerald-50 text-emerald-700',
-  },
-  {
     key: 'maquinasAtivas',
     label: 'Maquinas ativas',
     icon: Wrench,
     chipClass: 'bg-sky-50 text-sky-700',
   },
   {
-    key: 'diariosPendentes',
-    label: 'Diarios pendentes',
-    icon: FileText,
-    chipClass: 'bg-amber-50 text-amber-700',
+    key: 'diariosConcluidos',
+    label: 'Diarios concluidos',
+    icon: CheckSquare2,
+    chipClass: 'bg-emerald-50 text-emerald-700',
   },
 ] as const
 

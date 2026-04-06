@@ -72,6 +72,10 @@ const adminSessions = new Map();
 const operadorSessions = new Map();
 const clientPortalSessions = new Map();
 
+const SOLIDES_EMPLOYER_BASE_URL = process.env.SOLIDES_EMPLOYER_BASE_URL || "https://employer.tangerino.com.br";
+const SOLIDES_PUNCH_BASE_URL = process.env.SOLIDES_PUNCH_BASE_URL || "https://api.tangerino.com.br/api/punch";
+const SOLIDES_PAGE_SIZE = 200;
+
 const requiredEnv = [
   "AWS_ACCESS_KEY_ID",
   "AWS_SECRET_ACCESS_KEY",
@@ -80,6 +84,423 @@ const requiredEnv = [
 
 function missingEnvVars() {
   return requiredEnv.filter((name) => !process.env[name]);
+}
+
+function getSolidesToken() {
+  return String(process.env.SOLIDES_BASIC_TOKEN || "").trim();
+}
+
+function normalizeDigits(value) {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+function parseBooleanFlag(value, defaultValue = false) {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  if (typeof value === "boolean") return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "sim", "yes", "y"].includes(normalized)) return true;
+  if (["0", "false", "nao", "não", "no", "n"].includes(normalized)) return false;
+  return defaultValue;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function weekdayForSolides(dateText) {
+  const date = parseDateString(dateText);
+  const day = date.getUTCDay();
+  return day === 0 ? 1 : day + 1;
+}
+
+function msOfDayToTime(ms) {
+  if (!Number.isFinite(Number(ms))) return null;
+  const totalMinutes = Math.floor(Number(ms) / 60000);
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minutes = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function isoToTimeText(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString("pt-BR", {
+    timeZone: process.env.APP_TIMEZONE || "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function isoToTimestamp(value) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildDayRangeMillis(dateText) {
+  const normalized = normalizeDateOnly(dateText) || getCurrentDateString();
+  const start = new Date(`${normalized}T00:00:00-03:00`).getTime();
+  const end = new Date(`${normalized}T23:59:59.999-03:00`).getTime();
+  return { start, end };
+}
+
+function workedSecondsToText(seconds) {
+  const total = Number(seconds || 0);
+  if (!Number.isFinite(total) || total <= 0) return "-";
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+async function solidesRequest(baseUrl, pathname, params = {}) {
+  const token = getSolidesToken();
+  if (!token) {
+    throw new Error("SOLIDES_BASIC_TOKEN nao configurado no backend.");
+  }
+
+  const normalizedPath = String(pathname || "").replace(/^\/+/, "");
+  const url = new URL(normalizedPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => url.searchParams.append(key, entry));
+      return;
+    }
+    url.searchParams.set(key, String(value));
+  });
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: token,
+      Accept: "application/json",
+    },
+  });
+
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
+
+  if (!response.ok) {
+    const message =
+      (data && typeof data === "object" && (data.message || data.error)) ||
+      response.statusText ||
+      "Falha ao consultar a API da Solides.";
+    const error = new Error(String(message));
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+
+  return data;
+}
+
+async function solidesFetchAll(baseUrl, pathname, params = {}) {
+  const items = [];
+  let page = 0;
+  let totalPages = 1;
+
+  while (page < totalPages) {
+    const payload = await solidesRequest(baseUrl, pathname, {
+      ...params,
+      page,
+      size: SOLIDES_PAGE_SIZE,
+    });
+
+    const content = Array.isArray(payload?.content) ? payload.content : [];
+    items.push(...content);
+    totalPages = Number(payload?.totalPages || (content.length < SOLIDES_PAGE_SIZE ? page + 1 : page + 2));
+    page += 1;
+    if (!Array.isArray(payload?.content) && page > 0) break;
+  }
+
+  return items;
+}
+
+async function fetchSolidesEmployees(showFired = false) {
+  return solidesFetchAll(SOLIDES_EMPLOYER_BASE_URL, "/employee/find-all", {
+    showFired: showFired ? 1 : 0,
+  });
+}
+
+async function fetchSolidesWorkSchedules() {
+  return solidesFetchAll(SOLIDES_EMPLOYER_BASE_URL, "/work-schedule");
+}
+
+async function fetchSolidesPunchesByEmployeeIds(dateText, employeeIds = [], extraFilters = {}) {
+  const ids = [...new Set((Array.isArray(employeeIds) ? employeeIds : []).map((value) => Number(value || 0)).filter(Boolean))];
+  if (!ids.length) return [];
+
+  const allPunches = [];
+  const batchSize = 12;
+
+  for (let index = 0; index < ids.length; index += batchSize) {
+    const batch = ids.slice(index, index + batchSize);
+    const settled = await Promise.allSettled(
+      batch.map((employeeId) =>
+        solidesRequest(SOLIDES_PUNCH_BASE_URL, "", {
+          page: 0,
+          size: 100,
+          employeeId,
+          showFired: extraFilters.showFired ? "true" : "false",
+          status: extraFilters.status || undefined,
+        })
+      )
+    );
+
+    for (const result of settled) {
+      if (result.status !== "fulfilled") continue;
+      const content = Array.isArray(result.value?.content) ? result.value.content : [];
+      const filtered = content.filter((item) => String(item?.date || "").slice(0, 10) === dateText);
+      allPunches.push(...filtered);
+    }
+  }
+
+  return allPunches;
+}
+
+function getScheduleForDate(schedule, dateText) {
+  const weekday = weekdayForSolides(dateText);
+  const timetable = Array.isArray(schedule?.workScheduleTimetableList)
+    ? schedule.workScheduleTimetableList.find((item) => Number(item.day) === weekday)
+    : null;
+
+  if (!timetable) return null;
+
+  return {
+    startMs: Number(timetable.startShift1 || 0) || null,
+    endMs: Number(timetable.endShift2 || timetable.endShift1 || 0) || null,
+    intervalStartMs: Number(timetable.startMainInterval || 0) || null,
+    intervalEndMs: Number(timetable.endMainInterval || 0) || null,
+  };
+}
+
+function groupPunchesByEmployee(punches) {
+  const grouped = new Map();
+
+  for (const punch of Array.isArray(punches) ? punches : []) {
+    const employeeId = Number(punch?.employeeId || punch?.employee?.id || 0);
+    const employeeCpf = normalizeDigits(punch?.employee?.cpf);
+    const key = employeeId || employeeCpf;
+    if (!key) continue;
+
+    const current = grouped.get(key) || [];
+    current.push(punch);
+    grouped.set(key, current);
+  }
+
+  return grouped;
+}
+
+function pickBestSolidesEmployee(candidates = []) {
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+
+  const ordered = [...candidates].sort((left, right) => {
+    const leftFired = left?.fired ? 1 : 0;
+    const rightFired = right?.fired ? 1 : 0;
+    if (leftFired !== rightFired) return leftFired - rightFired;
+
+    const leftExcluded = left?.excluded ? 1 : 0;
+    const rightExcluded = right?.excluded ? 1 : 0;
+    if (leftExcluded !== rightExcluded) return leftExcluded - rightExcluded;
+
+    const leftEffective = Number(left?.effectiveDate || 0);
+    const rightEffective = Number(right?.effectiveDate || 0);
+    return rightEffective - leftEffective;
+  });
+
+  return ordered[0] || null;
+}
+
+function buildPunchAggregate(punches) {
+  const rows = Array.isArray(punches) ? punches : [];
+  if (!rows.length) {
+    return {
+      count: 0,
+      totalPunches: 0,
+      totalPhotos: 0,
+      firstInTs: null,
+      lastOutTs: null,
+      firstIn: null,
+      lastOut: null,
+      workedSeconds: 0,
+      statuses: [],
+      missingExit: false,
+      missingPhoto: false,
+    };
+  }
+
+  const hasPhoto = (photo) => {
+    if (!photo) return false;
+    if (typeof photo === "string") return String(photo).trim() !== "";
+    if (typeof photo === "object") {
+      return Boolean(
+        photo.photoURL ||
+        photo.url ||
+        photo.id ||
+        photo.hash ||
+        photo.fileId
+      );
+    }
+    return false;
+  };
+
+  const totalPunches = rows.reduce((sum, item) => {
+    let current = sum;
+    if (item?.dateIn || item?.dateInFull || item?.startDate) current += 1;
+    if (item?.dateOut || item?.dateOutFull || item?.endDate) current += 1;
+    return current;
+  }, 0);
+
+  const totalPhotos = rows.reduce((sum, item) => {
+    let current = sum;
+    if (hasPhoto(item?.photoIn) || item?.hashStart) current += 1;
+    if (hasPhoto(item?.photoOut) || item?.hashEnd) current += 1;
+    return current;
+  }, 0);
+
+  const firstInTs = rows
+    .map((item) => isoToTimestamp(item?.dateInFull || item?.dateIn || item?.startDate))
+    .filter((value) => value !== null)
+    .sort((a, b) => a - b)[0] ?? null;
+
+  const lastOutTs = rows
+    .map((item) => isoToTimestamp(item?.dateOutFull || item?.dateOut || item?.endDate))
+    .filter((value) => value !== null)
+    .sort((a, b) => b - a)[0] ?? null;
+
+  return {
+    count: rows.length,
+    totalPunches,
+    totalPhotos,
+    firstInTs,
+    lastOutTs,
+    firstIn: firstInTs ? isoToTimeText(firstInTs) : null,
+    lastOut: lastOutTs ? isoToTimeText(lastOutTs) : null,
+    workedSeconds: rows.reduce((sum, item) => sum + Number(item?.workedHoursInSeconds || 0), 0),
+    statuses: [...new Set(rows.map((item) => String(item?.status || "").trim()).filter(Boolean))],
+    missingExit: rows.some((item) => !item?.dateOut && !item?.dateOutFull && !item?.endDate),
+    missingPhoto: totalPunches > totalPhotos,
+  };
+}
+
+function buildDailyPointStatus({ localUser, solidesEmployee, scheduleForDate, aggregate, params }) {
+  if (!solidesEmployee) {
+    return {
+      code: "sem_vinculo",
+      label: "Sem vinculo Solides",
+      tone: "slate",
+      detail: "CPF do usuario nao encontrado na Solides.",
+    };
+  }
+
+  if (!aggregate.count) {
+    return {
+      code: "sem_ponto",
+      label: "Sem ponto",
+      tone: "red",
+      detail: "Nenhuma marcacao encontrada para a data selecionada.",
+    };
+  }
+
+  if (aggregate.totalPunches < 4) {
+    return {
+      code: "batidas_insuficientes",
+      label: "Batidas insuficientes",
+      tone: "amber",
+      detail: `Foram encontradas ${aggregate.totalPunches} batidas. O minimo esperado para OK eh 4.`,
+    };
+  }
+
+  if (aggregate.missingPhoto) {
+    return {
+      code: "sem_foto",
+      label: "Sem foto em uma ou mais batidas",
+      tone: "amber",
+      detail: `Foram encontradas ${aggregate.totalPhotos} foto(s) para ${aggregate.totalPunches} batidas.`,
+    };
+  }
+
+  if (params.requireClosingPunch && aggregate.missingExit) {
+    return {
+      code: "marcacoes_incompletas",
+      label: "Marcacoes incompletas",
+      tone: "amber",
+      detail: "Existe marcacao sem saida registrada.",
+    };
+  }
+
+  if (aggregate.statuses.includes("PENDING")) {
+    return {
+      code: "pendente_solides",
+      label: "Pendente na Solides",
+      tone: "amber",
+      detail: "A Solides marcou o ponto como pendente.",
+    };
+  }
+
+  if (aggregate.statuses.includes("REPROVED")) {
+    return {
+      code: "reprovado_solides",
+      label: "Reprovado na Solides",
+      tone: "red",
+      detail: "A Solides marcou o ponto como reprovado.",
+    };
+  }
+
+    return {
+      code: "ok",
+      label: "OK",
+      tone: "emerald",
+      detail: `Conferencia ok para ${localUser.nome}: 4 ou mais batidas com foto e aprovadas na Solides.`,
+    };
+}
+
+async function fetchLocalUsersForPointCheck(filters = {}) {
+  const params = [];
+  const where = [];
+
+  if (filters.onlyActiveUsers) {
+    where.push("u.active = 'S'");
+  }
+
+  if (filters.sectorId) {
+    where.push("u.sector_id = ?");
+    params.push(Number(filters.sectorId));
+  }
+
+  if (filters.userId) {
+    where.push("u.id = ?");
+    params.push(Number(filters.userId));
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const [rows] = await db.query(
+    `SELECT u.id, u.name, u.document, u.phone, u.active, u.sector_id, s.name AS sector_name
+     FROM users u
+     LEFT JOIN sectors s ON s.id = u.sector_id
+     ${whereSql}
+     ORDER BY u.name ASC`,
+    params
+  );
+
+  return rows.map((row) => ({
+    id: Number(row.id),
+    nome: String(row.name || ""),
+    documento: normalizeDigits(row.document),
+    telefone: String(row.phone || ""),
+    ativo: String(row.active || "N") === "S",
+    setorId: row.sector_id == null ? null : Number(row.sector_id),
+    setorNome: String(row.sector_name || ""),
+  }));
 }
 
 function buildS3Client() {
@@ -174,6 +595,13 @@ function writeCachedDetail(key, detail) {
 function parseDateString(date) {
   const [year, month, day] = String(date).split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day));
+}
+
+function normalizeDateOnly(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : text;
 }
 
 function formatUtcDate(date) {
@@ -1627,6 +2055,174 @@ app.get("/api/admin/status", (req, res) => {
   });
 });
 
+app.get("/api/admin/solides/status", requireAdmin, async (_req, res) => {
+  try {
+    const tokenConfigured = Boolean(getSolidesToken());
+    if (!tokenConfigured) {
+      return res.json({
+        ok: true,
+        data: {
+          tokenConfigured: false,
+          accountName: null,
+          employeesEnabled: false,
+          punchEnabled: false,
+          message: "Configure SOLIDES_BASIC_TOKEN no backend para ativar a integracao.",
+        },
+      });
+    }
+
+    const [testPayload, employeesPayload] = await Promise.all([
+      solidesRequest(SOLIDES_EMPLOYER_BASE_URL, "/test"),
+      solidesRequest(SOLIDES_EMPLOYER_BASE_URL, "/employee/find-all", { page: 0, size: 1, showFired: 1 }),
+    ]);
+
+    let punchEnabled = true;
+    let punchMessage = "";
+    try {
+      await fetchSolidesPunchesByDate(getCurrentDateString(), { page: 0, size: 1 });
+    } catch (error) {
+      punchEnabled = false;
+      punchMessage = error.message || "Falha ao consultar o modulo de ponto.";
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        tokenConfigured: true,
+        accountName: typeof testPayload === "string" ? testPayload.replace(/^Hello,\s*/i, "").replace(/!$/, "") : null,
+        employeesEnabled: true,
+        punchEnabled,
+        employeesCount: Number(employeesPayload?.totalElements || 0),
+        message: punchEnabled
+          ? "Integracao Solides validada com sucesso."
+          : `Cadastros ok, mas o modulo de ponto retornou: ${punchMessage}`,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao validar integracao com a Solides.",
+    });
+  }
+});
+
+app.get("/api/admin/solides/daily-point-check", requireAdmin, async (req, res) => {
+  try {
+    const date = normalizeDateOnly(req.query.date) || getCurrentDateString();
+    const sectorId = Number(req.query.sector_id || 0) || null;
+    const userId = Number(req.query.user_id || 0) || null;
+    const onlyActiveUsers = parseBooleanFlag(req.query.only_active_users, true);
+    const requireClosingPunch = parseBooleanFlag(req.query.require_closing_punch, true);
+    const showFired = parseBooleanFlag(req.query.show_fired, false);
+    const statusFilter = String(req.query.status_filter || "").trim().toUpperCase();
+    const entryToleranceMinutes = clampNumber(req.query.entry_tolerance_minutes, 0, 240, 15);
+    const exitToleranceMinutes = clampNumber(req.query.exit_tolerance_minutes, 0, 240, 15);
+
+    const params = {
+      date,
+      sectorId,
+      userId,
+      onlyActiveUsers,
+      requireClosingPunch,
+      showFired,
+      statusFilter,
+      entryToleranceMinutes,
+      exitToleranceMinutes,
+    };
+
+    const [localUsers, solidesEmployees] = await Promise.all([
+      fetchLocalUsersForPointCheck({ sectorId, userId, onlyActiveUsers }),
+      fetchSolidesEmployees(showFired),
+    ]);
+
+    const employeesByCpf = new Map();
+    for (const employee of Array.isArray(solidesEmployees) ? solidesEmployees : []) {
+      const cpf = normalizeDigits(employee?.cpf);
+      if (!cpf) continue;
+      const current = employeesByCpf.get(cpf) || [];
+      current.push(employee);
+      employeesByCpf.set(cpf, current);
+    }
+
+    const linkedEmployeeIds = localUsers
+      .map((localUser) => pickBestSolidesEmployee(employeesByCpf.get(localUser.documento)))
+      .filter(Boolean)
+      .map((employee) => Number(employee.id || 0))
+      .filter(Boolean);
+
+    const solidsPunches = await fetchSolidesPunchesByEmployeeIds(date, linkedEmployeeIds, {
+      showFired,
+      status: ["APPROVED", "PENDING", "REPROVED"].includes(statusFilter) ? statusFilter : undefined,
+    });
+    const punchesByEmployee = groupPunchesByEmployee(solidsPunches);
+
+    const rows = localUsers.map((localUser) => {
+      const solidesEmployee = pickBestSolidesEmployee(employeesByCpf.get(localUser.documento));
+      const aggregate = buildPunchAggregate(
+        punchesByEmployee.get(Number(solidesEmployee?.id || 0))
+        || punchesByEmployee.get(localUser.documento)
+        || []
+      );
+      const status = buildDailyPointStatus({
+        localUser,
+        solidesEmployee,
+        scheduleForDate: null,
+        aggregate,
+        params,
+      });
+
+      return {
+        usuarioId: localUser.id,
+        nome: localUser.nome,
+        cpf: localUser.documento,
+        setor: localUser.setorNome || "-",
+        setorId: localUser.setorId,
+        ativo: localUser.ativo,
+        solidesEmployeeId: solidesEmployee ? Number(solidesEmployee.id) : null,
+        solidesExternalId: solidesEmployee?.externalId ? String(solidesEmployee.externalId) : "",
+        escalaNome: "-",
+        jornadaEsperadaInicio: "",
+        jornadaEsperadaFim: "",
+        primeiraMarcacao: aggregate.firstIn,
+        ultimaMarcacao: aggregate.lastOut,
+        totalMarcacoes: aggregate.count,
+        totalBatidas: aggregate.totalPunches,
+        totalFotos: aggregate.totalPhotos,
+        horasTrabalhadas: workedSecondsToText(aggregate.workedSeconds),
+        statusesSolides: aggregate.statuses,
+        status: status.code,
+        statusLabel: status.label,
+        statusTone: status.tone,
+        observacao: status.detail,
+      };
+    });
+
+    const summary = {
+      total: rows.length,
+      ok: rows.filter((item) => item.status === "ok").length,
+      semVinculo: rows.filter((item) => item.status === "sem_vinculo").length,
+      semPonto: rows.filter((item) => item.status === "sem_ponto").length,
+      atencao: rows.filter((item) => ["batidas_insuficientes", "sem_foto", "marcacoes_incompletas", "pendente_solides"].includes(item.status)).length,
+      reprovado: rows.filter((item) => item.status === "reprovado_solides").length,
+    };
+
+    return res.json({
+      ok: true,
+      data: {
+        date,
+        params,
+        summary,
+        items: rows,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao verificar pontos diarios na Solides.",
+    });
+  }
+});
+
 app.get("/api/admin/client-portals", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await db.query(
@@ -1757,6 +2353,27 @@ app.put("/api/admin/client-portals/:id", requireAdmin, async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Erro ao atualizar acesso do portal do cliente.",
+      details: error.message,
+    });
+  }
+});
+
+app.delete("/api/admin/client-portals/:id", requireAdmin, async (req, res) => {
+  const accessId = parsePositiveInteger(req.params.id);
+  if (!accessId) {
+    return res.status(400).json({ ok: false, message: "Acesso invalido." });
+  }
+  try {
+    const current = await fetchClientPortalAccessById(accessId);
+    if (!current) {
+      return res.status(404).json({ ok: false, message: "Acesso nao encontrado." });
+    }
+    await db.query(`DELETE FROM client_portal_accesses WHERE id = ?`, [accessId]);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro ao excluir acesso do portal do cliente.",
       details: error.message,
     });
   }

@@ -21,12 +21,16 @@ export type OptionItem = {
   nome: string
 }
 
+export type SetorOption = {
+  id: number
+  nome: string
+}
+
 export type DashboardOverview = {
   stats: {
     obrasAndamento: number
-    obrasFinalizadas: number
     maquinasAtivas: number
-    diariosPendentes: number
+    diariosConcluidos: number
   }
   recentActivities: Array<{
     id: string
@@ -41,6 +45,67 @@ export type DashboardOverview = {
     title: string
     description: string
   }>
+}
+
+export type SolidesIntegrationStatus = {
+  tokenConfigured: boolean
+  accountName: string
+  employeesEnabled: boolean
+  punchEnabled: boolean
+  employeesCount: number
+  message: string
+}
+
+export type SolidesPointCheckParams = {
+  date: string
+  sectorId?: number | null
+  userId?: number | null
+  onlyActiveUsers: boolean
+  requireClosingPunch: boolean
+  ignoreWithoutSchedule: boolean
+  showFired: boolean
+  statusFilter: '' | 'APPROVED' | 'PENDING' | 'REPROVED'
+  entryToleranceMinutes: number
+  exitToleranceMinutes: number
+}
+
+export type SolidesPointCheckRecord = {
+  usuarioId: number
+  nome: string
+  cpf: string
+  setor: string
+  setorId: number | null
+  ativo: boolean
+  solidesEmployeeId: number | null
+  solidesExternalId: string
+  escalaNome: string
+  jornadaEsperadaInicio: string
+  jornadaEsperadaFim: string
+  primeiraMarcacao: string
+  ultimaMarcacao: string
+  totalMarcacoes: number
+  totalBatidas: number
+  totalFotos: number
+  horasTrabalhadas: string
+  statusesSolides: string[]
+  status: string
+  statusLabel: string
+  statusTone: 'emerald' | 'amber' | 'red' | 'slate'
+  observacao: string
+}
+
+export type SolidesPointCheckResult = {
+  date: string
+  params: SolidesPointCheckParams
+  summary: {
+    total: number
+    ok: number
+    semVinculo: number
+    semPonto: number
+    atencao: number
+    reprovado: number
+  }
+  items: SolidesPointCheckRecord[]
 }
 
 export type UsuarioRecord = {
@@ -146,6 +211,12 @@ export type ObraContato = {
   email: string
 }
 
+export type ObraArquivo = {
+  nome: string
+  tipo: string
+  tamanho: number | null
+}
+
 export type ObraDetail = {
   id?: number
   numero: string
@@ -181,6 +252,53 @@ export type ObraDetail = {
   responsavelContratante: string
   telContratante: string
   observacoes: string
+  modalidadeContratual: string
+  faturamentoMinimoDiarioGlobal: number | null
+  diasIncidenciaFatMinimo: string
+  modalidadeFatMinimo: string
+  acrescimoTransporteNoturno: number | null
+  responsavelIcamento: 'cliente' | 'gontijo'
+  valorIcamento: number | null
+  incideSeguro: boolean
+  valorSeguro: number | null
+  necessidadeIntegracao: string
+  valorIntegracao: number | null
+  documentacaoEspecifica: string
+  valorDocumentacao: number | null
+  mobilizacaoInterna: string
+  valorMobilizacaoInterna: number | null
+  responsavelLimpezaTrado: 'cliente' | 'gontijo'
+  valorLimpezaTrado: number | null
+  responsavelHospedagem: 'cliente' | 'gontijo'
+  valorHospedagem: number | null
+  responsavelCafeManha: 'cliente' | 'gontijo'
+  valorCafeManha: number | null
+  responsavelAlmoco: 'cliente' | 'gontijo'
+  valorAlmoco: number | null
+  responsavelJantar: 'cliente' | 'gontijo'
+  valorJantar: number | null
+  responsavelFornecimentoDiesel: 'cliente' | 'gontijo'
+  responsavelCusteioDiesel: 'cliente' | 'gontijo'
+  razaoSocialFaturamento: string
+  tipoDocumentoFaturamento: 'cpf' | 'cnpj'
+  documentoFaturamento: string
+  inscricaoMunicipal: string
+  issqnPct: number | null
+  issqnRetidoFonte: boolean
+  modalidadeFaturamento: string
+  informarCeiCnoGuia: boolean
+  ceiCno: string
+  cartaoCeiCno: ObraArquivo | null
+  enderecoFaturamentoMesmoCliente: boolean
+  faturamentoEstado: string
+  faturamentoCidade: string
+  faturamentoCep: string
+  faturamentoLogradouro: string
+  faturamentoBairro: string
+  faturamentoNumero: string
+  faturamentoComplemento: string
+  projetosArquivos: ObraArquivo[]
+  sondagensArquivos: ObraArquivo[]
   producao: ObraProducao[]
   responsabilidades: ObraResponsabilidade[]
   contatos: ObraContato[]
@@ -462,6 +580,22 @@ function toDateOnly(value: unknown): string {
   return match ? match[1] : text
 }
 
+function toFileValue(value: unknown): ObraArquivo | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  const nome = toStringValue(row.nome || row.name)
+  if (!nome) return null
+  return {
+    nome,
+    tipo: toStringValue(row.tipo || row.type),
+    tamanho: toNumberValue(row.tamanho || row.size),
+  }
+}
+
+function toFileListValue(value: unknown): ObraArquivo[] {
+  return Array.isArray(value) ? value.map((item) => toFileValue(item)).filter((item): item is ObraArquivo => Boolean(item)) : []
+}
+
 function adaptUsuario(row: Record<string, unknown>): UsuarioRecord {
   return {
     id: Number(row.id),
@@ -599,6 +733,53 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
     responsavelContratante: toStringValue(row.responsavel_contratante),
     telContratante: toStringValue(row.tel_contratante),
     observacoes: toStringValue(row.observacoes),
+    modalidadeContratual: toStringValue(row.modalidade_contratual),
+    faturamentoMinimoDiarioGlobal: toNumberValue(row.faturamento_minimo_diario_global),
+    diasIncidenciaFatMinimo: toStringValue(row.dias_incidencia_fat_minimo),
+    modalidadeFatMinimo: toStringValue(row.modalidade_fat_minimo),
+    acrescimoTransporteNoturno: toNumberValue(row.acrescimo_transporte_noturno),
+    responsavelIcamento: toStringValue(row.responsavel_icamento) === 'cliente' ? 'cliente' : 'gontijo',
+    valorIcamento: toNumberValue(row.valor_icamento),
+    incideSeguro: toBooleanValue(row.incide_seguro),
+    valorSeguro: toNumberValue(row.valor_seguro),
+    necessidadeIntegracao: toStringValue(row.necessidade_integracao),
+    valorIntegracao: toNumberValue(row.valor_integracao),
+    documentacaoEspecifica: toStringValue(row.documentacao_especifica),
+    valorDocumentacao: toNumberValue(row.valor_documentacao),
+    mobilizacaoInterna: toStringValue(row.mobilizacao_interna),
+    valorMobilizacaoInterna: toNumberValue(row.valor_mobilizacao_interna),
+    responsavelLimpezaTrado: toStringValue(row.responsavel_limpeza_trado) === 'gontijo' ? 'gontijo' : 'cliente',
+    valorLimpezaTrado: toNumberValue(row.valor_limpeza_trado),
+    responsavelHospedagem: toStringValue(row.responsavel_hospedagem) === 'gontijo' ? 'gontijo' : 'cliente',
+    valorHospedagem: toNumberValue(row.valor_hospedagem),
+    responsavelCafeManha: toStringValue(row.responsavel_cafe_manha) === 'gontijo' ? 'gontijo' : 'cliente',
+    valorCafeManha: toNumberValue(row.valor_cafe_manha),
+    responsavelAlmoco: toStringValue(row.responsavel_almoco) === 'gontijo' ? 'gontijo' : 'cliente',
+    valorAlmoco: toNumberValue(row.valor_almoco),
+    responsavelJantar: toStringValue(row.responsavel_jantar) === 'gontijo' ? 'gontijo' : 'cliente',
+    valorJantar: toNumberValue(row.valor_jantar),
+    responsavelFornecimentoDiesel: toStringValue(row.responsavel_fornecimento_diesel) === 'gontijo' ? 'gontijo' : 'cliente',
+    responsavelCusteioDiesel: toStringValue(row.responsavel_custeio_diesel) === 'gontijo' ? 'gontijo' : 'cliente',
+    razaoSocialFaturamento: toStringValue(row.razao_social_faturamento),
+    tipoDocumentoFaturamento: toStringValue(row.tipo_documento_faturamento) === 'cpf' ? 'cpf' : 'cnpj',
+    documentoFaturamento: toStringValue(row.documento_faturamento),
+    inscricaoMunicipal: toStringValue(row.inscricao_municipal),
+    issqnPct: toNumberValue(row.issqn_pct),
+    issqnRetidoFonte: toBooleanValue(row.issqn_retido_fonte),
+    modalidadeFaturamento: toStringValue(row.modalidade_faturamento),
+    informarCeiCnoGuia: toBooleanValue(row.informar_cei_cno_guia),
+    ceiCno: toStringValue(row.cei_cno),
+    cartaoCeiCno: toFileValue(row.cartao_cei_cno),
+    enderecoFaturamentoMesmoCliente: toBooleanValue(row.endereco_faturamento_mesmo_cliente),
+    faturamentoEstado: toStringValue(row.faturamento_estado),
+    faturamentoCidade: toStringValue(row.faturamento_cidade),
+    faturamentoCep: toStringValue(row.faturamento_cep),
+    faturamentoLogradouro: toStringValue(row.faturamento_logradouro),
+    faturamentoBairro: toStringValue(row.faturamento_bairro),
+    faturamentoNumero: toStringValue(row.faturamento_numero),
+    faturamentoComplemento: toStringValue(row.faturamento_complemento),
+    projetosArquivos: toFileListValue(row.projetos_arquivos),
+    sondagensArquivos: toFileListValue(row.sondagens_arquivos),
     producao,
     responsabilidades,
     contatos,
@@ -731,6 +912,53 @@ function buildObraPayload(payload: ObraDetail) {
     responsavel_contratante: payload.responsavelContratante,
     tel_contratante: payload.telContratante,
     observacoes: payload.observacoes,
+    modalidade_contratual: payload.modalidadeContratual,
+    faturamento_minimo_diario_global: payload.faturamentoMinimoDiarioGlobal,
+    dias_incidencia_fat_minimo: payload.diasIncidenciaFatMinimo,
+    modalidade_fat_minimo: payload.modalidadeFatMinimo,
+    acrescimo_transporte_noturno: payload.acrescimoTransporteNoturno,
+    responsavel_icamento: payload.responsavelIcamento,
+    valor_icamento: payload.valorIcamento,
+    incide_seguro: payload.incideSeguro,
+    valor_seguro: payload.valorSeguro,
+    necessidade_integracao: payload.necessidadeIntegracao,
+    valor_integracao: payload.valorIntegracao,
+    documentacao_especifica: payload.documentacaoEspecifica,
+    valor_documentacao: payload.valorDocumentacao,
+    mobilizacao_interna: payload.mobilizacaoInterna,
+    valor_mobilizacao_interna: payload.valorMobilizacaoInterna,
+    responsavel_limpeza_trado: payload.responsavelLimpezaTrado,
+    valor_limpeza_trado: payload.valorLimpezaTrado,
+    responsavel_hospedagem: payload.responsavelHospedagem,
+    valor_hospedagem: payload.valorHospedagem,
+    responsavel_cafe_manha: payload.responsavelCafeManha,
+    valor_cafe_manha: payload.valorCafeManha,
+    responsavel_almoco: payload.responsavelAlmoco,
+    valor_almoco: payload.valorAlmoco,
+    responsavel_jantar: payload.responsavelJantar,
+    valor_jantar: payload.valorJantar,
+    responsavel_fornecimento_diesel: payload.responsavelFornecimentoDiesel,
+    responsavel_custeio_diesel: payload.responsavelCusteioDiesel,
+    razao_social_faturamento: payload.razaoSocialFaturamento,
+    tipo_documento_faturamento: payload.tipoDocumentoFaturamento,
+    documento_faturamento: payload.documentoFaturamento,
+    inscricao_municipal: payload.inscricaoMunicipal,
+    issqn_pct: payload.issqnPct,
+    issqn_retido_fonte: payload.issqnRetidoFonte,
+    modalidade_faturamento: payload.modalidadeFaturamento,
+    informar_cei_cno_guia: payload.informarCeiCnoGuia,
+    cei_cno: payload.ceiCno,
+    cartao_cei_cno: payload.cartaoCeiCno,
+    endereco_faturamento_mesmo_cliente: payload.enderecoFaturamentoMesmoCliente,
+    faturamento_estado: payload.faturamentoEstado,
+    faturamento_cidade: payload.faturamentoCidade,
+    faturamento_cep: payload.faturamentoCep,
+    faturamento_logradouro: payload.faturamentoLogradouro,
+    faturamento_bairro: payload.faturamentoBairro,
+    faturamento_numero: payload.faturamentoNumero,
+    faturamento_complemento: payload.faturamentoComplemento,
+    projetos_arquivos: payload.projetosArquivos,
+    sondagens_arquivos: payload.sondagensArquivos,
     producao: payload.producao.map((item) => ({
       diametro: item.diametro,
       profundidade: item.profundidade,
@@ -778,9 +1006,8 @@ export const dashboardService = {
     return {
       stats: {
         obrasAndamento: Number((payload.stats as Record<string, unknown>).obras_andamento),
-        obrasFinalizadas: Number((payload.stats as Record<string, unknown>).obras_finalizadas),
         maquinasAtivas: Number((payload.stats as Record<string, unknown>).maquinas_ativas),
-        diariosPendentes: Number((payload.stats as Record<string, unknown>).diarios_pendentes),
+        diariosConcluidos: Number((payload.stats as Record<string, unknown>).diarios_concluidos),
       },
       recentActivities: ((payload.recent_activities as Array<Record<string, unknown>>) || []).map((item) => ({
         id: toStringValue(item.id),
@@ -978,6 +1205,18 @@ export const modalidadeService = {
       id: Number(row.id),
       nome: toStringValue(row.nome),
     }))
+  },
+}
+
+export const setorService = {
+  async list(): Promise<SetorOption[]> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/setores')
+    return Array.isArray(data.data)
+      ? data.data.map((row) => ({
+          id: Number(row.id || 0),
+          nome: toStringValue(row.nome),
+        }))
+      : []
   },
 }
 
@@ -1252,6 +1491,93 @@ export const clientPortalAdminService = {
       active: payload.active,
     })
     return adaptClientPortalAccess(data.data)
+  },
+  async delete(id: number) {
+    await api.delete(`/admin/client-portals/${id}`)
+  },
+}
+
+export const solidesPointService = {
+  async getStatus(): Promise<SolidesIntegrationStatus> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/admin/solides/status')
+    const payload = data.data || {}
+    return {
+      tokenConfigured: toBooleanValue(payload.tokenConfigured),
+      accountName: toStringValue(payload.accountName),
+      employeesEnabled: toBooleanValue(payload.employeesEnabled),
+      punchEnabled: toBooleanValue(payload.punchEnabled),
+      employeesCount: Number(payload.employeesCount || 0),
+      message: toStringValue(payload.message),
+    }
+  },
+  async checkDaily(params: SolidesPointCheckParams): Promise<SolidesPointCheckResult> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/admin/solides/daily-point-check', {
+      params: {
+        date: params.date,
+        sector_id: params.sectorId || undefined,
+        user_id: params.userId || undefined,
+        only_active_users: params.onlyActiveUsers,
+        require_closing_punch: params.requireClosingPunch,
+        ignore_without_schedule: params.ignoreWithoutSchedule,
+        show_fired: params.showFired,
+        status_filter: params.statusFilter || undefined,
+        entry_tolerance_minutes: params.entryToleranceMinutes,
+        exit_tolerance_minutes: params.exitToleranceMinutes,
+      },
+    })
+    const payload = (data.data || {}) as Record<string, unknown>
+    return {
+      date: toDateOnly(payload.date),
+      params: {
+        date: toDateOnly((payload.params as Record<string, unknown> | undefined)?.date || params.date),
+        sectorId: toNumberValue((payload.params as Record<string, unknown> | undefined)?.sectorId),
+        userId: toNumberValue((payload.params as Record<string, unknown> | undefined)?.userId),
+        onlyActiveUsers: toBooleanValue((payload.params as Record<string, unknown> | undefined)?.onlyActiveUsers ?? params.onlyActiveUsers),
+        requireClosingPunch: toBooleanValue((payload.params as Record<string, unknown> | undefined)?.requireClosingPunch ?? params.requireClosingPunch),
+        ignoreWithoutSchedule: toBooleanValue((payload.params as Record<string, unknown> | undefined)?.ignoreWithoutSchedule ?? params.ignoreWithoutSchedule),
+        showFired: toBooleanValue((payload.params as Record<string, unknown> | undefined)?.showFired ?? params.showFired),
+        statusFilter: (toStringValue((payload.params as Record<string, unknown> | undefined)?.statusFilter) as SolidesPointCheckParams['statusFilter']) || '',
+        entryToleranceMinutes: Number((payload.params as Record<string, unknown> | undefined)?.entryToleranceMinutes || params.entryToleranceMinutes),
+        exitToleranceMinutes: Number((payload.params as Record<string, unknown> | undefined)?.exitToleranceMinutes || params.exitToleranceMinutes),
+      },
+      summary: {
+        total: Number((payload.summary as Record<string, unknown> | undefined)?.total || 0),
+        ok: Number((payload.summary as Record<string, unknown> | undefined)?.ok || 0),
+        semVinculo: Number((payload.summary as Record<string, unknown> | undefined)?.semVinculo || 0),
+        semPonto: Number((payload.summary as Record<string, unknown> | undefined)?.semPonto || 0),
+        atencao: Number((payload.summary as Record<string, unknown> | undefined)?.atencao || 0),
+        reprovado: Number((payload.summary as Record<string, unknown> | undefined)?.reprovado || 0),
+      },
+      items: Array.isArray(payload.items)
+        ? payload.items.map((row) => {
+            const item = row as Record<string, unknown>
+            return {
+              usuarioId: Number(item.usuarioId || 0),
+              nome: toStringValue(item.nome),
+              cpf: toStringValue(item.cpf),
+              setor: toStringValue(item.setor),
+              setorId: toNumberValue(item.setorId),
+              ativo: toBooleanValue(item.ativo),
+              solidesEmployeeId: toNumberValue(item.solidesEmployeeId),
+              solidesExternalId: toStringValue(item.solidesExternalId),
+              escalaNome: toStringValue(item.escalaNome),
+              jornadaEsperadaInicio: toStringValue(item.jornadaEsperadaInicio),
+              jornadaEsperadaFim: toStringValue(item.jornadaEsperadaFim),
+              primeiraMarcacao: toStringValue(item.primeiraMarcacao),
+              ultimaMarcacao: toStringValue(item.ultimaMarcacao),
+              totalMarcacoes: Number(item.totalMarcacoes || 0),
+              totalBatidas: Number(item.totalBatidas || 0),
+              totalFotos: Number(item.totalFotos || 0),
+              horasTrabalhadas: toStringValue(item.horasTrabalhadas),
+              statusesSolides: Array.isArray(item.statusesSolides) ? item.statusesSolides.map((entry) => toStringValue(entry)) : [],
+              status: toStringValue(item.status),
+              statusLabel: toStringValue(item.statusLabel),
+              statusTone: (toStringValue(item.statusTone) as SolidesPointCheckRecord['statusTone']) || 'slate',
+              observacao: toStringValue(item.observacao),
+            }
+          })
+        : [],
+    }
   },
 }
 

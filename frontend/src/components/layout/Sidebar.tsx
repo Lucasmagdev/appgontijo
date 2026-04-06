@@ -2,12 +2,13 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, HardHat, Wrench,
   FileText, BarChart3, KeyRound, BookOpen,
+  Fingerprint,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   clienteService, dashboardService, diarioService,
-  equipamentoService, modalidadeService, obraService, usuarioService,
+  equipamentoService, modalidadeService, obraService, usuarioService, solidesPointService,
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +21,7 @@ const navItems = [
   { label: 'Equipamentos', to: '/equipamentos', icon: Wrench },
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
+  { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
   { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
   { type: 'divider', label: 'Treinamento' },
@@ -51,6 +53,8 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
       void queryClient.prefetchQuery({ queryKey: ['diarios', { dataInicio: '', dataFim: '', obra: '', modalidadeId: '', equipamentoId: '', page: 1 }], queryFn: () => diarioService.list({ page: 1, limit: 20 }) })
       void queryClient.prefetchQuery({ queryKey: ['modalidades'], queryFn: modalidadeService.list })
       void queryClient.prefetchQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
+    } else if (to === '/ponto-verificacao') {
+      void queryClient.prefetchQuery({ queryKey: ['solides-status'], queryFn: solidesPointService.getStatus })
     }
   }
 

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Save, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Save, Trash2, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -9,87 +9,47 @@ import {
   extractApiErrorMessage,
   modalidadeService,
   obraService,
+  type ObraArquivo,
   type ObraContato,
   type ObraDetail,
   type ObraProducao,
-  type ObraResponsabilidade,
 } from '@/lib/gontijo-api'
-import { calculateSegmentMeq, parseDiameterCm } from '@/lib/meq'
 
-const emptyProducao = (): ObraProducao => ({
-  diametro: '',
-  profundidade: null,
-  qtdEstacas: null,
-  preco: null,
-  subtotal: null,
-})
+type SectionKey = 'basicos' | 'arquivos' | 'contrato' | 'responsabilidades' | 'faturamento' | 'contatos'
 
-const emptyResponsabilidade = (): ObraResponsabilidade => ({
-  item: '',
-  responsavel: 'gontijo',
-  valor: null,
-})
+const UFS = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
+const STATUS_OPTIONS = [{ value: 'em andamento', label: 'Em execução' },{ value: 'pausada', label: 'Pausada' },{ value: 'finalizada', label: 'Finalizada' },{ value: 'cancelada', label: 'Cancelada' }] as const
+const EMPRESA_OPTIONS = [{ value: 'gontijo', label: 'Gontijo' },{ value: 'fundacoes', label: 'Gontijo Fundações' }] as const
+const CONTRACT_OPTIONS = [{ value: 'FM', label: 'Faturamento mínimo' },{ value: 'GL', label: 'Global' },{ value: 'DI', label: 'Diário' },{ value: 'AP', label: 'Apropriação' },{ value: 'OU', label: 'Outro' }] as const
+const FAT_MIN_DAY_OPTIONS = [{ value: 'SA', label: 'Segunda a sábado' },{ value: 'SO', label: 'Segunda a sexta' },{ value: 'TD', label: 'Todos os dias' },{ value: 'NA', label: 'Não se aplica' }] as const
+const FAT_MIN_MODAL_OPTIONS = [{ value: 'D', label: 'Diário' },{ value: 'S', label: 'Semanal' },{ value: 'Q', label: 'Quinzenal' },{ value: 'M', label: 'Mensal' },{ value: 'O', label: 'Outro' }]
+const YES_NO_OPTIONS = [{ value: 'Y', label: 'Sim' },{ value: 'N', label: 'Não' }] as const
+const YES_NO_THIRD_OPTIONS = [{ value: 'Y', label: 'Sim' },{ value: 'N', label: 'Não' },{ value: 'T', label: 'Terceiro' }] as const
+const RESPONSAVEL_OPTIONS = [{ value: 'cliente', label: 'Cliente' },{ value: 'gontijo', label: 'Gontijo' }] as const
+const MOD_FAT_OPTIONS = [{ value: 'FL', label: 'Fatura de locação' },{ value: 'NF', label: 'Nota fiscal' },{ value: 'OU', label: 'Outro' }] as const
 
-const emptyContato = (): ObraContato => ({
-  nome: '',
-  funcao: '',
-  telefone: '',
-  email: '',
-})
+const emptyArquivo = (file: File): ObraArquivo => ({ nome: file.name, tipo: file.type || '', tamanho: Number.isFinite(file.size) ? file.size : null })
+const emptyProducao = (): ObraProducao => ({ diametro: '', profundidade: null, qtdEstacas: null, preco: null, subtotal: null })
+const emptyContato = (): ObraContato => ({ nome: '', funcao: '', telefone: '', email: '' })
 
 const initialForm: ObraDetail = {
-  numero: '',
-  clienteId: null,
-  status: 'em andamento',
-  empresaResponsavel: '',
-  tipoObra: '',
-  finalidade: '',
-  dataPrevistaInicio: '',
-  estado: '',
-  cidade: '',
-  cep: '',
-  logradouro: '',
-  bairro: '',
-  numeroEnd: '',
-  complemento: '',
-  projetoGontijo: false,
-  valorProjeto: null,
-  fatMinimoTipo: 'global',
-  fatMinimoValor: null,
-  fatMinimoDias: null,
-  usaBits: false,
-  valorBits: null,
-  transporteNoturno: false,
-  icamento: false,
-  seguroPct: null,
-  totalProducao: null,
-  mobilizacao: null,
-  desmobilizacao: null,
-  totalGeral: null,
-  responsavelComercialGontijo: '',
-  telComercialGontijo: '',
-  responsavelContratante: '',
-  telContratante: '',
-  observacoes: '',
-  producao: [],
-  responsabilidades: [],
-  contatos: [],
-  modalidades: [],
-  equipamentos: [],
+  numero: '', clienteId: null, status: 'em andamento', empresaResponsavel: 'gontijo', tipoObra: 'Fundação', finalidade: '', dataPrevistaInicio: '', estado: '', cidade: '', cep: '', logradouro: '', bairro: '', numeroEnd: '', complemento: '',
+  projetoGontijo: true, valorProjeto: null, fatMinimoTipo: 'global', fatMinimoValor: null, fatMinimoDias: null, usaBits: false, valorBits: null, transporteNoturno: false, icamento: false, seguroPct: null, totalProducao: null, mobilizacao: null, desmobilizacao: null, totalGeral: null,
+  responsavelComercialGontijo: '', telComercialGontijo: '', responsavelContratante: '', telContratante: '', observacoes: '',
+  modalidadeContratual: 'FM', faturamentoMinimoDiarioGlobal: null, diasIncidenciaFatMinimo: 'SO', modalidadeFatMinimo: 'D', acrescimoTransporteNoturno: null, responsavelIcamento: 'gontijo', valorIcamento: null, incideSeguro: true, valorSeguro: null,
+  necessidadeIntegracao: 'N', valorIntegracao: null, documentacaoEspecifica: 'N', valorDocumentacao: null, mobilizacaoInterna: 'N', valorMobilizacaoInterna: null, responsavelLimpezaTrado: 'cliente', valorLimpezaTrado: null, responsavelHospedagem: 'cliente', valorHospedagem: null, responsavelCafeManha: 'cliente', valorCafeManha: null, responsavelAlmoco: 'cliente', valorAlmoco: null, responsavelJantar: 'cliente', valorJantar: null, responsavelFornecimentoDiesel: 'cliente', responsavelCusteioDiesel: 'cliente',
+  razaoSocialFaturamento: '', tipoDocumentoFaturamento: 'cnpj', documentoFaturamento: '', inscricaoMunicipal: '', issqnPct: null, issqnRetidoFonte: false, modalidadeFaturamento: 'FL', informarCeiCnoGuia: true, ceiCno: '', cartaoCeiCno: null, enderecoFaturamentoMesmoCliente: false, faturamentoEstado: '', faturamentoCidade: '', faturamentoCep: '', faturamentoLogradouro: '', faturamentoBairro: '', faturamentoNumero: '', faturamentoComplemento: '',
+  projetosArquivos: [], sondagensArquivos: [], producao: [], responsabilidades: [], contatos: [emptyContato()], modalidades: [], equipamentos: [],
 }
 
-function parseNumberInput(value: string) {
-  if (!value.trim()) return null
-  const parsed = Number(value.replace(',', '.'))
-  return Number.isFinite(parsed) ? parsed : null
-}
+function parseNumberInput(value: string) { if (!value.trim()) return null; const parsed = Number(value.replace(',', '.')); return Number.isFinite(parsed) ? parsed : null }
+function formatCurrency(value: number | null | undefined) { if (value == null || !Number.isFinite(value)) return '0,00'; return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function gridSpan(columns: number): React.CSSProperties { return { gridColumn: `span ${columns} / span ${columns}` } }
+function toggleArrayId(current: number[], value: number) { return current.includes(value) ? current.filter((item) => item !== value) : [...current, value] }
 
-function formatDecimal(value: number | null | undefined, digits = 2) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '-'
-  return value.toLocaleString('pt-BR', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
+function ObraSection({ title, sectionKey, activeSection, setActiveSection, children }: { title: string; sectionKey: SectionKey; activeSection: SectionKey; setActiveSection: (section: SectionKey) => void; children: React.ReactNode }) {
+  const open = activeSection === sectionKey
+  return <section className="app-panel section-panel !p-0 overflow-hidden"><button type="button" onClick={() => setActiveSection(sectionKey)} className="w-full flex items-center justify-between px-5 py-4 text-left" style={{ borderBottom: open ? '1px solid #e5e7eb' : 'none' }}><span style={{ color: 'var(--brand-red)', fontSize: '1.05rem', fontWeight: 800 }}>{title}</span>{open ? <ChevronUp size={18} color="#b91c1c" /> : <ChevronDown size={18} color="#b91c1c" />}</button>{open ? <div className="px-4 py-4">{children}</div> : null}</section>
 }
 
 export default function ObraFormPage() {
@@ -99,364 +59,149 @@ export default function ObraFormPage() {
   const isEditing = Boolean(id)
   const [form, setForm] = useState<ObraDetail>(initialForm)
   const [submitError, setSubmitError] = useState('')
+  const [activeSection, setActiveSection] = useState<SectionKey>('basicos')
+  const projectInputRef = useRef<HTMLInputElement | null>(null)
+  const pollInputRef = useRef<HTMLInputElement | null>(null)
+  const ceiCnoInputRef = useRef<HTMLInputElement | null>(null)
 
-  const obraQuery = useQuery({
-    queryKey: ['obra', id],
-    queryFn: () => obraService.getById(Number(id)),
-    enabled: isEditing,
-  })
+  const obraQuery = useQuery({ queryKey: ['obra', id], queryFn: () => obraService.getById(Number(id)), enabled: isEditing })
+  const clientesQuery = useQuery({ queryKey: ['cliente-options'], queryFn: clienteService.listOptions })
+  const clienteDetailQuery = useQuery({ queryKey: ['cliente-detail-for-obra', form.clienteId], queryFn: () => clienteService.getById(form.clienteId as number), enabled: Boolean(form.clienteId) })
+  const modalidadesQuery = useQuery({ queryKey: ['modalidades'], queryFn: modalidadeService.list })
+  const equipamentosQuery = useQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
 
-  const clientesQuery = useQuery({
-    queryKey: ['cliente-options'],
-    queryFn: clienteService.listOptions,
-  })
+  useEffect(() => { if (obraQuery.data) setForm({ ...initialForm, ...obraQuery.data, contatos: obraQuery.data.contatos.length ? obraQuery.data.contatos : [emptyContato()] }) }, [obraQuery.data])
+  useEffect(() => { if (!form.enderecoFaturamentoMesmoCliente || !clienteDetailQuery.data) return; setForm((prev) => ({ ...prev, faturamentoEstado: clienteDetailQuery.data.estado, faturamentoCidade: clienteDetailQuery.data.cidade, faturamentoCep: clienteDetailQuery.data.cep, faturamentoLogradouro: clienteDetailQuery.data.logradouro, faturamentoBairro: clienteDetailQuery.data.bairro, faturamentoNumero: clienteDetailQuery.data.numero, faturamentoComplemento: clienteDetailQuery.data.complemento, razaoSocialFaturamento: prev.razaoSocialFaturamento || clienteDetailQuery.data.razaoSocial, tipoDocumentoFaturamento: clienteDetailQuery.data.tipoDoc, documentoFaturamento: prev.documentoFaturamento || clienteDetailQuery.data.documento, inscricaoMunicipal: prev.inscricaoMunicipal || clienteDetailQuery.data.inscricaoMunicipal })) }, [form.enderecoFaturamentoMesmoCliente, clienteDetailQuery.data])
 
-  const modalidadesQuery = useQuery({
-    queryKey: ['modalidades'],
-    queryFn: modalidadeService.list,
-  })
+  const filteredEquipamentos = useMemo(() => { if (!equipamentosQuery.data) return []; if (!form.modalidades.length) return equipamentosQuery.data; return equipamentosQuery.data.filter((item) => !item.modalidadeId || form.modalidades.includes(item.modalidadeId)) }, [equipamentosQuery.data, form.modalidades])
+  const totalProducaoCalculado = useMemo(() => form.producao.reduce((sum, item) => sum + (item.subtotal || ((item.qtdEstacas || 0) * (item.preco || 0))), 0), [form.producao])
+  const totalObraCalculado = useMemo(() => totalProducaoCalculado + (form.mobilizacao || 0) + (form.desmobilizacao || 0), [form.desmobilizacao, form.mobilizacao, totalProducaoCalculado])
 
-  const equipamentosQuery = useQuery({
-    queryKey: ['equipamentos'],
-    queryFn: equipamentoService.list,
-  })
+  const mutation = useMutation({ mutationFn: async (payload: ObraDetail) => isEditing ? (await obraService.update(Number(id), payload), Number(id)) : obraService.create(payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['obras'] }); if (isEditing) await queryClient.invalidateQueries({ queryKey: ['obra', id] }); navigate('/obras') }, onError: (error) => setSubmitError(extractApiErrorMessage(error)) })
 
-  useEffect(() => {
-    if (obraQuery.data) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setForm(obraQuery.data)
-    }
-  }, [obraQuery.data])
-
-  const mutation = useMutation({
-    mutationFn: async (payload: ObraDetail) => {
-      if (isEditing) {
-        await obraService.update(Number(id), payload)
-        return Number(id)
-      }
-      return obraService.create(payload)
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['obras'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] })
-      if (isEditing) await queryClient.invalidateQueries({ queryKey: ['obra', id] })
-      navigate('/obras')
-    },
-    onError: (error) => setSubmitError(extractApiErrorMessage(error)),
-  })
-
-  function setField<K extends keyof ObraDetail>(field: K, value: ObraDetail[K]) {
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
-
-  function toggleId(field: 'modalidades' | 'equipamentos', value: number) {
-    setForm((prev) => ({
-      ...prev,
-      [field]: prev[field].includes(value)
-        ? prev[field].filter((current) => current !== value)
-        : [...prev[field], value],
-    }))
-  }
-
-  function updateProducao(index: number, field: keyof ObraProducao, value: string | number | null) {
-    setForm((prev) => {
-      const next = [...prev.producao]
-      next[index] = { ...next[index], [field]: value }
-      return { ...prev, producao: next }
-    })
-  }
-
-  function updateResponsabilidade(index: number, field: keyof ObraResponsabilidade, value: string | number | null) {
-    setForm((prev) => {
-      const next = [...prev.responsabilidades]
-      next[index] = { ...next[index], [field]: value }
-      return { ...prev, responsabilidades: next }
-    })
-  }
-
-  function updateContato(index: number, field: keyof ObraContato, value: string) {
-    setForm((prev) => {
-      const next = [...prev.contatos]
-      next[index] = { ...next[index], [field]: value }
-      return { ...prev, contatos: next }
-    })
-  }
-
-  const totalMetaMeq = form.producao.reduce((sum, item) => {
-    const meq = calculateSegmentMeq(item.qtdEstacas, item.profundidade, parseDiameterCm(item.diametro))
-    return sum + Number(meq.metaMeqSegmento || 0)
-  }, 0)
+  function setField<K extends keyof ObraDetail>(field: K, value: ObraDetail[K]) { setForm((prev) => ({ ...prev, [field]: value })) }
+  function updateContato(index: number, field: keyof ObraContato, value: string) { setForm((prev) => { const next = [...prev.contatos]; next[index] = { ...next[index], [field]: value }; return { ...prev, contatos: next } }) }
+  function updateProducao(index: number, field: keyof ObraProducao, value: string | number | null) { setForm((prev) => { const next = [...prev.producao]; const updated = { ...next[index], [field]: value }; updated.subtotal = ((updated.qtdEstacas || 0) * (updated.preco || 0)) || null; next[index] = updated; return { ...prev, producao: next } }) }
+  function pushArquivos(field: 'projetosArquivos' | 'sondagensArquivos', files: FileList | null) { if (!files?.length) return; setForm((prev) => ({ ...prev, [field]: [...prev[field], ...Array.from(files).map(emptyArquivo)] })) }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitError('')
-    await mutation.mutateAsync({
-      ...form,
-      numero: form.numero.trim(),
-      empresaResponsavel: form.empresaResponsavel.trim(),
-      tipoObra: form.tipoObra.trim(),
-      finalidade: form.finalidade.trim(),
-      estado: form.estado.trim().toUpperCase(),
-      cidade: form.cidade.trim(),
-      cep: form.cep.trim(),
-      logradouro: form.logradouro.trim(),
-      bairro: form.bairro.trim(),
-      numeroEnd: form.numeroEnd.trim(),
-      complemento: form.complemento.trim(),
-      responsavelComercialGontijo: form.responsavelComercialGontijo.trim(),
-      telComercialGontijo: form.telComercialGontijo.trim(),
-      responsavelContratante: form.responsavelContratante.trim(),
-      telContratante: form.telContratante.trim(),
-      observacoes: form.observacoes.trim(),
-    })
+    event.preventDefault(); setSubmitError('')
+    await mutation.mutateAsync({ ...form, numero: form.numero.trim(), tipoObra: form.tipoObra.trim(), finalidade: form.finalidade.trim(), estado: form.estado.trim().toUpperCase(), cidade: form.cidade.trim(), cep: form.cep.trim(), logradouro: form.logradouro.trim(), bairro: form.bairro.trim(), numeroEnd: form.numeroEnd.trim(), complemento: form.complemento.trim(), totalProducao: totalProducaoCalculado || null, totalGeral: totalObraCalculado || null, contatos: form.contatos.filter((item) => item.nome || item.funcao || item.telefone || item.email), producao: form.producao.filter((item) => item.diametro || item.profundidade || item.qtdEstacas || item.preco || item.subtotal), responsabilidades: [] })
   }
 
   return (
     <div className="page-shell">
-      <div className="flex items-center gap-3">
-        <Link to="/obras" className="btn btn-secondary btn-icon">
-          <ArrowLeft size={15} />
-        </Link>
-        <div>
-          <h1 className="page-heading">{isEditing ? 'Editar obra' : 'Nova obra'}</h1>
-          <p className="page-subtitle">Cadastro operacional completo ligado ao banco real.</p>
-        </div>
-      </div>
-
-      {obraQuery.isLoading ? <QueryFeedback type="loading" title="Carregando obra" description="Buscando os dados existentes antes de liberar a edicao." /> : null}
-      {obraQuery.isError ? <QueryFeedback type="error" title="Nao foi possivel carregar a obra" description={extractApiErrorMessage(obraQuery.error)} /> : null}
-      {submitError ? <QueryFeedback type="error" title="Nao foi possivel salvar" description={submitError} /> : null}
-
-      {(!isEditing || obraQuery.data) && (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Dados principais</h2>
-            <div className="form-grid">
-              <div className="span-3">
-                <label className="field-label">Numero da obra</label>
-                <input type="text" value={form.numero} onChange={(event) => setField('numero', event.target.value)} className="field-input" required />
-              </div>
-              <div className="span-5">
-                <label className="field-label">Cliente</label>
-                <select value={form.clienteId ?? ''} onChange={(event) => setField('clienteId', event.target.value ? Number(event.target.value) : null)} className="field-select" required>
-                  <option value="">Selecione</option>
-                  {clientesQuery.data?.map((item) => (
-                    <option key={item.id} value={item.id}>{item.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="span-2">
-                <label className="field-label">Status</label>
-                <select value={form.status} onChange={(event) => setField('status', event.target.value as ObraDetail['status'])} className="field-select">
-                  <option value="em andamento">Em andamento</option>
-                  <option value="finalizada">Finalizada</option>
-                  <option value="pausada">Pausada</option>
-                  <option value="cancelada">Cancelada</option>
-                </select>
-              </div>
-              <div className="span-2">
-                <label className="field-label">Inicio previsto</label>
-                <input type="date" value={form.dataPrevistaInicio} onChange={(event) => setField('dataPrevistaInicio', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Empresa responsavel</label>
-                <input type="text" value={form.empresaResponsavel} onChange={(event) => setField('empresaResponsavel', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Tipo de obra</label>
-                <input type="text" value={form.tipoObra} onChange={(event) => setField('tipoObra', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Finalidade</label>
-                <input type="text" value={form.finalidade} onChange={(event) => setField('finalidade', event.target.value)} className="field-input" />
-              </div>
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Endereco</h2>
-            <div className="form-grid">
-              <div className="span-2">
-                <label className="field-label">UF</label>
-                <input type="text" value={form.estado} onChange={(event) => setField('estado', event.target.value)} className="field-input" maxLength={2} />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Cidade</label>
-                <input type="text" value={form.cidade} onChange={(event) => setField('cidade', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-2">
-                <label className="field-label">CEP</label>
-                <input type="text" value={form.cep} onChange={(event) => setField('cep', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-8">
-                <label className="field-label">Logradouro</label>
-                <input type="text" value={form.logradouro} onChange={(event) => setField('logradouro', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-2">
-                <label className="field-label">Numero</label>
-                <input type="text" value={form.numeroEnd} onChange={(event) => setField('numeroEnd', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Bairro</label>
-                <input type="text" value={form.bairro} onChange={(event) => setField('bairro', event.target.value)} className="field-input" />
-              </div>
-              <div className="span-4">
-                <label className="field-label">Complemento</label>
-                <input type="text" value={form.complemento} onChange={(event) => setField('complemento', event.target.value)} className="field-input" />
-              </div>
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Contrato e totais</h2>
-            <div className="form-grid">
-              <div className="span-3"><label className="field-label">Valor do projeto</label><input type="number" value={form.valorProjeto ?? ''} onChange={(event) => setField('valorProjeto', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Fat. minimo tipo</label><select value={form.fatMinimoTipo} onChange={(event) => setField('fatMinimoTipo', event.target.value as ObraDetail['fatMinimoTipo'])} className="field-select"><option value="global">Global</option><option value="diario">Diario</option></select></div>
-              <div className="span-3"><label className="field-label">Fat. minimo valor</label><input type="number" value={form.fatMinimoValor ?? ''} onChange={(event) => setField('fatMinimoValor', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Fat. minimo dias</label><input type="number" value={form.fatMinimoDias ?? ''} onChange={(event) => setField('fatMinimoDias', parseNumberInput(event.target.value))} className="field-input" /></div>
-              <div className="span-3"><label className="field-label">Valor bits</label><input type="number" value={form.valorBits ?? ''} onChange={(event) => setField('valorBits', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Seguro %</label><input type="number" value={form.seguroPct ?? ''} onChange={(event) => setField('seguroPct', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Mobilizacao</label><input type="number" value={form.mobilizacao ?? ''} onChange={(event) => setField('mobilizacao', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Desmobilizacao</label><input type="number" value={form.desmobilizacao ?? ''} onChange={(event) => setField('desmobilizacao', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Total producao</label><input type="number" value={form.totalProducao ?? ''} onChange={(event) => setField('totalProducao', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-3"><label className="field-label">Total geral</label><input type="number" value={form.totalGeral ?? ''} onChange={(event) => setField('totalGeral', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-              <div className="span-6 checkbox-grid">
-                <label className="checkbox-card"><input type="checkbox" checked={form.projetoGontijo} onChange={(event) => setField('projetoGontijo', event.target.checked)} />Projeto Gontijo</label>
-                <label className="checkbox-card"><input type="checkbox" checked={form.usaBits} onChange={(event) => setField('usaBits', event.target.checked)} />Usa bits</label>
-                <label className="checkbox-card"><input type="checkbox" checked={form.transporteNoturno} onChange={(event) => setField('transporteNoturno', event.target.checked)} />Transporte noturno</label>
-                <label className="checkbox-card"><input type="checkbox" checked={form.icamento} onChange={(event) => setField('icamento', event.target.checked)} />Icamento</label>
-              </div>
-              <div className="span-6">
-                <label className="field-label">Observacoes</label>
-                <textarea value={form.observacoes} onChange={(event) => setField('observacoes', event.target.value)} className="field-textarea" />
-              </div>
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Responsaveis comerciais</h2>
-            <div className="form-grid">
-              <div className="span-4"><label className="field-label">Responsavel comercial Gontijo</label><input type="text" value={form.responsavelComercialGontijo} onChange={(event) => setField('responsavelComercialGontijo', event.target.value)} className="field-input" /></div>
-              <div className="span-2"><label className="field-label">Telefone Gontijo</label><input type="text" value={form.telComercialGontijo} onChange={(event) => setField('telComercialGontijo', event.target.value)} className="field-input" /></div>
-              <div className="span-4"><label className="field-label">Responsavel contratante</label><input type="text" value={form.responsavelContratante} onChange={(event) => setField('responsavelContratante', event.target.value)} className="field-input" /></div>
-              <div className="span-2"><label className="field-label">Telefone contratante</label><input type="text" value={form.telContratante} onChange={(event) => setField('telContratante', event.target.value)} className="field-input" /></div>
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Modalidades</h2>
-            <div className="selection-grid">
-              {modalidadesQuery.data?.map((item) => (
-                <label key={item.id} className="checkbox-card">
-                  <input type="checkbox" checked={form.modalidades.includes(item.id)} onChange={() => toggleId('modalidades', item.id)} />
-                  {item.nome}
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <h2 className="section-heading">Equipamentos da obra</h2>
-            <div className="selection-grid">
-              {equipamentosQuery.data?.map((item) => (
-                <label key={item.id} className="checkbox-card">
-                  <input type="checkbox" checked={form.equipamentos.includes(item.id)} onChange={() => toggleId('equipamentos', item.id)} />
-                  <span>{item.nome}{item.modalidadeNome ? ` · ${item.modalidadeNome}` : ''}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <div className="section-header-inline">
-              <div>
-                <h2 className="section-heading !mb-0">Producao</h2>
-                <p className="page-subtitle">MEQ calculado com a mesma regra do outro sistema: estacas x profundidade x fator do diametro.</p>
-              </div>
-              <div className="inline-actions">
-                <span className="pagination-chip">Meta MEQ total: {formatDecimal(totalMetaMeq)}</span>
-                <button type="button" className="btn btn-secondary" onClick={() => setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] }))}><Plus size={15} />Adicionar linha</button>
-              </div>
-            </div>
-            <div className="stack-list">
-              {form.producao.length ? form.producao.map((item, index) => {
-                const diametroCm = parseDiameterCm(item.diametro)
-                const meq = calculateSegmentMeq(item.qtdEstacas, item.profundidade, diametroCm)
-
-                return (
-                  <div key={`producao-${index}`} className="nested-card">
-                    <div className="form-grid">
-                      <div className="span-2"><label className="field-label">Diametro</label><input type="text" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} className="field-input" /></div>
-                      <div className="span-2"><label className="field-label">Profundidade</label><input type="number" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                      <div className="span-2"><label className="field-label">Qtd. estacas</label><input type="number" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} className="field-input" /></div>
-                      <div className="span-2"><label className="field-label">Preco</label><input type="number" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                      <div className="span-2"><label className="field-label">Subtotal</label><input type="number" value={item.subtotal ?? ''} onChange={(event) => updateProducao(index, 'subtotal', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                      <div className="span-2 nested-actions"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, producao: prev.producao.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 size={14} /></button></div>
-
-                      <div className="span-3">
-                        <label className="field-label">Diametro convertido</label>
-                        <div className="pagination-chip w-full justify-center">{diametroCm == null ? '-' : `${formatDecimal(diametroCm, 1)} cm`}</div>
-                      </div>
-                      <div className="span-3">
-                        <label className="field-label">Fator MEQ</label>
-                        <div className="pagination-chip w-full justify-center">{formatDecimal(meq.meqFactor, 4)}</div>
-                      </div>
-                      <div className="span-3">
-                        <label className="field-label">Meta MEQ segmento</label>
-                        <div className="pagination-chip w-full justify-center">{formatDecimal(meq.metaMeqSegmento)}</div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              }) : <QueryFeedback type="empty" title="Nenhuma linha de producao" description="Adicione as faixas de diametro e volume da obra." />}
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <div className="section-header-inline">
-              <h2 className="section-heading !mb-0">Responsabilidades</h2>
-              <button type="button" className="btn btn-secondary" onClick={() => setForm((prev) => ({ ...prev, responsabilidades: [...prev.responsabilidades, emptyResponsabilidade()] }))}><Plus size={15} />Adicionar item</button>
-            </div>
-            <div className="stack-list">
-              {form.responsabilidades.length ? form.responsabilidades.map((item, index) => (
-                <div key={`responsabilidade-${index}`} className="nested-card">
-                  <div className="form-grid">
-                    <div className="span-5"><label className="field-label">Item</label><input type="text" value={item.item} onChange={(event) => updateResponsabilidade(index, 'item', event.target.value)} className="field-input" /></div>
-                    <div className="span-3"><label className="field-label">Responsavel</label><select value={item.responsavel} onChange={(event) => updateResponsabilidade(index, 'responsavel', event.target.value as ObraResponsabilidade['responsavel'])} className="field-select"><option value="gontijo">Gontijo</option><option value="cliente">Cliente</option></select></div>
-                    <div className="span-3"><label className="field-label">Valor</label><input type="number" value={item.valor ?? ''} onChange={(event) => updateResponsabilidade(index, 'valor', parseNumberInput(event.target.value))} className="field-input" step="0.01" /></div>
-                    <div className="span-1 nested-actions"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, responsabilidades: prev.responsabilidades.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 size={14} /></button></div>
-                  </div>
-                </div>
-              )) : <QueryFeedback type="empty" title="Nenhuma responsabilidade cadastrada" description="Adicione os custos e seus respectivos responsaveis." />}
-            </div>
-          </section>
-
-          <section className="app-panel section-panel">
-            <div className="section-header-inline">
-              <h2 className="section-heading !mb-0">Contatos</h2>
-              <button type="button" className="btn btn-secondary" onClick={() => setForm((prev) => ({ ...prev, contatos: [...prev.contatos, emptyContato()] }))}><Plus size={15} />Adicionar contato</button>
-            </div>
-            <div className="stack-list">
-              {form.contatos.length ? form.contatos.map((item, index) => (
-                <div key={`contato-${index}`} className="nested-card">
-                  <div className="form-grid">
-                    <div className="span-4"><label className="field-label">Nome</label><input type="text" value={item.nome} onChange={(event) => updateContato(index, 'nome', event.target.value)} className="field-input" /></div>
-                    <div className="span-3"><label className="field-label">Funcao</label><input type="text" value={item.funcao} onChange={(event) => updateContato(index, 'funcao', event.target.value)} className="field-input" /></div>
-                    <div className="span-2"><label className="field-label">Telefone</label><input type="text" value={item.telefone} onChange={(event) => updateContato(index, 'telefone', event.target.value)} className="field-input" /></div>
-                    <div className="span-2"><label className="field-label">Email</label><input type="email" value={item.email} onChange={(event) => updateContato(index, 'email', event.target.value)} className="field-input" /></div>
-                    <div className="span-1 nested-actions"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, contatos: prev.contatos.filter((_, currentIndex) => currentIndex !== index) }))}><Trash2 size={14} /></button></div>
-                  </div>
-                </div>
-              )) : <QueryFeedback type="empty" title="Nenhum contato cadastrado" description="Adicione os contatos operacionais e comerciais da obra." />}
-            </div>
-          </section>
-
-          <div className="inline-actions justify-end">
-            <Link to="/obras" className="btn btn-secondary">Cancelar</Link>
-            <button type="submit" className="btn btn-primary" disabled={mutation.isPending}><Save size={15} />{mutation.isPending ? 'Salvando...' : 'Salvar obra'}</button>
+      <div className="flex items-center justify-between gap-4"><h1 className="page-heading">Adicionar Obra</h1><Link to="/obras" className="btn btn-primary">Voltar</Link></div>
+      {obraQuery.isLoading ? <QueryFeedback type="loading" title="Carregando obra" description="Buscando os dados existentes antes de liberar a edição." /> : null}
+      {obraQuery.isError ? <QueryFeedback type="error" title="Não foi possível carregar a obra" description={extractApiErrorMessage(obraQuery.error)} /> : null}
+      {submitError ? <QueryFeedback type="error" title="Não foi possível salvar" description={submitError} /> : null}
+      {(!isEditing || obraQuery.data) && <form onSubmit={handleSubmit} className="space-y-3">
+        <ObraSection title="Dados básicos" sectionKey="basicos" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <div className="form-grid">
+            <div style={gridSpan(3)}><label className="field-label">Cliente</label><select value={form.clienteId ?? ''} onChange={(event) => setField('clienteId', event.target.value ? Number(event.target.value) : null)} className="field-select"><option value="">- Cliente -</option>{clientesQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></div>
+            <div style={gridSpan(3)}><label className="field-label" style={{ color: 'var(--brand-red)' }}>Número da obra</label><input className="field-input" value={form.numero} onChange={(event) => setField('numero', event.target.value)} placeholder="nº da Obra" required /></div>
+            <div style={gridSpan(3)}><label className="field-label">Status da obra</label><select className="field-select" value={form.status} onChange={(event) => setField('status', event.target.value as ObraDetail['status'])}>{STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(3)}><label className="field-label">Empresa responsável</label><select className="field-select" value={form.empresaResponsavel} onChange={(event) => setField('empresaResponsavel', event.target.value)}>{EMPRESA_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div className="span-12"><label className="field-label">Modalidades</label><div className="selection-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>{modalidadesQuery.data?.map((item) => (<label key={item.id} className="checkbox-card"><input type="checkbox" checked={form.modalidades.includes(item.id)} onChange={() => setField('modalidades', toggleArrayId(form.modalidades, item.id))} />{item.nome}</label>))}</div></div>
+            <div className="span-12"><label className="field-label">Equipamentos possíveis</label><div className="stack-list" style={{ maxHeight: '11rem', overflowY: 'auto', border: '1px solid #d7dde5', borderRadius: '8px', padding: '0.75rem', background: '#fff' }}><div className="selection-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>{filteredEquipamentos.map((item) => (<label key={item.id} className="checkbox-card"><input type="checkbox" checked={form.equipamentos.includes(item.id)} onChange={() => setField('equipamentos', toggleArrayId(form.equipamentos, item.id))} />{item.nome}</label>))}</div></div></div>
+            <div style={gridSpan(4)}><label className="field-label">Tipo de obra</label><input className="field-input" value={form.tipoObra} onChange={(event) => setField('tipoObra', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Finalidade</label><input className="field-input" value={form.finalidade} onChange={(event) => setField('finalidade', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Data prevista de início</label><input type="date" className="field-input" value={form.dataPrevistaInicio} onChange={(event) => setField('dataPrevistaInicio', event.target.value)} /></div>
+            <div className="span-12"><h3 className="section-heading !mb-0" style={{ fontSize: '1rem', marginTop: '0.25rem' }}>Endereço da obra</h3></div>
+            <div style={gridSpan(4)}><label className="field-label">Estado</label><select className="field-select" value={form.estado} onChange={(event) => setField('estado', event.target.value)}><option value="">- Estado -</option>{UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Cidade</label><input className="field-input" value={form.cidade} onChange={(event) => setField('cidade', event.target.value)} placeholder="- Cidade -" /></div>
+            <div style={gridSpan(4)}><label className="field-label">CEP</label><input className="field-input" value={form.cep} onChange={(event) => setField('cep', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Logradouro</label><input className="field-input" value={form.logradouro} onChange={(event) => setField('logradouro', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Bairro</label><input className="field-input" value={form.bairro} onChange={(event) => setField('bairro', event.target.value)} /></div>
+            <div style={gridSpan(2)}><label className="field-label">Número</label><input className="field-input" value={form.numeroEnd} onChange={(event) => setField('numeroEnd', event.target.value)} /></div>
+            <div style={gridSpan(2)}><label className="field-label">Complemento</label><input className="field-input" value={form.complemento} onChange={(event) => setField('complemento', event.target.value)} /></div>
           </div>
-        </form>
-      )}
+        </ObraSection>
+
+        <ObraSection title="Projetos e Sondagens" sectionKey="arquivos" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <input ref={projectInputRef} type="file" multiple hidden onChange={(event) => pushArquivos('projetosArquivos', event.target.files)} />
+          <input ref={pollInputRef} type="file" multiple hidden onChange={(event) => pushArquivos('sondagensArquivos', event.target.files)} />
+          <div className="form-grid">
+            <div style={gridSpan(6)}><button type="button" className="btn btn-secondary" onClick={() => projectInputRef.current?.click()}><Upload size={15} />Inserir projetos</button><div className="stack-list mt-3">{form.projetosArquivos.length ? form.projetosArquivos.map((arquivo, index) => (<div key={`${arquivo.nome}-${index}`} className="nested-card" style={{ padding: '0.7rem 0.9rem' }}><div className="flex items-center justify-between gap-3"><div className="text-sm font-medium">{arquivo.nome}</div><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setField('projetosArquivos', form.projetosArquivos.filter((_, current) => current !== index))}><Trash2 size={14} /></button></div></div>)) : <QueryFeedback type="empty" title="Nenhum projeto inserido" description="Adicione os arquivos de projeto vinculados à obra." />}</div></div>
+            <div style={gridSpan(6)}><button type="button" className="btn btn-secondary" onClick={() => pollInputRef.current?.click()}><Upload size={15} />Inserir sondagens</button><div className="stack-list mt-3">{form.sondagensArquivos.length ? form.sondagensArquivos.map((arquivo, index) => (<div key={`${arquivo.nome}-${index}`} className="nested-card" style={{ padding: '0.7rem 0.9rem' }}><div className="flex items-center justify-between gap-3"><div className="text-sm font-medium">{arquivo.nome}</div><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setField('sondagensArquivos', form.sondagensArquivos.filter((_, current) => current !== index))}><Trash2 size={14} /></button></div></div>)) : <QueryFeedback type="empty" title="Nenhuma sondagem inserida" description="Adicione os arquivos de sondagem vinculados à obra." />}</div></div>
+          </div>
+        </ObraSection>
+
+        <ObraSection title="Questões Contratuais" sectionKey="contrato" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <div className="form-grid">
+            <div style={gridSpan(4)}><label className="field-label">Projeto é da gontijo?</label><select className="field-select" value={form.projetoGontijo ? 'Y' : 'N'} onChange={(event) => setField('projetoGontijo', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Qual o valor do projeto?</label><input className="field-input" value={form.valorProjeto ?? ''} onChange={(event) => setField('valorProjeto', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Selecione a modalidade contratual</label><select className="field-select" value={form.modalidadeContratual} onChange={(event) => setField('modalidadeContratual', event.target.value)}>{CONTRACT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Faturamento mínimo, diário ou global</label><input className="field-input" value={form.faturamentoMinimoDiarioGlobal ?? ''} onChange={(event) => setField('faturamentoMinimoDiarioGlobal', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Dias que incidem o Fat. Mínimo ou Diário</label><select className="field-select" value={form.diasIncidenciaFatMinimo} onChange={(event) => setField('diasIncidenciaFatMinimo', event.target.value)}>{FAT_MIN_DAY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Modalidade de Fat. Mínimo</label><select className="field-select" value={form.modalidadeFatMinimo} onChange={(event) => setField('modalidadeFatMinimo', event.target.value)}>{FAT_MIN_MODAL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Previsto uso de BITS?</label><select className="field-select" value={form.usaBits ? 'Y' : 'N'} onChange={(event) => setField('usaBits', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Valor do BITS</label><input className="field-input" value={form.valorBits ?? ''} onChange={(event) => setField('valorBits', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Acréscimo de transporte noturno</label><input className="field-input" value={form.acrescimoTransporteNoturno ?? ''} onChange={(event) => setField('acrescimoTransporteNoturno', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável pelo içamento?</label><select className="field-select" value={form.responsavelIcamento} onChange={(event) => setField('responsavelIcamento', event.target.value as ObraDetail['responsavelIcamento'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor do içamento</label><input className="field-input" value={form.valorIcamento ?? ''} onChange={(event) => setField('valorIcamento', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Incide seguro?</label><select className="field-select" value={form.incideSeguro ? 'Y' : 'N'} onChange={(event) => setField('incideSeguro', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor do seguro</label><input className="field-input" value={form.valorSeguro ?? ''} onChange={(event) => setField('valorSeguro', parseNumberInput(event.target.value))} /></div>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-lg border border-[#e5c76c]"><table className="w-full text-sm border-collapse"><thead style={{ background: '#fff0b8' }}><tr><th className="text-left px-3 py-2 border-b">Diâmetro/Perfil</th><th className="text-left px-3 py-2 border-b">Profundidade</th><th className="text-left px-3 py-2 border-b">Qtd Estacas</th><th className="text-left px-3 py-2 border-b">Preço Diâmetro</th><th className="text-left px-3 py-2 border-b">Sub-total</th><th className="text-center px-3 py-2 border-b" style={{ width: '52px' }}><button type="button" className="mini-button" onClick={() => setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] }))}><Plus size={12} /></button></th></tr></thead><tbody>{form.producao.length ? form.producao.map((item, index) => (<tr key={`prod-${index}`}><td className="p-2 border-b"><input className="field-input" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} /></td><td className="p-2 border-b"><input className="field-input" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.subtotal ?? ''} disabled /></td><td className="p-2 border-b text-center"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, producao: prev.producao.filter((_, current) => current !== index) }))}><Trash2 size={13} /></button></td></tr>)) : (<tr><td colSpan={6} className="px-3 py-4 text-sm text-slate-500">Nenhuma linha adicionada ainda.</td></tr>)}<tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">TOTAL DE PRODUÇÃO</td><td className="px-3 py-3 border-b">{formatCurrency(totalProducaoCalculado)}</td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">VALOR DA MOBILIZAÇÃO</td><td className="px-3 py-2 border-b"><input className="field-input" value={form.mobilizacao ?? ''} onChange={(event) => setField('mobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">VALOR DA DESMOBILIZAÇÃO</td><td className="px-3 py-2 border-b"><input className="field-input" value={form.desmobilizacao ?? ''} onChange={(event) => setField('desmobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold">TOTAL DA OBRA</td><td className="px-3 py-3 font-semibold">{formatCurrency(totalObraCalculado)}</td><td /></tr></tbody></table></div>
+        </ObraSection>
+        <ObraSection title="Responsabilidades" sectionKey="responsabilidades" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <div className="form-grid">
+            <div style={gridSpan(6)}><label className="field-label">Necessidade de Integração?</label><select className="field-select" value={form.necessidadeIntegracao} onChange={(event) => setField('necessidadeIntegracao', event.target.value)}>{YES_NO_THIRD_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor da Integração</label><input className="field-input" value={form.valorIntegracao ?? ''} onChange={(event) => setField('valorIntegracao', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Documentação específica?</label><select className="field-select" value={form.documentacaoEspecifica} onChange={(event) => setField('documentacaoEspecifica', event.target.value)}>{YES_NO_THIRD_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor da Documentação</label><input className="field-input" value={form.valorDocumentacao ?? ''} onChange={(event) => setField('valorDocumentacao', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Mobilização interna?</label><select className="field-select" value={form.mobilizacaoInterna} onChange={(event) => setField('mobilizacaoInterna', event.target.value)}>{YES_NO_THIRD_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor da Mob. Interna</label><input className="field-input" value={form.valorMobilizacaoInterna ?? ''} onChange={(event) => setField('valorMobilizacaoInterna', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável pela limpeza de terra do trado</label><select className="field-select" value={form.responsavelLimpezaTrado} onChange={(event) => setField('responsavelLimpezaTrado', event.target.value as ObraDetail['responsavelLimpezaTrado'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor da limpeza do trado</label><input className="field-input" value={form.valorLimpezaTrado ?? ''} onChange={(event) => setField('valorLimpezaTrado', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável hospedagem</label><select className="field-select" value={form.responsavelHospedagem} onChange={(event) => setField('responsavelHospedagem', event.target.value as ObraDetail['responsavelHospedagem'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor hospedagem</label><input className="field-input" value={form.valorHospedagem ?? ''} onChange={(event) => setField('valorHospedagem', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável café da manhã</label><select className="field-select" value={form.responsavelCafeManha} onChange={(event) => setField('responsavelCafeManha', event.target.value as ObraDetail['responsavelCafeManha'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor café da manhã</label><input className="field-input" value={form.valorCafeManha ?? ''} onChange={(event) => setField('valorCafeManha', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável almoço</label><select className="field-select" value={form.responsavelAlmoco} onChange={(event) => setField('responsavelAlmoco', event.target.value as ObraDetail['responsavelAlmoco'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor almoço</label><input className="field-input" value={form.valorAlmoco ?? ''} onChange={(event) => setField('valorAlmoco', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável jantar</label><select className="field-select" value={form.responsavelJantar} onChange={(event) => setField('responsavelJantar', event.target.value as ObraDetail['responsavelJantar'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Valor jantar</label><input className="field-input" value={form.valorJantar ?? ''} onChange={(event) => setField('valorJantar', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável fornecimento do Diesel</label><select className="field-select" value={form.responsavelFornecimentoDiesel} onChange={(event) => setField('responsavelFornecimentoDiesel', event.target.value as ObraDetail['responsavelFornecimentoDiesel'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável custeio do Diesel</label><select className="field-select" value={form.responsavelCusteioDiesel} onChange={(event) => setField('responsavelCusteioDiesel', event.target.value as ObraDetail['responsavelCusteioDiesel'])}>{RESPONSAVEL_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+          </div>
+        </ObraSection>
+
+        <ObraSection title="Dados de Faturamento" sectionKey="faturamento" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <input ref={ceiCnoInputRef} type="file" hidden onChange={(event) => setField('cartaoCeiCno', event.target.files?.[0] ? emptyArquivo(event.target.files[0]) : null)} />
+          <div className="form-grid">
+            <div style={gridSpan(4)}><label className="field-label">Razão social</label><input className="field-input" value={form.razaoSocialFaturamento} onChange={(event) => setField('razaoSocialFaturamento', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Clique por usar</label><div className="inline-actions"><button type="button" className={`mini-button ${form.tipoDocumentoFaturamento === 'cnpj' ? 'red' : 'gray'}`} onClick={() => setField('tipoDocumentoFaturamento', 'cnpj')}>CNPJ</button><button type="button" className={`mini-button ${form.tipoDocumentoFaturamento === 'cpf' ? 'red' : 'gray'}`} onClick={() => setField('tipoDocumentoFaturamento', 'cpf')}>CPF</button></div><input className="field-input mt-2" value={form.documentoFaturamento} onChange={(event) => setField('documentoFaturamento', event.target.value)} placeholder={form.tipoDocumentoFaturamento === 'cpf' ? 'CPF' : 'CNPJ'} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Inscrição municipal</label><input className="field-input" value={form.inscricaoMunicipal} onChange={(event) => setField('inscricaoMunicipal', event.target.value)} /></div>
+            <div style={gridSpan(6)}><label className="field-label">ISSQN (%)</label><input className="field-input" value={form.issqnPct ?? ''} onChange={(event) => setField('issqnPct', parseNumberInput(event.target.value))} /></div>
+            <div style={gridSpan(6)}><label className="field-label">ISSQN retido na fonte?</label><select className="field-select" value={form.issqnRetidoFonte ? 'Y' : 'N'} onChange={(event) => setField('issqnRetidoFonte', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Modalidade de faturamento</label><select className="field-select" value={form.modalidadeFaturamento} onChange={(event) => setField('modalidadeFaturamento', event.target.value)}>{MOD_FAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Informar CEI/CNO na guia do INSS</label><select className="field-select" value={form.informarCeiCnoGuia ? 'Y' : 'N'} onChange={(event) => setField('informarCeiCnoGuia', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Cartão CEI/CNO</label><div className="inline-actions"><button type="button" className="btn btn-secondary" onClick={() => ceiCnoInputRef.current?.click()}><Upload size={15} />Selecionar</button><span className="pagination-chip">{form.cartaoCeiCno?.nome || 'Nenhum arquivo'}</span></div></div>
+            <div className="span-12"><h3 className="section-heading !mb-0" style={{ fontSize: '1rem', marginTop: '0.25rem' }}>Endereço de faturamento</h3><label className="field-label">O endereço de faturamento é o mesmo do cliente?</label><select className="field-select" value={form.enderecoFaturamentoMesmoCliente ? 'Y' : 'N'} onChange={(event) => setField('enderecoFaturamentoMesmoCliente', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Estado</label><select className="field-select" value={form.faturamentoEstado} onChange={(event) => setField('faturamentoEstado', event.target.value)}><option value="">- Estado -</option>{UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Cidade</label><input className="field-input" value={form.faturamentoCidade} onChange={(event) => setField('faturamentoCidade', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">CEP</label><input className="field-input" value={form.faturamentoCep} onChange={(event) => setField('faturamentoCep', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Logradouro</label><input className="field-input" value={form.faturamentoLogradouro} onChange={(event) => setField('faturamentoLogradouro', event.target.value)} /></div>
+            <div style={gridSpan(4)}><label className="field-label">Bairro</label><input className="field-input" value={form.faturamentoBairro} onChange={(event) => setField('faturamentoBairro', event.target.value)} /></div>
+            <div style={gridSpan(2)}><label className="field-label">Número</label><input className="field-input" value={form.faturamentoNumero} onChange={(event) => setField('faturamentoNumero', event.target.value)} /></div>
+            <div style={gridSpan(2)}><label className="field-label">Complemento</label><input className="field-input" value={form.faturamentoComplemento} onChange={(event) => setField('faturamentoComplemento', event.target.value)} /></div>
+          </div>
+        </ObraSection>
+        <ObraSection title="Contatos" sectionKey="contatos" activeSection={activeSection} setActiveSection={setActiveSection}>
+          <div className="form-grid">
+            <div style={gridSpan(6)}><label className="field-label">Responsável comercial Gontijo</label><input className="field-input" value={form.responsavelComercialGontijo} onChange={(event) => setField('responsavelComercialGontijo', event.target.value)} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Telefone</label><input className="field-input" value={form.telComercialGontijo} onChange={(event) => setField('telComercialGontijo', event.target.value)} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Responsável da CONTRATANTE no canteiro de obras</label><input className="field-input" value={form.responsavelContratante} onChange={(event) => setField('responsavelContratante', event.target.value)} /></div>
+            <div style={gridSpan(6)}><label className="field-label">Telefone</label><input className="field-input" value={form.telContratante} onChange={(event) => setField('telContratante', event.target.value)} /></div>
+          </div>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200"><table className="w-full text-sm border-collapse"><thead style={{ background: '#e5e7eb' }}><tr><th className="text-left px-3 py-2 border-b">Nome</th><th className="text-left px-3 py-2 border-b">Função</th><th className="text-left px-3 py-2 border-b">Telefone</th><th className="text-left px-3 py-2 border-b">Email</th><th className="text-center px-3 py-2 border-b" style={{ width: '52px' }}><button type="button" className="mini-button" onClick={() => setForm((prev) => ({ ...prev, contatos: [...prev.contatos, emptyContato()] }))}><Plus size={12} /></button></th></tr></thead><tbody>{form.contatos.map((item, index) => (<tr key={`contact-${index}`}><td className="p-2 border-b"><input className="field-input" value={item.nome} onChange={(event) => updateContato(index, 'nome', event.target.value)} /></td><td className="p-2 border-b"><input className="field-input" value={item.funcao} onChange={(event) => updateContato(index, 'funcao', event.target.value)} /></td><td className="p-2 border-b"><input className="field-input" value={item.telefone} onChange={(event) => updateContato(index, 'telefone', event.target.value)} /></td><td className="p-2 border-b"><input className="field-input" value={item.email} onChange={(event) => updateContato(index, 'email', event.target.value)} /></td><td className="p-2 border-b text-center"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, contatos: prev.contatos.length === 1 ? [emptyContato()] : prev.contatos.filter((_, current) => current !== index) }))}><Trash2 size={13} /></button></td></tr>))}</tbody></table></div>
+        </ObraSection>
+
+        <div className="inline-actions justify-start"><button type="submit" className="btn btn-primary" disabled={mutation.isPending}><Save size={15} />{mutation.isPending ? 'Enviando...' : 'Enviar'}</button></div>
+      </form>}
     </div>
   )
 }
+

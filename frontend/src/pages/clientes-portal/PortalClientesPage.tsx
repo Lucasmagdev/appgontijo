@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Check, Clock, Copy, Eye, EyeOff, KeyRound, MapPin, Pencil, RotateCcw, Search, ShieldOff, X } from 'lucide-react'
+import { Building2, Check, Clock, Copy, Eye, EyeOff, KeyRound, MapPin, Pencil, Search, ShieldOff, Trash2, X } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   clientPortalAdminService,
@@ -44,6 +44,7 @@ export default function PortalClientesPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [search, setSearch] = useState('')
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
   const { copy, copiedKey } = useClipboard()
 
   const obrasQuery = useQuery({
@@ -79,6 +80,16 @@ export default function PortalClientesPage() {
 
   const activeCount = accessesQuery.data?.filter((a) => a.status === 'ativo').length ?? 0
   const totalCount = accessesQuery.data?.length ?? 0
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => clientPortalAdminService.delete(id),
+    onSuccess: async (_data, id) => {
+      setDeleteConfirmId(null)
+      if (form.id === id) resetForm()
+      await queryClient.invalidateQueries({ queryKey: ['portal-clientes-acessos'] })
+    },
+    onError: (error) => setSubmitError(extractApiErrorMessage(error)),
+  })
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -405,6 +416,11 @@ export default function PortalClientesPage() {
                   onEdit={() => startEdit(access)}
                   onCopy={copy}
                   copiedKey={copiedKey}
+                  confirmingDelete={deleteConfirmId === access.id}
+                  onDeleteRequest={() => setDeleteConfirmId(access.id)}
+                  onDeleteCancel={() => setDeleteConfirmId(null)}
+                  onDeleteConfirm={() => deleteMutation.mutate(access.id)}
+                  isDeleting={deleteMutation.isPending && deleteConfirmId === access.id}
                 />
               ))}
             </div>
@@ -421,12 +437,22 @@ function AccessCard({
   onEdit,
   onCopy,
   copiedKey,
+  confirmingDelete,
+  onDeleteRequest,
+  onDeleteCancel,
+  onDeleteConfirm,
+  isDeleting,
 }: {
   access: ClientPortalAccessRecord
   isSelected: boolean
   onEdit: () => void
   onCopy: (text: string, key: string) => void
   copiedKey: string | null
+  confirmingDelete: boolean
+  onDeleteRequest: () => void
+  onDeleteCancel: () => void
+  onDeleteConfirm: () => void
+  isDeleting: boolean
 }) {
   const isActive = access.status === 'ativo'
   const loginKey = `login-${access.id}`
@@ -474,19 +500,51 @@ function AccessCard({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onEdit}
-          className={cn(
-            'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-            isSelected
-              ? 'border-amber-300 bg-amber-50 text-amber-700'
-              : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              isSelected
+                ? 'border-amber-300 bg-amber-50 text-amber-700'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+            )}
+          >
+            <Pencil size={12} />
+            {isSelected ? 'Editando...' : 'Editar'}
+          </button>
+
+          {confirmingDelete ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onDeleteConfirm}
+                disabled={isDeleting}
+                className="flex items-center gap-1 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+              >
+                {isDeleting ? 'Excluindo...' : 'Confirmar'}
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteCancel}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-50"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onDeleteRequest}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              title="Excluir acesso"
+            >
+              <Trash2 size={12} />
+              Excluir
+            </button>
           )}
-        >
-          <Pencil size={12} />
-          {isSelected ? 'Editando...' : 'Editar'}
-        </button>
+        </div>
       </div>
 
       {/* Divider */}
