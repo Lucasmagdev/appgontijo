@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { operadorCursosApi } from '@/lib/gontijo-api'
 
 function getYoutubeEmbedUrl(url: string): string | null {
@@ -17,19 +17,31 @@ function getYoutubeEmbedUrl(url: string): string | null {
 export default function OperadorCursoDetalhePage() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
 
   const { data: curso, isLoading } = useQuery({
     queryKey: ['operador-curso', id],
     queryFn: () => operadorCursosApi.get(Number(id)),
     enabled: !!id,
+    refetchOnMount: 'always',
   })
 
   const embedUrl = curso?.video_url ? getYoutubeEmbedUrl(curso.video_url) : null
-  const aprovado = curso?.ja_aprovado === 1
+  const aprovado = Number(curso?.ja_aprovado ?? curso?.ultima_tentativa?.aprovado ?? 0) === 1
   const ultimaTentativa = curso?.ultima_tentativa
-  const exigeProva = Boolean(curso?.tem_prova && curso.tipo_acesso !== 'so_curso')
+  const exigeProva = Boolean(curso?.prova && curso.tipo_acesso !== 'so_curso')
   const naoIniciado = Boolean(curso && exigeProva && curso.tentativas === 0 && !aprovado)
   const reprovado = Boolean(curso && exigeProva && curso.tentativas > 0 && !aprovado)
+  const concluidoSemProva = Boolean(curso?.concluido_sem_prova)
+
+  const concluirMutation = useMutation({
+    mutationFn: () => operadorCursosApi.concluirCurso(Number(id)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operador-cursos'] })
+      await queryClient.invalidateQueries({ queryKey: ['operador-curso', id] })
+      await queryClient.invalidateQueries({ queryKey: ['operador-cursos-pontos'] })
+    },
+  })
 
   if (isLoading) {
     return (
@@ -151,9 +163,45 @@ export default function OperadorCursoDetalhePage() {
             )}
 
             {aprovado ? (
-              <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+              <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '16px' }}>
                 <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#16a34a' }}>Voce ja foi aprovado neste curso.</p>
-                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#4ade80' }}>O resultado ficou registrado no sistema.</p>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#166534' }}>
+                  O resultado ficou registrado e esta prova nao precisa mais ser refeita.
+                </p>
+                {ultimaTentativa && (
+                  <div style={{ marginTop: '12px', borderRadius: '12px', background: '#dcfce7', padding: '12px 14px' }}>
+                    <p style={{ margin: 0, fontSize: '11px', fontWeight: 800, color: '#15803d', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Resultado final
+                    </p>
+                    <p style={{ margin: '6px 0 0', fontSize: '14px', color: '#166534' }}>
+                      {ultimaTentativa.acertos}/{ultimaTentativa.total_questoes} acertos - {Number(ultimaTentativa.percentual).toFixed(0)}%
+                    </p>
+                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#166534' }}>
+                      Pontos ganhos: <strong>{curso?.prova_concluida_pontos || 0}</strong>
+                      {curso?.prova_concluida_em ? ` em ${new Date(curso.prova_concluida_em).toLocaleDateString('pt-BR')}` : ''}
+                    </p>
+                  </div>
+                )}
+                <a
+                  href={`/api/gontijo/operador/cursos/${id}/certificado`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    marginTop: '14px', padding: '13px 16px', borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #c0392b 0%, #922b21 100%)',
+                    color: '#ffffff', textDecoration: 'none', fontWeight: 700, fontSize: '14px',
+                    boxShadow: '0 4px 14px rgba(192,57,43,0.30)',
+                  }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <polyline points="8 13 12 17 16 13"/>
+                    <line x1="12" y1="17" x2="12" y2="11"/>
+                  </svg>
+                  Baixar Certificado
+                </a>
               </div>
             ) : (
               <button
@@ -185,6 +233,56 @@ export default function OperadorCursoDetalhePage() {
             <p style={{ margin: 0, fontSize: '14px', color: '#1e3a8a' }}>
               Este item foi atribuido somente como curso. Nao existe prova obrigatoria para ele.
             </p>
+            {concluidoSemProva ? (
+              <div style={{ marginTop: '14px', borderRadius: '12px', background: '#dbeafe', padding: '12px 14px' }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#1d4ed8' }}>
+                  Curso concluido e pontos lancados.
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#1e40af' }}>
+                  {curso?.curso_concluido_pontos || 0} ponto(s) registrados em {curso?.curso_concluido_em ? new Date(curso.curso_concluido_em).toLocaleDateString('pt-BR') : 'data indisponivel'}.
+                </p>
+                <a
+                  href={`/api/gontijo/operador/cursos/${id}/certificado`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    marginTop: '12px', padding: '12px 16px', borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #c0392b 0%, #922b21 100%)',
+                    color: '#ffffff', textDecoration: 'none', fontWeight: 700, fontSize: '13px',
+                    boxShadow: '0 4px 14px rgba(192,57,43,0.25)',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <polyline points="8 13 12 17 16 13"/>
+                    <line x1="12" y1="17" x2="12" y2="11"/>
+                  </svg>
+                  Baixar Certificado
+                </a>
+              </div>
+            ) : (
+              <button
+                onClick={() => concluirMutation.mutate()}
+                disabled={concluirMutation.isPending}
+                style={{
+                  width: '100%',
+                  marginTop: '14px',
+                  background: 'linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '14px 16px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 18px rgba(30,64,175,0.18)',
+                }}
+              >
+                {concluirMutation.isPending ? 'Lançando pontos...' : 'Concluir curso e ganhar pontos'}
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Trash2, Users, Building2, BookOpen, ClipboardList } from 'lucide-react'
@@ -54,6 +54,16 @@ export default function CursoAtribuicoesPage() {
     enabled: !!id,
   })
 
+  const hasActiveProof = Array.isArray((curso as { provas?: { ativo?: number }[] } | undefined)?.provas)
+    ? ((curso as { provas?: { ativo?: number }[] }).provas ?? []).some((prova) => Number(prova.ativo ?? 1) === 1)
+    : false
+
+  useEffect(() => {
+    if (!hasActiveProof && tipoAcesso !== 'so_curso') {
+      setTipoAcesso('so_curso')
+    }
+  }, [hasActiveProof, tipoAcesso])
+
   const { data: atribuicoes = [] } = useQuery({
     queryKey: ['atribuicoes', id],
     queryFn: () => cursosApi.getAtribuicoes(Number(id)),
@@ -102,6 +112,10 @@ export default function CursoAtribuicoesPage() {
     setError('')
     if (tipo === 'setor' && !setorId) { setError('Selecione um setor'); return }
     if (tipo === 'usuario' && !usuarioId) { setError('Selecione um colaborador'); return }
+    if (tipoAcesso !== 'so_curso' && !hasActiveProof) {
+      setError('Cadastre ou ative uma prova neste curso antes de atribuir acesso com prova.')
+      return
+    }
     createMutation.mutate()
   }
 
@@ -160,14 +174,20 @@ export default function CursoAtribuicoesPage() {
           <p className="mb-2 text-xs font-medium text-slate-600">O que pode acessar</p>
           <div className="flex flex-col gap-2">
             {TIPO_ACESSO_OPTIONS.map((opt) => (
+              (() => {
+                const requiresProof = opt.value !== 'so_curso'
+                const disabled = requiresProof && !hasActiveProof
+
+                return (
               <button
                 key={opt.value}
                 onClick={() => setTipoAcesso(opt.value)}
+                disabled={disabled}
                 className={`flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
                   tipoAcesso === opt.value
                     ? 'border-[var(--brand-red)] bg-red-50'
                     : 'border-slate-200 hover:bg-slate-50'
-                }`}
+                } ${disabled ? 'cursor-not-allowed opacity-45 hover:bg-white' : ''}`}
               >
                 <div className={`flex items-center gap-0.5 ${tipoAcesso === opt.value ? 'text-[var(--brand-red)]' : 'text-slate-400'}`}>
                   {opt.icon}
@@ -176,12 +196,21 @@ export default function CursoAtribuicoesPage() {
                   <p className={`text-sm font-semibold ${tipoAcesso === opt.value ? 'text-[var(--brand-red)]' : 'text-slate-700'}`}>
                     {opt.label}
                   </p>
-                  <p className="text-xs text-slate-400">{opt.desc}</p>
+                  <p className="text-xs text-slate-400">
+                    {disabled ? 'Indisponível até existir uma prova ativa para este curso.' : opt.desc}
+                  </p>
                 </div>
                 <div className={`h-4 w-4 rounded-full border-2 ${tipoAcesso === opt.value ? 'border-[var(--brand-red)] bg-[var(--brand-red)]' : 'border-slate-300'}`} />
               </button>
+                )
+              })()
             ))}
           </div>
+          {!hasActiveProof && (
+            <p className="mt-2 text-xs text-amber-600">
+              Este curso ainda não possui prova ativa. Por isso, por enquanto só é possível atribuir como <strong>Só Curso</strong>.
+            </p>
+          )}
         </div>
 
         {error && <p className="text-xs text-red-500">{error}</p>}

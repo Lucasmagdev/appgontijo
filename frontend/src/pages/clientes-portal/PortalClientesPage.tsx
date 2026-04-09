@@ -568,12 +568,6 @@ function AccessCard({
           </button>
         </div>
 
-        {/* Tipo */}
-        <MetaCell
-          label="Tipo"
-          value={access.tipoObra || '—'}
-        />
-
         {/* Localização */}
         {access.cidade || access.estado ? (
           <MetaCell

@@ -2523,6 +2523,137 @@ function getOperadorSession(req) {
   return { token, ...session };
 }
 
+app.get("/api/gontijo/operador/cursos/:id/certificado", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session?.userId) {
+    return res.status(401).json({ ok: false, error: "Não autorizado" });
+  }
+
+  try {
+    const [[curso]] = await db.query(
+      "SELECT id, titulo FROM cursos WHERE id = ? AND ativo = 1",
+      [req.params.id]
+    );
+    if (!curso) {
+      return res.status(404).json({ ok: false, error: "Curso não encontrado" });
+    }
+
+    const [[usuario]] = await db.query(
+      "SELECT name AS nome FROM users WHERE id = ?",
+      [session.userId]
+    );
+    if (!usuario) {
+      return res.status(404).json({ ok: false, error: "Usuário não encontrado" });
+    }
+
+    const [[prova]] = await db.query(
+      "SELECT id FROM provas WHERE curso_id = ? AND ativo = 1 LIMIT 1",
+      [req.params.id]
+    );
+
+    let autorizado = false;
+    if (prova) {
+      const [[tent]] = await db.query(
+        "SELECT MAX(aprovado) AS aprovado FROM prova_tentativas WHERE prova_id = ? AND usuario_id = ?",
+        [prova.id, session.userId]
+      );
+      autorizado = Number(tent?.aprovado) === 1;
+    }
+
+    if (!autorizado) {
+      const [[completion]] = await db.query(
+        `SELECT id
+         FROM training_points_ledger
+         WHERE user_id = ?
+           AND curso_id = ?
+           AND event_type = 'curso_concluido'
+         LIMIT 1`,
+        [session.userId, req.params.id]
+      );
+      autorizado = Boolean(completion);
+    }
+
+    if (!autorizado) {
+      return res.status(403).json({
+        ok: false,
+        error: "Certificado disponível apenas após conclusão do curso",
+      });
+    }
+
+    const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
+    const chunks = [];
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => {
+      const buf = Buffer.concat(chunks);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="certificado-curso-${curso.id}.pdf"`);
+      res.send(buf);
+    });
+
+    const W = 841.89;
+    const H = 595.28;
+    const RED = "#c0392b";
+    const DARK_RED = "#7b1d1d";
+    const nome = String(usuario.nome || "").toUpperCase();
+
+    doc.rect(0, 0, W, H).fill("#ffffff");
+    doc.rect(0, 0, 6, H).fill(RED);
+    doc.rect(0, 0, W, 88).fill(RED);
+
+    doc.save();
+    doc.polygon([0, 88], [100, 88], [0, 150]).fill(DARK_RED);
+    doc.restore();
+
+    doc.save();
+    doc.polygon([W, 88], [W - 100, 88], [W, 150]).fill(DARK_RED);
+    doc.restore();
+
+    doc.rect(0, H - 54, W, 54).fill(RED);
+
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(13)
+      .text("GONTIJO FUNDAÇÕES", 30, 22, { width: 300 });
+    doc.fillColor("#fbe4e2").font("Helvetica").fontSize(9)
+      .text("Engenharia de Fundações e Estacas", 30, 40, { width: 300 });
+    doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(18)
+      .text("CERTIFICADO DE CONCLUSÃO", 0, 30, { align: "right", width: W - 32 });
+
+    const cy = 125;
+    doc.fillColor("#64748b").font("Helvetica").fontSize(12)
+      .text("Certificamos que", 0, cy, { align: "center", width: W });
+    doc.fillColor(RED).font("Helvetica-Bold").fontSize(30)
+      .text(nome, 60, cy + 26, { align: "center", width: W - 120 });
+
+    doc.moveTo(W / 2 - 160, cy + 70).lineTo(W / 2 + 160, cy + 70)
+      .lineWidth(1).strokeColor("#e2e8f0").stroke();
+
+    doc.fillColor("#334155").font("Helvetica").fontSize(13)
+      .text("concluiu com êxito o curso", 0, cy + 84, { align: "center", width: W });
+    doc.fillColor("#1e293b").font("Helvetica-Bold").fontSize(20)
+      .text(curso.titulo, 80, cy + 108, { align: "center", width: W - 160 });
+
+    doc.moveTo(W / 2 - 80, cy + 160).lineTo(W / 2 + 80, cy + 160)
+      .lineWidth(1.5).strokeColor(RED).stroke();
+
+    const dataEmissao = new Date().toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    doc.fillColor("#64748b").font("Helvetica").fontSize(10)
+      .text(`Emitido em ${dataEmissao}`, 0, cy + 170, { align: "center", width: W });
+
+    doc.fillColor("#ffffff").font("Helvetica").fontSize(9)
+      .text("Gontijo Fundações - Sistema de Treinamento Corporativo", 0, H - 36, {
+        align: "center",
+        width: W,
+      });
+
+    doc.end();
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.use("/api/gontijo", (req, _res, next) => {
   const operadorSession = getOperadorSession(req);
 
@@ -2707,6 +2838,7 @@ async function fetchClientPortalDashboard(constructionId) {
        CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) = ?
        OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')), '') = ?
      )
+     AND d.conferencia_status = 'aprovado'
      ORDER BY data_diario DESC, d.id DESC`,
     [constructionId, String(construction.construction_number || "")]
   );
@@ -2923,7 +3055,7 @@ function buildSignatureStatusPayload({ diary, link, publicUrl }) {
     status: computedStatus,
     publicUrl: finalPublicUrl,
     expiresAt: firstFilledText(link?.expires_at, requestMeta.expiresAt),
-    sentAt: firstFilledText(link?.sent_at, requestMeta.sentAt),
+    sentAt: firstFilledText(link?.sent_at, diary.data.enviado_em, requestMeta.sentAt),
     signedAt: firstFilledText(
       link?.signed_at,
       requestMeta.signedAt,
@@ -3183,6 +3315,7 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
     const nextData = {
       ...diary.data,
       status: diary.data.status === "assinado" ? "assinado" : "pendente",
+      enviado_em: sentAtSql,
       operatorSignature: diary.operator_signature,
       operatorSignatureName: diary.operator_name,
       operatorSignatureDoc: diary.operator_document,
@@ -3251,6 +3384,7 @@ app.get("/api/public/diarios/signature/:token", async (req, res) => {
               COALESCE(cl.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.client'))) AS cliente,
               COALESCE(e.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')), JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))) AS equipamento,
               COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS data_diario,
+              JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.enviado_em')) AS enviado_em,
               u.name AS operator_name,
               u.document AS operator_document,
               u.signature AS operator_signature
@@ -3329,6 +3463,7 @@ app.get("/api/public/diarios/signature/:token", async (req, res) => {
         cliente: diary.cliente,
         equipamento: diary.equipamento,
         dataDiario: diary.data_diario,
+        sentAt: firstFilledText(link.sent_at, diary.data.enviado_em, requestMeta.sentAt),
         pdfUrl: `/api/gontijo/diarios/${diary.id}/pdf`,
         operatorName: firstFilledText(diary.data.operatorSignatureName, diary.operator_name),
         operatorDocument: firstFilledText(diary.data.operatorSignatureDoc, diary.operator_document),

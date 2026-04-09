@@ -39,7 +39,7 @@ const initialForm: ObraDetail = {
   modalidadeContratual: 'FM', faturamentoMinimoDiarioGlobal: null, diasIncidenciaFatMinimo: 'SO', modalidadeFatMinimo: 'D', acrescimoTransporteNoturno: null, responsavelIcamento: 'gontijo', valorIcamento: null, incideSeguro: true, valorSeguro: null,
   necessidadeIntegracao: 'N', valorIntegracao: null, documentacaoEspecifica: 'N', valorDocumentacao: null, mobilizacaoInterna: 'N', valorMobilizacaoInterna: null, responsavelLimpezaTrado: 'cliente', valorLimpezaTrado: null, responsavelHospedagem: 'cliente', valorHospedagem: null, responsavelCafeManha: 'cliente', valorCafeManha: null, responsavelAlmoco: 'cliente', valorAlmoco: null, responsavelJantar: 'cliente', valorJantar: null, responsavelFornecimentoDiesel: 'cliente', responsavelCusteioDiesel: 'cliente',
   razaoSocialFaturamento: '', tipoDocumentoFaturamento: 'cnpj', documentoFaturamento: '', inscricaoMunicipal: '', issqnPct: null, issqnRetidoFonte: false, modalidadeFaturamento: 'FL', informarCeiCnoGuia: true, ceiCno: '', cartaoCeiCno: null, enderecoFaturamentoMesmoCliente: false, faturamentoEstado: '', faturamentoCidade: '', faturamentoCep: '', faturamentoLogradouro: '', faturamentoBairro: '', faturamentoNumero: '', faturamentoComplemento: '',
-  projetosArquivos: [], sondagensArquivos: [], producao: [], responsabilidades: [], contatos: [emptyContato()], modalidades: [], equipamentos: [],
+  projetosArquivos: [], sondagensArquivos: [], producao: [emptyProducao()], responsabilidades: [], contatos: [emptyContato()], modalidades: [], equipamentos: [],
 }
 
 function parseNumberInput(value: string) { if (!value.trim()) return null; const parsed = Number(value.replace(',', '.')); return Number.isFinite(parsed) ? parsed : null }
@@ -83,6 +83,13 @@ export default function ObraFormPage() {
   function updateContato(index: number, field: keyof ObraContato, value: string) { setForm((prev) => { const next = [...prev.contatos]; next[index] = { ...next[index], [field]: value }; return { ...prev, contatos: next } }) }
   function updateProducao(index: number, field: keyof ObraProducao, value: string | number | null) { setForm((prev) => { const next = [...prev.producao]; const updated = { ...next[index], [field]: value }; updated.subtotal = ((updated.qtdEstacas || 0) * (updated.preco || 0)) || null; next[index] = updated; return { ...prev, producao: next } }) }
   function pushArquivos(field: 'projetosArquivos' | 'sondagensArquivos', files: FileList | null) { if (!files?.length) return; setForm((prev) => ({ ...prev, [field]: [...prev[field], ...Array.from(files).map(emptyArquivo)] })) }
+  function addProducaoRow() { setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] })) }
+  function removeProducaoRow(index: number) {
+    setForm((prev) => {
+      const nextRows = prev.producao.filter((_, current) => current !== index)
+      return { ...prev, producao: nextRows.length ? nextRows : [emptyProducao()] }
+    })
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitError('')
@@ -143,7 +150,76 @@ export default function ObraFormPage() {
             <div style={gridSpan(6)}><label className="field-label">Incide seguro?</label><select className="field-select" value={form.incideSeguro ? 'Y' : 'N'} onChange={(event) => setField('incideSeguro', event.target.value === 'Y')}>{YES_NO_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
             <div style={gridSpan(6)}><label className="field-label">Valor do seguro</label><input className="field-input" value={form.valorSeguro ?? ''} onChange={(event) => setField('valorSeguro', parseNumberInput(event.target.value))} /></div>
           </div>
-          <div className="mt-4 overflow-x-auto rounded-lg border border-[#e5c76c]"><table className="w-full text-sm border-collapse"><thead style={{ background: '#fff0b8' }}><tr><th className="text-left px-3 py-2 border-b">Diâmetro/Perfil</th><th className="text-left px-3 py-2 border-b">Profundidade</th><th className="text-left px-3 py-2 border-b">Qtd Estacas</th><th className="text-left px-3 py-2 border-b">Preço Diâmetro</th><th className="text-left px-3 py-2 border-b">Sub-total</th><th className="text-center px-3 py-2 border-b" style={{ width: '52px' }}><button type="button" className="mini-button" onClick={() => setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] }))}><Plus size={12} /></button></th></tr></thead><tbody>{form.producao.length ? form.producao.map((item, index) => (<tr key={`prod-${index}`}><td className="p-2 border-b"><input className="field-input" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} /></td><td className="p-2 border-b"><input className="field-input" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} /></td><td className="p-2 border-b"><input className="field-input" value={item.subtotal ?? ''} disabled /></td><td className="p-2 border-b text-center"><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setForm((prev) => ({ ...prev, producao: prev.producao.filter((_, current) => current !== index) }))}><Trash2 size={13} /></button></td></tr>)) : (<tr><td colSpan={6} className="px-3 py-4 text-sm text-slate-500">Nenhuma linha adicionada ainda.</td></tr>)}<tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">TOTAL DE PRODUÇÃO</td><td className="px-3 py-3 border-b">{formatCurrency(totalProducaoCalculado)}</td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">VALOR DA MOBILIZAÇÃO</td><td className="px-3 py-2 border-b"><input className="field-input" value={form.mobilizacao ?? ''} onChange={(event) => setField('mobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold border-b">VALOR DA DESMOBILIZAÇÃO</td><td className="px-3 py-2 border-b"><input className="field-input" value={form.desmobilizacao ?? ''} onChange={(event) => setField('desmobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b" /></tr><tr><td colSpan={4} className="px-3 py-3 font-semibold">TOTAL DA OBRA</td><td className="px-3 py-3 font-semibold">{formatCurrency(totalObraCalculado)}</td><td /></tr></tbody></table></div>
+          <div className="mt-4 overflow-hidden rounded-[20px] border border-[rgba(167,39,39,0.16)] bg-white shadow-[0_14px_28px_rgba(15,23,42,0.06)]">
+            <div className="flex items-center justify-between gap-3 border-b border-[rgba(167,39,39,0.1)] bg-[linear-gradient(180deg,#fff6f5_0%,#ffffff_100%)] px-4 py-4">
+              <div className="grid gap-1">
+                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--brand-red)]">Composição da produção</div>
+                <div className="text-sm font-semibold text-slate-800">Adicione uma linha para cada diâmetro/perfil da obra.</div>
+                <div className="text-xs text-slate-500">Exemplo: 40 cm e 30 cm na mesma obra, cada um com sua profundidade, quantidade e preço.</div>
+              </div>
+              <button type="button" className="btn btn-primary shrink-0" onClick={addProducaoRow}>
+                <Plus size={14} />
+                Adicionar linha
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2 border-b border-[rgba(167,39,39,0.08)] bg-white px-4 py-3">
+              <span className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--brand-red)]">
+                Multi diâmetro
+              </span>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                Sub-total automático
+              </span>
+              <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">
+                Total consolidado da obra
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead style={{ background: '#fff' }}>
+                  <tr>
+                    <th className="text-left px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Diâmetro/Perfil</th>
+                    <th className="text-left px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Profundidade</th>
+                    <th className="text-left px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Qtd Estacas</th>
+                    <th className="text-left px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Preço Diâmetro</th>
+                    <th className="text-left px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500">Sub-total</th>
+                    <th className="text-center px-4 py-3 border-b border-[rgba(167,39,39,0.08)] text-[11px] font-black uppercase tracking-[0.12em] text-slate-500" style={{ width: '72px' }}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {form.producao.map((item, index) => (
+                    <tr key={`prod-${index}`} className="bg-white">
+                      <td className="p-3 border-b border-slate-100">
+                        <input className="field-input" value={item.diametro} onChange={(event) => updateProducao(index, 'diametro', event.target.value)} placeholder="Ex.: 40 cm" />
+                      </td>
+                      <td className="p-3 border-b border-slate-100">
+                        <input className="field-input" value={item.profundidade ?? ''} onChange={(event) => updateProducao(index, 'profundidade', parseNumberInput(event.target.value))} placeholder="Ex.: 10" />
+                      </td>
+                      <td className="p-3 border-b border-slate-100">
+                        <input className="field-input" value={item.qtdEstacas ?? ''} onChange={(event) => updateProducao(index, 'qtdEstacas', parseNumberInput(event.target.value))} placeholder="Ex.: 10" />
+                      </td>
+                      <td className="p-3 border-b border-slate-100">
+                        <input className="field-input" value={item.preco ?? ''} onChange={(event) => updateProducao(index, 'preco', parseNumberInput(event.target.value))} placeholder="Ex.: 1500" />
+                      </td>
+                      <td className="p-3 border-b border-slate-100">
+                        <div className="field-input flex items-center font-bold text-slate-700" style={{ background: '#f8fafc' }}>
+                          {item.subtotal != null ? formatCurrency(item.subtotal) : '—'}
+                        </div>
+                      </td>
+                      <td className="p-3 border-b border-slate-100 text-center">
+                        <button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => removeProducaoRow(index)} title="Remover linha">
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="bg-[linear-gradient(180deg,#fff8f7_0%,#ffffff_100%)]"><td colSpan={4} className="px-4 py-3 font-black uppercase tracking-[0.08em] text-[var(--brand-red)] border-b border-[rgba(167,39,39,0.08)]">Total de produção</td><td className="px-4 py-3 border-b border-[rgba(167,39,39,0.08)] font-bold text-slate-800">{formatCurrency(totalProducaoCalculado)}</td><td className="border-b border-[rgba(167,39,39,0.08)]" /></tr>
+                  <tr><td colSpan={4} className="px-4 py-3 font-black uppercase tracking-[0.08em] text-slate-600 border-b border-slate-100">Valor da mobilização</td><td className="px-4 py-2 border-b border-slate-100"><input className="field-input" value={form.mobilizacao ?? ''} onChange={(event) => setField('mobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b border-slate-100" /></tr>
+                  <tr><td colSpan={4} className="px-4 py-3 font-black uppercase tracking-[0.08em] text-slate-600 border-b border-slate-100">Valor da desmobilização</td><td className="px-4 py-2 border-b border-slate-100"><input className="field-input" value={form.desmobilizacao ?? ''} onChange={(event) => setField('desmobilizacao', parseNumberInput(event.target.value))} /></td><td className="border-b border-slate-100" /></tr>
+                  <tr className="bg-[linear-gradient(180deg,#fff6f5_0%,#ffffff_100%)]"><td colSpan={4} className="px-4 py-3 font-black uppercase tracking-[0.08em] text-[var(--brand-red)]">Total da obra</td><td className="px-4 py-3 font-black text-[var(--brand-red)]">{formatCurrency(totalObraCalculado)}</td><td /></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </ObraSection>
         <ObraSection title="Responsabilidades" sectionKey="responsabilidades" activeSection={activeSection} setActiveSection={setActiveSection}>
           <div className="form-grid">

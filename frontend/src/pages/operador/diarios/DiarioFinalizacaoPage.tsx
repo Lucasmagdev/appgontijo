@@ -75,6 +75,7 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
               <SummaryRow label="Maquina" value={signatureStatus.equipamento || '-'} />
               <SummaryRow label="Data" value={formatDateBr(signatureStatus.dataDiario)} />
               <SummaryRow label="Status do link" value={signatureStatus.status.replace(/_/g, ' ')} />
+              <SummaryRow label="Enviado em" value={signatureStatus.sentAt ? formatDateTimeBr(signatureStatus.sentAt) : '-'} />
               <SummaryRow label="Expira em" value={signatureStatus.expiresAt ? formatDateTimeBr(signatureStatus.expiresAt) : '-'} />
               <SummaryRow label="Assinado em" value={signatureStatus.signedAt ? formatDateTimeBr(signatureStatus.signedAt) : '-'} />
               <SummaryRow label="Cliente assinante" value={signatureStatus.clientName || '-'} />

@@ -8,7 +8,7 @@ import { diarioService, equipamentoService, extractApiErrorMessage, type DiarioP
 type JsonMap = Record<string, unknown>
 type StakeKey = 'stakes' | 'stakesBE'
 type DiaryStakeRow = Record<string, string>
-type DiaryStaffRow = { item: string }
+type DiaryStaffRow = { item: string; nota?: number | null }
 type DiaryOccurrenceRow = { desc: string; hora_ini: string; hora_fim: string }
 type DiaryPlanRow = { numeroEstacas: string; diametro: string }
 type DiarySupply = {
@@ -155,7 +155,11 @@ function normalizeStakeRow(value: unknown): DiaryStakeRow {
 
 function normalizeStaffRow(value: unknown): DiaryStaffRow {
   const source = asRecord(value)
-  return { item: toText(source.item || source.name) }
+  const notaValue = Number(source.nota)
+  return {
+    item: toText(source.item || source.name || source.nome),
+    nota: Number.isInteger(notaValue) && notaValue >= 1 && notaValue <= 10 ? notaValue : null,
+  }
 }
 
 function normalizeOccurrenceRow(value: unknown): DiaryOccurrenceRow {
@@ -483,7 +487,13 @@ export default function DiarioFormPage() {
           litros: editor.supply.litros,
           horario: editor.supply.horario,
         }),
-        staff: compactStringArray(editor.staff),
+        staff: editor.staff
+          .map((person) => ({
+            item: person.item,
+            nome: person.item,
+            nota: person.nota ?? null,
+          }))
+          .filter((person) => person.item),
         occurrences: compactStringArray(editor.occurrences),
         planning: compactStringArray(editor.planning),
         endConstruction: compactStringArray(editor.endConstruction),

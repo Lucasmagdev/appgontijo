@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { operadorCursosApi, type OperadorCurso } from '@/lib/gontijo-api'
+import OperadorBottomNav from '@/components/operador/OperadorBottomNav'
 
 type CursoStatus = 'nao_iniciado' | 'aprovado' | 'reprovado' | 'conteudo'
 
@@ -66,6 +68,7 @@ function sectionTitle(status: CursoStatus) {
 
 function CursoCard({ curso }: { curso: OperadorCurso }) {
   const navigate = useNavigate()
+  const [imgError, setImgError] = useState(false)
   const status = resolveCursoStatus(curso)
   const visual = statusConfig(status)
   const provaResumo =
@@ -74,6 +77,27 @@ function CursoCard({ curso }: { curso: OperadorCurso }) {
         ? `${curso.tentativas} tentativa(s) registrada(s)`
         : 'Prova aguardando primeira tentativa'
       : 'Sem prova obrigatoria neste curso'
+
+  const gradientBg =
+    status === 'nao_iniciado'
+      ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)'
+      : status === 'reprovado'
+        ? 'linear-gradient(135deg, #ea580c 0%, #9a3412 100%)'
+        : status === 'aprovado'
+          ? 'linear-gradient(135deg, #16a34a 0%, #166534 100%)'
+          : 'linear-gradient(135deg, #334155 0%, #1e293b 100%)'
+
+  const thumbnailBlock =
+    curso.thumbnail_url && !imgError ? (
+      <img
+        src={curso.thumbnail_url}
+        alt={curso.titulo}
+        style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
+        onError={() => setImgError(true)}
+      />
+    ) : (
+      <div style={{ height: '72px', background: gradientBg }} />
+    )
 
   return (
     <button
@@ -90,36 +114,7 @@ function CursoCard({ curso }: { curso: OperadorCurso }) {
         width: '100%',
       }}
     >
-      {curso.thumbnail_url ? (
-        <img
-          src={curso.thumbnail_url}
-          alt={curso.titulo}
-          style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block' }}
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-        />
-      ) : (
-        <div
-          style={{
-            height: '98px',
-            background:
-              status === 'nao_iniciado'
-                ? 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)'
-                : status === 'reprovado'
-                  ? 'linear-gradient(135deg, #ea580c 0%, #9a3412 100%)'
-                  : status === 'aprovado'
-                    ? 'linear-gradient(135deg, #16a34a 0%, #166534 100%)'
-                    : 'linear-gradient(135deg, #334155 0%, #1e293b 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.68)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-          </svg>
-        </div>
-      )}
+      {thumbnailBlock}
 
       <div style={{ padding: '14px 14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
@@ -184,6 +179,12 @@ export default function OperadorCursosPage() {
   const { data: cursos = [], isLoading } = useQuery({
     queryKey: ['operador-cursos'],
     queryFn: operadorCursosApi.list,
+    refetchOnMount: 'always',
+  })
+  const { data: pontosData } = useQuery({
+    queryKey: ['operador-cursos-pontos'],
+    queryFn: () => operadorCursosApi.getPontos(),
+    refetchOnMount: 'always',
   })
 
   const grouped = {
@@ -218,7 +219,40 @@ export default function OperadorCursosPage() {
         </p>
       </div>
 
-      <div style={{ padding: '20px 16px 40px' }}>
+      <div style={{ padding: '20px 16px 112px' }}>
+        {pontosData && (
+          <div
+            style={{
+              marginBottom: '18px',
+              borderRadius: '18px',
+              background: 'linear-gradient(135deg, #c0392b 0%, #7b1d1d 100%)',
+              padding: '16px',
+              color: '#fff',
+              boxShadow: '0 14px 28px rgba(192,57,43,0.22)',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.07)', pointerEvents: 'none' }} />
+            <p style={{ margin: 0, fontSize: '11px', fontWeight: 800, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {pontosData.raffle?.banner_label || 'Sorteio do mês'}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '16px', fontWeight: 800 }}>
+              {pontosData.raffle?.title || 'Ganhe pontos estudando'}
+            </p>
+            {pontosData.raffle?.prize && (
+              <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.80)' }}>
+                Prêmio: <strong style={{ color: '#fff' }}>{pontosData.raffle.prize}</strong>
+              </p>
+            )}
+            <p style={{ margin: '6px 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.65)' }}>
+              {pontosData.points.month_points > 0
+                ? `Você tem ${pontosData.points.month_points} ponto(s) este mês`
+                : 'Conclua cursos e provas para pontuar'}
+            </p>
+          </div>
+        )}
+
         {!isLoading && cursos.length > 0 && (
           <div
             style={{
@@ -280,6 +314,7 @@ export default function OperadorCursosPage() {
             ))
         )}
       </div>
+      <OperadorBottomNav />
     </div>
   )
 }

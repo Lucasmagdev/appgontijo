@@ -165,6 +165,7 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
               <SummaryRow label="Obra" value={status.obraNumero || '-'} />
               <SummaryRow label="Maquina" value={status.equipamento || '-'} />
               <SummaryRow label="Data" value={formatDateBr(status.dataDiario)} />
+              <SummaryRow label="Enviado em" value={status.sentAt ? formatDateTimeBr(status.sentAt) : '-'} />
               <SummaryRow label="Expira em" value={status.expiresAt ? formatDateTimeBr(status.expiresAt) : '-'} />
               <SummaryRow label="Assinado em" value={status.signedAt ? formatDateTimeBr(status.signedAt) : '-'} />
             </div>

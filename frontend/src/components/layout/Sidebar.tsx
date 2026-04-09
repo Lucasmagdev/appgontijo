@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Users, Building2, HardHat, Wrench,
   FileText, BarChart3, KeyRound, BookOpen,
   Fingerprint,
+  ClipboardCheck,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -22,6 +23,7 @@ const navItems = [
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
   { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
+  { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
   { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
   { type: 'divider', label: 'Treinamento' },

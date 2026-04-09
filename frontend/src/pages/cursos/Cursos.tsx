@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, BookOpen, ClipboardList, BarChart2, Pencil, Trash2, Users } from 'lucide-react'
+import { Plus, BookOpen, ClipboardList, BarChart2, Pencil, Trash2, Users, Ticket } from 'lucide-react'
 import { cursosApi, type CursoRecord } from '@/lib/gontijo-api'
 
 function CursoCard({ curso, onEdit, onDelete }: { curso: CursoRecord; onEdit: () => void; onDelete: () => void }) {
@@ -50,7 +50,7 @@ export default function CursosPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [page] = useState(1)
-  const [tab, setTab] = useState<'cursos' | 'resultados'>('cursos')
+  const [tab, setTab] = useState<'cursos' | 'resultados' | 'pontos'>('cursos')
 
   const { data, isLoading } = useQuery({
     queryKey: ['cursos', page],
@@ -91,11 +91,13 @@ export default function CursosPage() {
         {[
           { key: 'cursos', label: 'Cursos', icon: BookOpen },
           { key: 'resultados', label: 'Resultados', icon: BarChart2 },
+          { key: 'pontos', label: 'Pontos e Sorteio', icon: Ticket },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => {
               if (key === 'resultados') navigate('/cursos/resultados')
+              else if (key === 'pontos') navigate('/cursos/pontos')
               else setTab(key as 'cursos')
             }}
             className={`flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${

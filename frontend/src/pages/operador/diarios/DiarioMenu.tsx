@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import OperadorBottomNav from '@/components/operador/OperadorBottomNav'
 
 function OperadorHeader({ titulo, voltarPara }: { titulo: string; voltarPara: string }) {
   const navigate = useNavigate()
@@ -70,7 +71,7 @@ export default function DiarioMenu() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '32px 20px',
+          padding: '32px 20px 116px',
           gap: '16px',
         }}
       >
@@ -146,6 +147,7 @@ export default function DiarioMenu() {
           </span>
         </button>
       </div>
+      <OperadorBottomNav />
     </div>
   )
 }

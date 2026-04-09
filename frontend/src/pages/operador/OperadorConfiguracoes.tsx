@@ -4,6 +4,7 @@ import { Home, LogOut, Pencil, Save, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { operadorProfileService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
+import OperadorBottomNav from '@/components/operador/OperadorBottomNav'
 
 type FormState = {
   assinatura: string
@@ -175,7 +176,7 @@ export default function OperadorConfiguracoesPage() {
             background: '#fff',
             border: '2px solid #111827',
             boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
-            padding: '22px 18px 26px',
+            padding: '22px 18px 120px',
             display: 'flex',
             flexDirection: 'column',
             gap: '18px',
@@ -296,6 +297,7 @@ export default function OperadorConfiguracoesPage() {
           <div style={{ fontSize: '11px', fontWeight: 900, letterSpacing: '0.14em', color: '#111827' }}>GONTIJO FUNDACOES</div>
         </div>
       </div>
+      <OperadorBottomNav />
     </div>
   )
 }

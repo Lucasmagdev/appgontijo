@@ -312,10 +312,13 @@ export type DiarioRecord = {
   equipamentoId: number | null
   dataDiario: string
   status: 'rascunho' | 'pendente' | 'assinado'
+  criadoEm: string
+  enviadoEm: string
   assinadoEm: string
   obraNumero: string
   cliente: string
   equipamento: string
+  conferenciaStatus?: 'pendente' | 'aprovado' | 'rejeitado'
 }
 
 export type DiarioDetail = DiarioRecord & {
@@ -329,6 +332,7 @@ export type DiarioPayload = {
   dataDiario: string
   status: 'rascunho' | 'pendente' | 'assinado'
   equipamentoId: number | null
+  enviadoEm?: string
   assinadoEm: string
   dadosJson: Record<string, unknown> | null
 }
@@ -343,6 +347,30 @@ export type DiarioFilters = {
   equipamentoId?: number | null
   operadorId?: number | null
   status?: string
+}
+
+export type HelperEvaluationRecord = {
+  id: number
+  diaryId: number
+  diaryDate: string
+  score: number
+  helperUserId: number | null
+  helperName: string
+  operatorUserId: number | null
+  operatorName: string
+  constructionId: number | null
+  obraNumero: string
+  cliente: string
+  equipamento: string
+  createdAt: string
+}
+
+export type HelperEvaluationFilters = {
+  page?: number
+  limit?: number
+  dataInicio?: string
+  dataFim?: string
+  nome?: string
 }
 
 export type OperadorProfile = {
@@ -795,10 +823,13 @@ function adaptDiario(row: Record<string, unknown>): DiarioRecord {
     equipamentoId: toNumberValue(row.equipamento_id),
     dataDiario: toDateOnly(row.data_diario),
     status: (toStringValue(row.status) || 'pendente') as DiarioRecord['status'],
+    criadoEm: toStringValue(row.criado_em),
+    enviadoEm: toStringValue(row.enviado_em),
     assinadoEm: toStringValue(row.assinado_em),
     obraNumero: toStringValue(row.obra_numero),
     cliente: toStringValue(row.cliente),
     equipamento: toStringValue(row.equipamento),
+    conferenciaStatus: (toStringValue(row.conferencia_status) || undefined) as DiarioRecord['conferenciaStatus'],
   }
 }
 
@@ -1358,6 +1389,49 @@ export const diarioService = {
   },
 }
 
+export const helperEvaluationService = {
+  async list(filters: HelperEvaluationFilters = {}) {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/avaliacoes-ajudantes', {
+      params: {
+        page: filters.page ?? 1,
+        limit: filters.limit ?? 20,
+        dataInicio: filters.dataInicio || undefined,
+        dataFim: filters.dataFim || undefined,
+        nome: filters.nome || undefined,
+      },
+    })
+
+    const payload = listResult(data)
+    return {
+      ...payload,
+      items: payload.items.map((row) => ({
+        id: Number((row as Record<string, unknown>).id || 0),
+        diaryId: Number((row as Record<string, unknown>).diary_id || 0),
+        diaryDate: toDateOnly((row as Record<string, unknown>).diary_date),
+        score: Number((row as Record<string, unknown>).score || 0),
+        helperUserId: toNumberValue((row as Record<string, unknown>).helper_user_id),
+        helperName: toStringValue((row as Record<string, unknown>).helper_name),
+        operatorUserId: toNumberValue((row as Record<string, unknown>).operator_user_id),
+        operatorName: toStringValue((row as Record<string, unknown>).operator_name),
+        constructionId: toNumberValue((row as Record<string, unknown>).construction_id),
+        obraNumero: toStringValue((row as Record<string, unknown>).obra_numero),
+        cliente: toStringValue((row as Record<string, unknown>).cliente),
+        equipamento: toStringValue((row as Record<string, unknown>).equipamento),
+        createdAt: toStringValue((row as Record<string, unknown>).created_at),
+      })),
+    }
+  },
+
+  getExportUrl(filters: HelperEvaluationFilters = {}) {
+    const params = new URLSearchParams()
+    if (filters.dataInicio) params.set('dataInicio', filters.dataInicio)
+    if (filters.dataFim) params.set('dataFim', filters.dataFim)
+    if (filters.nome) params.set('nome', filters.nome)
+    const query = params.toString()
+    return `/api/gontijo/avaliacoes-ajudantes/export${query ? `?${query}` : ''}`
+  },
+}
+
 export const operadorProfileService = {
   async getProfile(): Promise<OperadorProfile> {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/operador/profile')
@@ -1769,6 +1843,69 @@ export type OperadorCurso = CursoRecord & {
   tipo_acesso?: 'curso_e_prova' | 'so_curso' | 'so_prova'
   prova?: Pick<ProvaRecord, 'id' | 'titulo' | 'percentual_aprovacao'> | null
   ultima_tentativa?: TentativaRecord | null
+  concluido_sem_prova?: boolean
+  curso_concluido_em?: string | null
+  curso_concluido_pontos?: number
+  prova_concluida_em?: string | null
+  prova_concluida_pontos?: number
+}
+
+export type TrainingPointSettings = {
+  id: number
+  points_course_completion: number
+  points_proof_approved: number
+  points_proof_failed: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type TrainingMonthlyRaffle = {
+  id: number
+  month_ref: string
+  title: string
+  description: string | null
+  prize: string | null
+  draw_date: string | null
+  status: 'draft' | 'active' | 'closed'
+  banner_label: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type TrainingRankingRow = {
+  usuario_id: number
+  nome: string
+  apelido: string | null
+  documento: string
+  setor_nome: string | null
+  pontos: number
+  eventos: number
+}
+
+export type TrainingAdminPayload = {
+  month_ref: string
+  settings: TrainingPointSettings
+  raffle: TrainingMonthlyRaffle | null
+  ranking: TrainingRankingRow[]
+}
+
+export type TrainingPointsOverview = {
+  month_ref: string
+  points: {
+    month_points: number
+    lifetime_points: number
+    chances: number
+  }
+  settings: TrainingPointSettings
+  raffle: TrainingMonthlyRaffle | null
+  recent_events: Array<{
+    id: number
+    event_type: 'curso_concluido' | 'prova_aprovada' | 'prova_reprovada'
+    points: number
+    created_at: string
+    curso_titulo: string | null
+    prova_titulo: string | null
+  }>
 }
 
 export type ResultadoMatrizColumn = {
@@ -1904,6 +2041,43 @@ export const cursosApi = {
     const res = await api.get<ApiEnvelope<ResultadoMatriz>>(`/gontijo/cursos/resultados/matriz?${q}`)
     return res.data.data
   },
+
+  getPontosConfig: async (month?: string) => {
+    const q = new URLSearchParams()
+    if (month) q.set('month', month)
+    const res = await api.get<ApiEnvelope<TrainingAdminPayload>>(`/gontijo/cursos/pontos/config?${q}`)
+    return res.data.data
+  },
+
+  updatePontosConfig: async (payload: {
+    month?: string
+    points_course_completion: number
+    points_proof_approved: number
+    points_proof_failed: number
+  }) => {
+    const res = await api.put<ApiEnvelope<TrainingAdminPayload>>('/gontijo/cursos/pontos/config', payload)
+    return res.data.data
+  },
+
+  updateSorteioAtual: async (payload: {
+    month_ref: string
+    title: string
+    description?: string
+    prize?: string
+    draw_date?: string
+    status: 'draft' | 'active' | 'closed'
+    banner_label?: string
+  }) => {
+    const res = await api.put<ApiEnvelope<TrainingMonthlyRaffle>>('/gontijo/cursos/pontos/sorteio-atual', payload)
+    return res.data.data
+  },
+
+  getRankingPontos: async (month?: string) => {
+    const q = new URLSearchParams()
+    if (month) q.set('month', month)
+    const res = await api.get<ApiEnvelope<{ month_ref: string; items: TrainingRankingRow[] }>>(`/gontijo/cursos/pontos/ranking?${q}`)
+    return res.data.data
+  },
 }
 
 export const operadorCursosApi = {
@@ -1922,6 +2096,26 @@ export const operadorCursosApi = {
     return res.data.data
   },
 
+  getPontos: async (month?: string) => {
+    const q = new URLSearchParams()
+    if (month) q.set('month', month)
+    const res = await api.get<ApiEnvelope<TrainingPointsOverview>>(`/gontijo/operador/cursos/pontos?${q}`)
+    return res.data.data
+  },
+
+  concluirCurso: async (id: number) => {
+    const res = await api.post<ApiEnvelope<{
+      awarded: boolean
+      points: number
+      totals: {
+        month_points: number
+        lifetime_points: number
+        chances: number
+      }
+    }>>(`/gontijo/operador/cursos/${id}/concluir`)
+    return res.data.data
+  },
+
   getQuestoes: async (provaId: number) => {
     const res = await api.get<ApiEnvelope<ProvaRecord & { questoes: QuestaoRecord[] }>>(`/gontijo/operador/provas/${provaId}/questoes`)
     return res.data.data
@@ -1930,8 +2124,95 @@ export const operadorCursosApi = {
   submitTentativa: async (provaId: number, respostas: { questao_id: number; alternativa_id: number }[]) => {
     const res = await api.post<ApiEnvelope<{
       id: number; acertos: number; total_questoes: number;
-      percentual: number; aprovado: boolean; percentual_aprovacao: number
+      percentual: number; aprovado: boolean; percentual_aprovacao: number;
+      points_awarded: number;
+      totals: { month_points: number; lifetime_points: number; chances: number }
     }>>(`/gontijo/operador/provas/${provaId}/tentativa`, { respostas })
     return res.data.data
+  },
+}
+
+// ── Conferência de Estacas ────────────────────────────────────────────────────
+
+export type EstacaExecutada = {
+  nome: string
+  diametro: string | null
+  profundidade: string | null
+}
+
+export type ProducaoPlanejada = {
+  diametro: string
+  profundidade: string
+  qtd_estacas: number
+}
+
+export type ComparacaoDetalhe = {
+  estaca: string
+  diametroExec: number | null
+  diametroPlan?: number | null
+  profExec: number | null
+  profPlan?: number
+  diferencaPct?: number
+  ok: boolean
+  motivo?: string
+}
+
+export type AutoComparacao = {
+  dentroTolerancia: boolean
+  semEstacas?: boolean
+  semProducao?: boolean
+  detalhes: ComparacaoDetalhe[]
+}
+
+export type ConferenciaEstacaItem = {
+  id: number
+  obraId: number
+  obraNumero: string
+  cliente: string
+  dataDiario: string
+  equipamento: string
+  operadorNome: string
+  conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaEm: string | null
+  conferenciaObs: string | null
+  conferenciaPorNome: string | null
+  estacas: EstacaExecutada[]
+  producaoPlanejada: ProducaoPlanejada[]
+  autoComparacao: AutoComparacao
+}
+
+export const conferenciaEstacasApi = {
+  async list(params: { page?: number; limit?: number; conferencia_status?: string; obra_numero?: string }): Promise<ApiListResult<ConferenciaEstacaItem>> {
+    const res = await api.get<ApiEnvelope<ConferenciaEstacaItem[]>>('/gontijo/conferencia-estacas', { params })
+    return {
+      items: res.data.data ?? [],
+      total: res.data.total ?? 0,
+      page: res.data.page ?? 1,
+      limit: res.data.limit ?? 20,
+    }
+  },
+
+  async aprovar(id: number, obs?: string): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, { obs })
+  },
+
+  async rejeitar(id: number, obs: string): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/rejeitar`, { obs })
+  },
+}
+
+// ── Fato Observado ────────────────────────────────────────────────────────────
+
+export const operadorFatoObservadoApi = {
+  async registrar(payload: { tipo: 'positivo' | 'negativo'; local_ref?: string; descricao: string }): Promise<void> {
+    await api.post('/gontijo/operador/fatos-observados', payload)
+  },
+}
+
+// ── Indicações de Obra ────────────────────────────────────────────────────────
+
+export const operadorIndicacoesApi = {
+  async indicar(payload: { contato_nome: string; contato_telefone?: string; endereco: string; tipo_servico?: string; observacoes?: string }): Promise<void> {
+    await api.post('/gontijo/operador/indicacoes-obra', payload)
   },
 }

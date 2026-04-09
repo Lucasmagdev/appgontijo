@@ -66,7 +66,6 @@ export default function ClientePortalDashboardPage() {
                     <div className="mt-1 text-lg text-slate-600">{data.obra.cliente || '-'}</div>
 
                     <div className="mt-5 grid gap-3 md:grid-cols-2">
-                      <InfoCard label="Tipo" value={data.obra.tipo || '-'} />
                       <InfoCard label="Localidade" value={[data.obra.cidade, data.obra.estado].filter(Boolean).join(' / ') || '-'} />
                       <InfoCard label="Endereco" value={data.obra.endereco || '-'} />
                       <InfoCard label="Status" value={data.obra.status || '-'} />

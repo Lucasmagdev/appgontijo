@@ -11,6 +11,19 @@ import {
 } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 
+function formatDateTime(value: string) {
+  if (!value) return '-'
+  const parsed = new Date(String(value).replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) return value
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
 export default function DiariosPage() {
   const queryClient = useQueryClient()
 
@@ -123,7 +136,27 @@ export default function DiariosPage() {
 
   return (
     <div className="page-shell">
-      <h1 className="page-heading">Diários</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8, flexWrap: 'wrap' }}>
+        <h1 className="page-heading" style={{ margin: 0 }}>Diários</h1>
+        <Link
+          to="/diarios/conferencia"
+          style={{
+            padding: '5px 14px',
+            borderRadius: 6,
+            border: '1px solid #e2e8f0',
+            background: '#fff',
+            color: '#2d3748',
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          ✓ Conferência de Estacas
+        </Link>
+      </div>
 
       {/* Filter bar */}
       <section className="app-panel toolbar-panel">
@@ -256,6 +289,7 @@ export default function DiariosPage() {
                     </th>
                     <th>Equipamento</th>
                     <th>Assinatura</th>
+                    <th>Conferência</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
@@ -281,6 +315,15 @@ export default function DiariosPage() {
                             >
                               {item.status === 'assinado' ? 'Assinado' : 'Não assinado'}
                             </span>
+                            {item.enviadoEm ? (
+                              <span className="text-xs text-slate-500">
+                                Enviado em {formatDateTime(item.enviadoEm)}
+                              </span>
+                            ) : item.criadoEm ? (
+                              <span className="text-xs text-slate-500">
+                                Criado em {formatDateTime(item.criadoEm)}
+                              </span>
+                            ) : null}
                             {item.status !== 'assinado' && (
                               <button
                                 type="button"
@@ -291,9 +334,27 @@ export default function DiariosPage() {
                               </button>
                             )}
                             {item.status === 'assinado' && item.assinadoEm ? (
-                              <span className="text-xs text-slate-400">{formatDate(item.assinadoEm)}</span>
+                              <span className="text-xs text-slate-400">
+                                Assinado em {formatDateTime(item.assinadoEm)}
+                              </span>
                             ) : null}
                           </div>
+                        </td>
+                        <td>
+                          {item.status === 'assinado' && (
+                            <span
+                              className="text-xs font-semibold px-2 py-0.5 rounded"
+                              style={
+                                item.conferenciaStatus === 'aprovado'
+                                  ? { backgroundColor: '#c6f6d5', color: '#276749' }
+                                  : item.conferenciaStatus === 'rejeitado'
+                                    ? { backgroundColor: '#fed7d7', color: '#9b2c2c' }
+                                    : { backgroundColor: '#fefcbf', color: '#744210' }
+                              }
+                            >
+                              {item.conferenciaStatus === 'aprovado' ? 'Conferido' : item.conferenciaStatus === 'rejeitado' ? 'Rejeitado' : 'Aguard. Conferência'}
+                            </span>
+                          )}
                         </td>
                         <td>
                           <div className="flex flex-col gap-1 items-start">

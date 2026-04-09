@@ -8,7 +8,6 @@ import LoginPage from '@/pages/Login'
 import OperadorLoginPage from '@/pages/operador/OperadorLogin'
 import OperadorHomePage from '@/pages/operador/OperadorHome'
 import OperadorSplashPage from '@/pages/operador/OperadorSplash'
-import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import OperadorConfiguracoesPage from '@/pages/operador/OperadorConfiguracoes'
 import AssinaturaClientePage from '@/pages/public/AssinaturaClientePage'
 import ClientePortalLoginPage from '@/pages/public/ClientePortalLoginPage'
@@ -28,6 +27,7 @@ import ObraFormPage from '@/pages/obras/ObraForm'
 import EquipamentosPage from '@/pages/equipamentos/Equipamentos'
 import DiariosPage from '@/pages/diarios/Diarios'
 import DiarioFormPage from '@/pages/diarios/DiarioForm'
+import DiarioConferenciaPage from '@/pages/diarios/DiarioConferenciaPage'
 import ProducaoPage from '@/pages/producao/Producao'
 import PortalClientesPage from '@/pages/clientes-portal/PortalClientesPage'
 import CursosPage from '@/pages/cursos/Cursos'
@@ -35,10 +35,14 @@ import CursoFormPage from '@/pages/cursos/CursoForm'
 import CursoProvaPage from '@/pages/cursos/CursoProva'
 import CursoAtribuicoesPage from '@/pages/cursos/CursoAtribuicoes'
 import CursosResultadosPage from '@/pages/cursos/CursosResultados'
+import CursosPontosPage from '@/pages/cursos/CursosPontos'
 import PontoVerificacaoPage from '@/pages/ponto/PontoVerificacaoPage'
+import AjudantesAvaliacaoPage from '@/pages/ponto/AjudantesAvaliacaoPage'
 import OperadorCursosPage from '@/pages/operador/cursos/OperadorCursos'
 import OperadorCursoDetalhePage from '@/pages/operador/cursos/OperadorCursoDetalhe'
 import OperadorProvaPage from '@/pages/operador/cursos/OperadorProva'
+import FatoObservadoPage from '@/pages/operador/FatoObservadoPage'
+import IndiqueUmaObraPage from '@/pages/operador/IndiqueUmaObraPage'
 
 function AppBootstrap() {
   const initAdmin = useAuth((state) => state.initialize)
@@ -133,12 +137,15 @@ export default function App() {
           <Route path="equipamentos" element={<EquipamentosPage />} />
           <Route path="producao" element={<ProducaoPage />} />
           <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
+          <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
           <Route path="diarios" element={<DiariosPage />} />
+          <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />
           <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
           <Route path="portal-clientes" element={<PortalClientesPage />} />
           <Route path="cursos" element={<CursosPage />} />
           <Route path="cursos/novo" element={<CursoFormPage />} />
           <Route path="cursos/resultados" element={<CursosResultadosPage />} />
+          <Route path="cursos/pontos" element={<CursosPontosPage />} />
           <Route path="cursos/:id/editar" element={<CursoFormPage />} />
           <Route path="cursos/:id/prova" element={<CursoProvaPage />} />
           <Route path="cursos/:id/atribuicoes" element={<CursoAtribuicoesPage />} />
@@ -162,9 +169,8 @@ export default function App() {
         <Route path="/operador/diario-de-obras/novo" element={<OperadorPrivateRoute><DiarioNovoObra /></OperadorPrivateRoute>} />
         <Route path="/operador/diario-de-obras/novo/:equipamentoId" element={<OperadorPrivateRoute><DiarioPainel /></OperadorPrivateRoute>} />
         <Route path="/operador/diario-de-obras/novo/:equipamentoId/:modulo" element={<OperadorPrivateRoute><DiarioModuloPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Indique uma Obra" /></OperadorPrivateRoute>} />
-        <Route path="/operador/mapa-de-obras" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Mapa de Obras" /></OperadorPrivateRoute>} />
-        <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><OperadorPlaceholder titulo="Fato Observado" /></OperadorPrivateRoute>} />
+        <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><IndiqueUmaObraPage /></OperadorPrivateRoute>} />
+        <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><FatoObservadoPage /></OperadorPrivateRoute>} />
         <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorConfiguracoesPage /></OperadorPrivateRoute>} />
         <Route path="/operador/cursos" element={<OperadorPrivateRoute><OperadorCursosPage /></OperadorPrivateRoute>} />
         <Route path="/operador/cursos/:id" element={<OperadorPrivateRoute><OperadorCursoDetalhePage /></OperadorPrivateRoute>} />

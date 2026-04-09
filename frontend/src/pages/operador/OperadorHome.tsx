@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { operadorCursosApi } from '@/lib/gontijo-api'
+import OperadorBottomNav from '@/components/operador/OperadorBottomNav'
 
 const ATALHOS = [
   {
@@ -28,24 +29,14 @@ const ATALHOS = [
     ),
   },
   {
-    label: 'Mapa de Obras',
-    rota: '/operador/mapa-de-obras',
-    icon: (
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-        <line x1="8" y1="2" x2="8" y2="18"/>
-        <line x1="16" y1="6" x2="16" y2="22"/>
-      </svg>
-    ),
-  },
-  {
     label: 'Fato Observado',
     rota: '/operador/fato-observado',
     icon: (
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="11" x2="12" y2="17"/>
+        <line x1="9" y1="14" x2="15" y2="14"/>
       </svg>
     ),
   },
@@ -108,9 +99,16 @@ export default function OperadorHomePage() {
   const { data: pendenciasData } = useQuery({
     queryKey: ['operador-pendencias'],
     queryFn: operadorCursosApi.pendencias,
-    staleTime: 60_000,
+    refetchOnMount: 'always',
+  })
+  const { data: pontosData } = useQuery({
+    queryKey: ['operador-cursos-pontos'],
+    queryFn: () => operadorCursosApi.getPontos(),
+    refetchOnMount: 'always',
   })
   const pendencias = pendenciasData?.pendencias ?? 0
+  const points = pontosData?.points.month_points ?? 0
+  const raffle = pontosData?.raffle ?? null
 
   const firstName = user?.nome?.split(' ')[0] ?? 'Operador'
 
@@ -206,6 +204,41 @@ export default function OperadorHomePage() {
           </div>
         )}
 
+        {(raffle || points > 0) && (
+          <div style={{ padding: '0 16px 12px' }}>
+            <button
+              onClick={() => navigate('/operador/cursos')}
+              style={{
+                width: '100%', background: '#fff', borderRadius: '14px',
+                padding: '14px 16px', boxShadow: '0 4px 14px rgba(192,57,43,0.10)',
+                border: '1.5px solid #fecaca', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '12px',
+                position: 'relative', overflow: 'hidden',
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: '10px', fontWeight: 800, color: '#c0392b', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {raffle?.banner_label || 'Sorteio do mês'}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '15px', fontWeight: 800, color: '#7f1d1d', lineHeight: 1.2 }}>
+                  {raffle?.title || 'Ganhe pontos estudando'}
+                </p>
+                {raffle?.prize && (
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#991b1b' }}>
+                    Prêmio: <strong>{raffle.prize}</strong>
+                  </p>
+                )}
+                <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>
+                  {points > 0 ? `Você tem ${points} ponto(s) este mês` : 'Conclua cursos e provas para pontuar'}
+                </p>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c0392b" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Card comunicação interna */}
         <div style={{ padding: '0 16px 16px' }}>
           <div
@@ -269,7 +302,7 @@ export default function OperadorHomePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '20px 20px 32px',
+            padding: '20px 20px 112px',
           }}
         >
           <button
@@ -304,6 +337,7 @@ export default function OperadorHomePage() {
           </span>
         </div>
       </div>
+      <OperadorBottomNav />
     </div>
   )
 }

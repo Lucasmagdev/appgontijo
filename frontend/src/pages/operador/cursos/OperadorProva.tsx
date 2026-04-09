@@ -11,6 +11,12 @@ type Resultado = {
   percentual: number
   aprovado: boolean
   percentual_aprovacao: number
+  points_awarded: number
+  totals: {
+    month_points: number
+    lifetime_points: number
+    chances: number
+  }
 }
 
 function ResultadoScreen({ resultado, cursoId }: { resultado: Resultado; cursoId: string }) {
@@ -54,6 +60,16 @@ function ResultadoScreen({ resultado, cursoId }: { resultado: Resultado; cursoId
         {aprovado ? 'Parabéns pelo seu desempenho!' : `Nota mínima: ${percentual_aprovacao}%. Continue estudando!`}
       </p>
 
+      <div style={{ marginBottom: '24px', borderRadius: '16px', background: 'rgba(255,255,255,0.08)', padding: '14px 18px', textAlign: 'center', maxWidth: '320px' }}>
+        <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+          Pontos desta tentativa
+        </p>
+        <p style={{ margin: '6px 0 0', fontSize: '28px', fontWeight: 900, color: '#fff' }}>+{resultado.points_awarded}</p>
+        <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.72)' }}>
+          Agora você tem {resultado.totals.month_points} ponto(s) acumulado(s) neste mês.
+        </p>
+      </div>
+
       {/* Círculo de progresso */}
       <div style={{ position: 'relative', width: '160px', height: '160px', marginBottom: '32px' }}>
         <svg width="160" height="160" style={{ transform: 'rotate(-90deg)' }}>
@@ -95,10 +111,10 @@ function ResultadoScreen({ resultado, cursoId }: { resultado: Resultado; cursoId
         <button
           onClick={() => navigate(`/operador/cursos/${cursoId}`)}
           style={{
-            background: aprovado ? '#16a34a' : '#dc2626',
+            background: 'linear-gradient(135deg, #c0392b 0%, #922b21 100%)',
             border: 'none', borderRadius: '14px', padding: '16px',
             fontSize: '15px', fontWeight: 700, color: '#fff', cursor: 'pointer',
-            boxShadow: `0 4px 16px ${aprovado ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)'}`,
+            boxShadow: '0 4px 16px rgba(192,57,43,0.4)',
           }}
         >
           {aprovado ? 'Ver curso' : 'Estudar novamente'}
@@ -150,6 +166,7 @@ export default function OperadorProvaPage() {
       qc.invalidateQueries({ queryKey: ['operador-cursos'] })
       qc.invalidateQueries({ queryKey: ['operador-pendencias'] })
       qc.invalidateQueries({ queryKey: ['operador-curso', id] })
+      qc.invalidateQueries({ queryKey: ['operador-cursos-pontos'] })
       setResultado(data)
     },
     onError: (e: Error) => setError(e.message),
@@ -158,7 +175,7 @@ export default function OperadorProvaPage() {
   if (isLoading) {
     return (
       <div style={{ minHeight: '100dvh', maxWidth: '430px', margin: '0 auto', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
-        <div style={{ background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)', height: '72px', flexShrink: 0 }} />
+        <div style={{ background: 'linear-gradient(135deg, #c0392b 0%, #922b21 100%)', height: '4px', flexShrink: 0 }} />
         <div style={{ padding: '24px 18px', display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
           <SkeletonLine width="30%" height="12px" />
           <div style={{ borderRadius: '20px', background: '#fff', padding: '24px', boxShadow: '0 4px 16px rgba(15,23,42,0.06)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -211,25 +228,29 @@ export default function OperadorProvaPage() {
   return (
     <div style={{ minHeight: '100dvh', background: '#f8fafc', maxWidth: '430px', margin: '0 auto', display: 'flex', flexDirection: 'column' }}>
       {/* Header com progresso */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '48px 16px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <button
-            onClick={() => navigate(`/operador/cursos/${id}`)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Sair
-          </button>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>
-            {currentIndex + 1} / {total}
-          </span>
-          <span style={{ fontSize: '12px', color: '#94a3b8' }}>{answered} respondidas</span>
-        </div>
-        {/* Barra de progresso */}
-        <div style={{ height: '4px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${progress}%`, background: '#c0392b', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
+        {/* Faixa vermelha de topo */}
+        <div style={{ height: '4px', background: 'linear-gradient(90deg, #c0392b 0%, #922b21 100%)' }} />
+        <div style={{ padding: '14px 16px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <button
+              onClick={() => navigate(`/operador/cursos/${id}`)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', padding: 0, display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', fontWeight: 600 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              Sair
+            </button>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>
+              {currentIndex + 1} <span style={{ color: '#94a3b8', fontWeight: 400 }}>/ {total}</span>
+            </span>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>{answered} respondidas</span>
+          </div>
+          {/* Barra de progresso */}
+          <div style={{ height: '5px', background: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg, #c0392b 0%, #e74c3c 100%)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+          </div>
         </div>
       </div>
 
@@ -305,11 +326,13 @@ export default function OperadorProvaPage() {
             onClick={handleNext}
             disabled={!selectedAlt}
             style={{
-              flex: 2, background: selectedAlt ? '#1e293b' : '#f1f5f9',
+              flex: 2,
+              background: selectedAlt ? 'linear-gradient(135deg, #c0392b 0%, #922b21 100%)' : '#f1f5f9',
               border: 'none', borderRadius: '12px', padding: '14px',
               fontSize: '14px', fontWeight: 700, color: selectedAlt ? '#fff' : '#94a3b8',
               cursor: selectedAlt ? 'pointer' : 'not-allowed',
               transition: 'all 0.15s ease',
+              boxShadow: selectedAlt ? '0 4px 12px rgba(192,57,43,0.28)' : 'none',
             }}
           >
             Próxima →

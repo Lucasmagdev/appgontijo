@@ -12,21 +12,23 @@ type Props = {
 type TeamMember = {
   userId: number | null
   nome: string
+  nota: string
 }
 
 function normalizeTeamRows(value: unknown) {
   if (!Array.isArray(value)) return []
   return value
     .map((item) => {
-      if (typeof item === 'string') return { userId: null, nome: item.trim() }
+      if (typeof item === 'string') return { userId: null, nome: item.trim(), nota: '' }
       if (item && typeof item === 'object') {
         const row = item as Record<string, unknown>
         return {
           userId: Number(row.userId ?? row.user_id ?? row.usuario_id ?? row.id) || null,
           nome: String(row.nome || row.nome_membro || row.item || row.name || '').trim(),
+          nota: String(row.nota ?? ''),
         }
       }
-      return { userId: null, nome: '' }
+      return { userId: null, nome: '', nota: '' }
     })
     .filter((item) => item.nome)
 }
@@ -89,8 +91,16 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
     if (!cleaned) return
     if (members.length >= 7) return
     if (members.some((item) => item.nome.toLowerCase() === cleaned.toLowerCase())) return
-    setMembers((prev) => [...prev, { userId: member.userId, nome: cleaned }])
+    setMembers((prev) => [...prev, { userId: member.userId, nome: cleaned, nota: member.nota }])
     setSearch('')
+    setSubmitError('')
+  }
+
+  function updateMemberScore(index: number, value: string) {
+    const sanitized = value.replace(/[^\d]/g, '').slice(0, 2)
+    setMembers((prev) =>
+      prev.map((item, current) => (current === index ? { ...item, nota: sanitized } : item))
+    )
     setSubmitError('')
   }
 
@@ -101,6 +111,13 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!diarioQuery.data) return
+      const invalidMember = members.find((item) => {
+        const nota = Number(item.nota)
+        return !Number.isInteger(nota) || nota < 1 || nota > 10
+      })
+      if (invalidMember) {
+        throw new Error(`Informe uma nota de 1 a 10 para ${invalidMember.nome}.`)
+      }
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
       await diarioService.update(diarioQuery.data.id, {
         dataDiario: diarioQuery.data.dataDiario,
@@ -114,6 +131,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
             userId: item.userId,
             nome: item.nome,
             item: item.nome,
+            nota: Number(item.nota),
           })),
         },
       })
@@ -223,6 +241,24 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
             </span>
           </div>
 
+          <div
+            style={{
+              borderRadius: '18px',
+              border: '1px solid #fecaca',
+              background: '#fff5f5',
+              padding: '14px 16px',
+              display: 'grid',
+              gap: '4px',
+            }}
+          >
+            <div style={{ fontSize: '12px', fontWeight: 900, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Avaliacao obrigatoria
+            </div>
+            <div style={{ fontSize: '14px', lineHeight: '1.5', color: '#7f1d1d', fontWeight: 600 }}>
+              O colaborador so entra no diario se a nota do dia for lancada. Informe uma nota de 1 a 10 para cada membro da equipe antes de salvar.
+            </div>
+          </div>
+
           <div style={{ position: 'relative', display: 'grid', gap: '10px' }}>
             <div
               style={{
@@ -243,7 +279,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && canAddFreeText) {
                     event.preventDefault()
-                    addMember({ userId: null, nome: deferredSearch })
+                    addMember({ userId: null, nome: deferredSearch, nota: '' })
                   }
                 }}
                 placeholder={members.length >= 7 ? 'Limite de 7 membros atingido' : 'Digite o nome do membro'}
@@ -273,7 +309,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
                 {availableSuggestions.map((item) => (
                   <button
                     key={`${item.id}-${item.nome}`}
-                    onClick={() => addMember({ userId: item.id, nome: item.nome })}
+                    onClick={() => addMember({ userId: item.id, nome: item.nome, nota: '' })}
                     style={{
                       width: '100%',
                       border: 'none',
@@ -301,7 +337,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
 
                 {canAddFreeText ? (
                   <button
-                    onClick={() => addMember({ userId: null, nome: deferredSearch })}
+                    onClick={() => addMember({ userId: null, nome: deferredSearch, nota: '' })}
                     style={{
                       width: '100%',
                       border: 'none',
@@ -365,6 +401,32 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#b45309' }}>Nome digitado manualmente</div>
                   )}
                 </div>
+                <div style={{ display: 'grid', gap: '4px', minWidth: '90px' }}>
+                  <label style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Nota 1-10
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    step={1}
+                    inputMode="numeric"
+                    value={member.nota}
+                    onChange={(event) => updateMemberScore(index, event.target.value)}
+                    placeholder="1 a 10"
+                    style={{
+                      width: '90px',
+                      minHeight: '42px',
+                      borderRadius: '12px',
+                      border: '1px solid #d8dee7',
+                      background: '#fffaf9',
+                      padding: '0 12px',
+                      fontSize: '15px',
+                      fontWeight: 800,
+                      color: '#111827',
+                    }}
+                  />
+                </div>
                 <button
                   onClick={() => removeMember(index)}
                   style={{
@@ -403,17 +465,44 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
 
           <button
             onClick={() => void mutation.mutateAsync()}
-            disabled={mutation.isPending}
+            disabled={
+              mutation.isPending ||
+              members.some((item) => {
+                const nota = Number(item.nota)
+                return !Number.isInteger(nota) || nota < 1 || nota > 10
+              })
+            }
             style={{
               border: 'none',
               borderRadius: '18px',
-              background: mutation.isPending ? '#cbd5e1' : '#16a34a',
+              background:
+                mutation.isPending ||
+                members.some((item) => {
+                  const nota = Number(item.nota)
+                  return !Number.isInteger(nota) || nota < 1 || nota > 10
+                })
+                  ? '#cbd5e1'
+                  : '#16a34a',
               color: '#fff',
               minHeight: '56px',
               fontSize: '17px',
               fontWeight: 800,
-              cursor: mutation.isPending ? 'not-allowed' : 'pointer',
-              boxShadow: mutation.isPending ? 'none' : '0 14px 28px rgba(22,163,74,0.22)',
+              cursor:
+                mutation.isPending ||
+                members.some((item) => {
+                  const nota = Number(item.nota)
+                  return !Number.isInteger(nota) || nota < 1 || nota > 10
+                })
+                  ? 'not-allowed'
+                  : 'pointer',
+              boxShadow:
+                mutation.isPending ||
+                members.some((item) => {
+                  const nota = Number(item.nota)
+                  return !Number.isInteger(nota) || nota < 1 || nota > 10
+                })
+                  ? 'none'
+                  : '0 14px 28px rgba(22,163,74,0.22)',
             }}
           >
             {mutation.isPending ? 'Salvando...' : 'Salvar equipe'}
