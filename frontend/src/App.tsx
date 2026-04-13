@@ -1,48 +1,55 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 import AppLayout from '@/components/layout/AppLayout'
-import LoginPage from '@/pages/Login'
-import OperadorLoginPage from '@/pages/operador/OperadorLogin'
-import OperadorHomePage from '@/pages/operador/OperadorHome'
-import OperadorSplashPage from '@/pages/operador/OperadorSplash'
-import OperadorConfiguracoesPage from '@/pages/operador/OperadorConfiguracoes'
-import AssinaturaClientePage from '@/pages/public/AssinaturaClientePage'
-import ClientePortalLoginPage from '@/pages/public/ClientePortalLoginPage'
-import ClientePortalDashboardPage from '@/pages/public/ClientePortalDashboardPage'
-import DiarioMenu from '@/pages/operador/diarios/DiarioMenu'
-import DiarioPesquisar from '@/pages/operador/diarios/DiarioPesquisar'
-import DiarioNovoObra from '@/pages/operador/diarios/DiarioNovoObra'
-import DiarioPainel from '@/pages/operador/diarios/DiarioPainel'
-import DiarioModuloPage from '@/pages/operador/diarios/DiarioModuloPage'
-import HomePage from '@/pages/Home'
-import UsuariosPage from '@/pages/usuarios/Usuarios'
-import UsuarioFormPage from '@/pages/usuarios/UsuarioForm'
-import ClientesPage from '@/pages/clientes/Clientes'
-import ClienteFormPage from '@/pages/clientes/ClienteForm'
-import ObrasPage from '@/pages/obras/Obras'
-import ObraFormPage from '@/pages/obras/ObraForm'
-import EquipamentosPage from '@/pages/equipamentos/Equipamentos'
-import DiariosPage from '@/pages/diarios/Diarios'
-import DiarioFormPage from '@/pages/diarios/DiarioForm'
-import DiarioConferenciaPage from '@/pages/diarios/DiarioConferenciaPage'
-import ProducaoPage from '@/pages/producao/Producao'
-import PortalClientesPage from '@/pages/clientes-portal/PortalClientesPage'
-import CursosPage from '@/pages/cursos/Cursos'
-import CursoFormPage from '@/pages/cursos/CursoForm'
-import CursoProvaPage from '@/pages/cursos/CursoProva'
-import CursoAtribuicoesPage from '@/pages/cursos/CursoAtribuicoes'
-import CursosResultadosPage from '@/pages/cursos/CursosResultados'
-import CursosPontosPage from '@/pages/cursos/CursosPontos'
-import PontoVerificacaoPage from '@/pages/ponto/PontoVerificacaoPage'
-import AjudantesAvaliacaoPage from '@/pages/ponto/AjudantesAvaliacaoPage'
-import OperadorCursosPage from '@/pages/operador/cursos/OperadorCursos'
-import OperadorCursoDetalhePage from '@/pages/operador/cursos/OperadorCursoDetalhe'
-import OperadorProvaPage from '@/pages/operador/cursos/OperadorProva'
-import FatoObservadoPage from '@/pages/operador/FatoObservadoPage'
-import IndiqueUmaObraPage from '@/pages/operador/IndiqueUmaObraPage'
+
+// Admin pages — carregadas sob demanda
+const LoginPage = lazy(() => import('@/pages/Login'))
+const HomePage = lazy(() => import('@/pages/Home'))
+const UsuariosPage = lazy(() => import('@/pages/usuarios/Usuarios'))
+const UsuarioFormPage = lazy(() => import('@/pages/usuarios/UsuarioForm'))
+const ClientesPage = lazy(() => import('@/pages/clientes/Clientes'))
+const ClienteFormPage = lazy(() => import('@/pages/clientes/ClienteForm'))
+const ObrasPage = lazy(() => import('@/pages/obras/Obras'))
+const ObraFormPage = lazy(() => import('@/pages/obras/ObraForm'))
+const EquipamentosPage = lazy(() => import('@/pages/equipamentos/Equipamentos'))
+const DiariosPage = lazy(() => import('@/pages/diarios/Diarios'))
+const DiarioFormPage = lazy(() => import('@/pages/diarios/DiarioForm'))
+const DiarioConferenciaPage = lazy(() => import('@/pages/diarios/DiarioConferenciaPage'))
+const ProducaoPage = lazy(() => import('@/pages/producao/Producao'))
+const PortalClientesPage = lazy(() => import('@/pages/clientes-portal/PortalClientesPage'))
+const CursosPage = lazy(() => import('@/pages/cursos/Cursos'))
+const CursoFormPage = lazy(() => import('@/pages/cursos/CursoForm'))
+const CursoProvaPage = lazy(() => import('@/pages/cursos/CursoProva'))
+const CursoAtribuicoesPage = lazy(() => import('@/pages/cursos/CursoAtribuicoes'))
+const CursosResultadosPage = lazy(() => import('@/pages/cursos/CursosResultados'))
+const CursosPontosPage = lazy(() => import('@/pages/cursos/CursosPontos'))
+const PontoVerificacaoPage = lazy(() => import('@/pages/ponto/PontoVerificacaoPage'))
+const AjudantesAvaliacaoPage = lazy(() => import('@/pages/ponto/AjudantesAvaliacaoPage'))
+const WhatsAppLogsPage = lazy(() => import('@/pages/whatsapp/WhatsAppLogsPage'))
+
+// Operador PWA — chunk separado
+const OperadorLoginPage = lazy(() => import('@/pages/operador/OperadorLogin'))
+const OperadorHomePage = lazy(() => import('@/pages/operador/OperadorHome'))
+const OperadorSplashPage = lazy(() => import('@/pages/operador/OperadorSplash'))
+const OperadorConfiguracoesPage = lazy(() => import('@/pages/operador/OperadorConfiguracoes'))
+const DiarioMenu = lazy(() => import('@/pages/operador/diarios/DiarioMenu'))
+const DiarioPesquisar = lazy(() => import('@/pages/operador/diarios/DiarioPesquisar'))
+const DiarioNovoObra = lazy(() => import('@/pages/operador/diarios/DiarioNovoObra'))
+const DiarioPainel = lazy(() => import('@/pages/operador/diarios/DiarioPainel'))
+const DiarioModuloPage = lazy(() => import('@/pages/operador/diarios/DiarioModuloPage'))
+const OperadorCursosPage = lazy(() => import('@/pages/operador/cursos/OperadorCursos'))
+const OperadorCursoDetalhePage = lazy(() => import('@/pages/operador/cursos/OperadorCursoDetalhe'))
+const OperadorProvaPage = lazy(() => import('@/pages/operador/cursos/OperadorProva'))
+const FatoObservadoPage = lazy(() => import('@/pages/operador/FatoObservadoPage'))
+const IndiqueUmaObraPage = lazy(() => import('@/pages/operador/IndiqueUmaObraPage'))
+
+// Portal público
+const AssinaturaClientePage = lazy(() => import('@/pages/public/AssinaturaClientePage'))
+const ClientePortalLoginPage = lazy(() => import('@/pages/public/ClientePortalLoginPage'))
+const ClientePortalDashboardPage = lazy(() => import('@/pages/public/ClientePortalDashboardPage'))
 
 function AppBootstrap() {
   const initAdmin = useAuth((state) => state.initialize)
@@ -86,7 +93,11 @@ function AppLoading() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-4">
       <div className="app-panel w-full max-w-md px-6 py-10 text-center">
-        <div className="app-title text-3xl tracking-[0.16em] text-slate-800">GONTIJO</div>
+        <img
+          src="/gontijo-logo-diarios.png"
+          alt="Gontijo Fundações"
+          className="mx-auto h-16 w-auto object-contain"
+        />
         <p className="mt-3 text-sm text-slate-500">Validando sessao administrativa...</p>
       </div>
     </div>
@@ -114,6 +125,7 @@ export default function App() {
     <BrowserRouter>
       <AppBootstrap />
 
+      <Suspense fallback={<AppLoading />}>
       <Routes>
         <Route path="/login" element={<LoginRoute />} />
         <Route
@@ -137,6 +149,7 @@ export default function App() {
           <Route path="equipamentos" element={<EquipamentosPage />} />
           <Route path="producao" element={<ProducaoPage />} />
           <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
+          <Route path="whatsapp" element={<WhatsAppLogsPage />} />
           <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
           <Route path="diarios" element={<DiariosPage />} />
           <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />
@@ -177,6 +190,7 @@ export default function App() {
         <Route path="/operador/cursos/:id/prova" element={<OperadorPrivateRoute><OperadorProvaPage /></OperadorPrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

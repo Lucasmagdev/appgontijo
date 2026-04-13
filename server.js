@@ -7,6 +7,7 @@ const dotenv = require("dotenv");
 const PDFDocument = require("pdfkit");
 const multer = require("multer");
 const XLSX = require("xlsx");
+const compression = require("compression");
 
 dotenv.config();
 
@@ -23,6 +24,15 @@ const {
   buildSecondaryDashboard,
 } = require("./lib/dashboard-service");
 const {
+  getWhatsAppConfig,
+  normalizeBrazilPhone,
+  isWhatsAppConfigured,
+  isWhatsAppEnabled,
+  getConnectionStatus,
+  getQrCodeImage,
+  sendText: sendWhatsAppText,
+} = require("./lib/whatsapp-service");
+const {
   S3Client,
   ListObjectsV2Command,
   HeadBucketCommand,
@@ -32,7 +42,8 @@ const {
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-app.use(express.json());
+app.use(compression());
+
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 let goalTargetSanitizePromise = null;
 
@@ -503,6 +514,464 @@ async function fetchLocalUsersForPointCheck(filters = {}) {
   }));
 }
 
+async function fetchWhatsAppSchemaStatus() {
+  const [logsTable, responsibleColumn, equipmentOperatorColumn] = await Promise.all([
+    tableExists("whatsapp_notification_logs"),
+    columnExists("constructions", "responsible_operator_user_id"),
+    columnExists("equipments", "operator_user_id"),
+  ]);
+
+  return {
+    logsTable,
+    responsibleColumn,
+    equipmentOperatorColumn,
+  };
+}
+
+async function insertWhatsAppLog(entry) {
+  const [result] = await db.query(
+    `INSERT INTO whatsapp_notification_logs
+     (event_type, status, user_id, phone, construction_id, course_id, assignment_id, reference_date,
+      dedupe_key, target_name, message_text, provider_message_id, provider_payload_json, metadata_json, error_text)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      entry.eventType,
+      entry.status || "queued",
+      entry.userId || null,
+      textOrNull(entry.phone),
+      entry.constructionId || null,
+      entry.courseId || null,
+      entry.assignmentId || null,
+      normalizeDateOnly(entry.referenceDate),
+      textOrNull(entry.dedupeKey),
+      textOrNull(entry.targetName),
+      textOrNull(entry.messageText),
+      textOrNull(entry.providerMessageId),
+      stringifyJsonSafe(entry.providerPayload),
+      stringifyJsonSafe(entry.metadata),
+      textOrNull(entry.errorText),
+    ]
+  );
+  return Number(result.insertId);
+}
+
+async function updateWhatsAppLog(logId, patch) {
+  await db.query(
+    `UPDATE whatsapp_notification_logs
+     SET status = ?,
+         phone = ?,
+         provider_message_id = ?,
+         provider_payload_json = ?,
+         metadata_json = ?,
+         error_text = ?,
+         updated_at = NOW()
+     WHERE id = ?`,
+    [
+      patch.status || "failed",
+      textOrNull(patch.phone),
+      textOrNull(patch.providerMessageId),
+      stringifyJsonSafe(patch.providerPayload),
+      stringifyJsonSafe(patch.metadata),
+      textOrNull(patch.errorText),
+      logId,
+    ]
+  );
+}
+
+async function findRecentWhatsAppLogByDedupeKey(dedupeKey) {
+  if (!dedupeKey) return null;
+  const [rows] = await db.query(
+    `SELECT id, status, created_at
+     FROM whatsapp_notification_logs
+     WHERE dedupe_key = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [dedupeKey]
+  );
+  return rows[0] || null;
+}
+
+function shouldSkipDedupeLog(logRow) {
+  if (!logRow) return false;
+  const status = String(logRow.status || "");
+  if (status === "queued" || status === "sent") return true;
+  const createdAt = new Date(logRow.created_at || 0).getTime();
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt < 12 * 60 * 60 * 1000;
+}
+
+async function sendLoggedWhatsAppMessage(payload) {
+  const schema = await fetchWhatsAppSchemaStatus();
+  if (!schema.logsTable) {
+    throw new Error("A tabela whatsapp_notification_logs ainda não existe no banco.");
+  }
+
+  if (payload.dedupeKey) {
+    const existingLog = await findRecentWhatsAppLogByDedupeKey(payload.dedupeKey);
+    if (shouldSkipDedupeLog(existingLog)) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "duplicate",
+        logId: Number(existingLog.id),
+      };
+    }
+  }
+
+  const normalizedPhone = normalizeBrazilPhone(payload.phone);
+  const logId = await insertWhatsAppLog({
+    eventType: payload.eventType,
+    status: "queued",
+    userId: payload.userId,
+    phone: normalizedPhone || payload.phone,
+    constructionId: payload.constructionId,
+    courseId: payload.courseId,
+    assignmentId: payload.assignmentId,
+    referenceDate: payload.referenceDate,
+    dedupeKey: payload.dedupeKey,
+    targetName: payload.targetName,
+    messageText: payload.messageText,
+    metadata: payload.metadata,
+  });
+
+  if (payload.skipDispatchReason) {
+    await updateWhatsAppLog(logId, {
+      status: "skipped",
+      phone: payload.phone,
+      metadata: {
+        ...(payload.metadata || {}),
+        skippedReason: payload.skipDispatchReason,
+      },
+      errorText: payload.skipDispatchMessage || "Envio ignorado.",
+    });
+    return { ok: true, skipped: true, reason: payload.skipDispatchReason, logId };
+  }
+
+  if (!normalizedPhone) {
+    await updateWhatsAppLog(logId, {
+      status: "skipped",
+      phone: payload.phone,
+      metadata: {
+        ...(payload.metadata || {}),
+        skippedReason: "invalid_phone",
+      },
+      errorText: "Telefone inválido para envio no WhatsApp.",
+    });
+    return { ok: true, skipped: true, reason: "invalid_phone", logId };
+  }
+
+  if (!isWhatsAppEnabled()) {
+    await updateWhatsAppLog(logId, {
+      status: "skipped",
+      phone: normalizedPhone,
+      metadata: {
+        ...(payload.metadata || {}),
+        skippedReason: "whatsapp_disabled",
+      },
+      errorText: "Integração WhatsApp/Z-API desativada ou não configurada.",
+    });
+    return { ok: true, skipped: true, reason: "whatsapp_disabled", logId };
+  }
+
+  try {
+    const result = await sendWhatsAppText(normalizedPhone, payload.messageText, {
+      eventType: payload.eventType,
+      userId: payload.userId,
+      constructionId: payload.constructionId,
+      courseId: payload.courseId,
+      assignmentId: payload.assignmentId,
+    });
+    await updateWhatsAppLog(logId, {
+      status: "sent",
+      phone: result.phone,
+      providerMessageId: result.providerMessageId,
+      providerPayload: result.payload,
+      metadata: payload.metadata,
+      errorText: null,
+    });
+    return {
+      ok: true,
+      skipped: false,
+      logId,
+      providerMessageId: result.providerMessageId,
+    };
+  } catch (error) {
+    await updateWhatsAppLog(logId, {
+      status: "failed",
+      phone: normalizedPhone,
+      providerPayload: error?.payload || null,
+      metadata: payload.metadata,
+      errorText: error?.message || "Falha ao enviar via Z-API.",
+    });
+    return {
+      ok: false,
+      skipped: false,
+      logId,
+      error: error?.message || "Falha ao enviar via Z-API.",
+    };
+  }
+}
+
+async function fetchDiaryReminderCandidates() {
+  const schema = await fetchWhatsAppSchemaStatus();
+  if (!schema.equipmentOperatorColumn) {
+    return { items: [], reason: "missing_equipment_operator_column" };
+  }
+
+  const now = new Date();
+  const saoPauloNow = new Date(new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(now));
+  const currentDate = getCurrentDateString("America/Sao_Paulo");
+  const currentHour = Number(new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now));
+  const latestOverdueDate = currentHour >= 8 ? shiftDateWithTz(currentDate, -1) : shiftDateWithTz(currentDate, -2);
+
+  const [activeConstructions] = await db.query(
+    `SELECT c.id,
+            c.construction_number,
+            c.start_date,
+            c.equipments
+     FROM constructions c
+     WHERE c.status = '1'`
+  );
+
+  if (!activeConstructions.length) return { items: [], reason: "" };
+
+  const equipmentIds = [
+    ...new Set(
+      activeConstructions
+        .flatMap((construction) => parseJsonSafe(construction.equipments, []))
+        .map((item) => Number(typeof item === "object" && item ? item.id || item.equipment_id : item))
+        .filter(Boolean)
+    ),
+  ];
+
+  if (!equipmentIds.length) return { items: [], reason: "" };
+
+  const [equipmentRows] = await db.query(
+    `SELECT e.id AS equipment_id,
+            e.name AS equipment_name,
+            e.operator_user_id,
+            u.name AS operator_name,
+            u.phone AS operator_phone
+     FROM equipments e
+     LEFT JOIN users u ON u.id = e.operator_user_id
+     WHERE e.active = 'Y'
+       AND e.id IN (?)`,
+    [equipmentIds]
+  );
+
+  const equipmentById = new Map(equipmentRows.map((row) => [Number(row.equipment_id || 0), row]));
+  const activeEquipmentRows = [];
+  for (const construction of activeConstructions) {
+    const ids = parseJsonSafe(construction.equipments, [])
+      .map((item) => Number(typeof item === "object" && item ? item.id || item.equipment_id : item))
+      .filter(Boolean);
+    for (const equipmentId of ids) {
+      const equipment = equipmentById.get(equipmentId);
+      if (!equipment) continue;
+      activeEquipmentRows.push({
+        ...construction,
+        ...equipment,
+      });
+    }
+  }
+
+  if (!activeEquipmentRows.length) return { items: [], reason: "" };
+
+  const constructionIds = [...new Set(activeEquipmentRows.map((item) => Number(item.id)).filter(Boolean))];
+  const [diaryRows] = await db.query(
+    `SELECT DISTINCT
+        CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) AS construction_id,
+        CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED) AS equipment_id,
+        COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS diary_date
+     FROM diaries d
+     WHERE CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) IN (?)
+       AND COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) <= ?`,
+    [constructionIds, latestOverdueDate]
+  );
+
+  const diariesByConstructionEquipment = new Map();
+  for (const row of diaryRows) {
+    const constructionId = Number(row.construction_id || 0);
+    const equipmentId = Number(row.equipment_id || 0);
+    const diaryDate = normalizeDateOnly(row.diary_date);
+    if (!constructionId || !equipmentId || !diaryDate) continue;
+    const mapKey = `${constructionId}:${equipmentId}`;
+    const current = diariesByConstructionEquipment.get(mapKey) || new Set();
+    current.add(diaryDate);
+    diariesByConstructionEquipment.set(mapKey, current);
+  }
+
+  const [logRows] = await db.query(
+    `SELECT id, construction_id, reference_date, status, created_at, metadata_json
+     FROM whatsapp_notification_logs
+     WHERE event_type = 'diary_overdue_reminder'
+       AND construction_id IN (?)`,
+    [constructionIds]
+  );
+
+  const logsByKey = new Map();
+  for (const row of logRows) {
+    const metadata = parseJsonSafe(row.metadata_json, {});
+    const equipmentId = Number(metadata.equipmentId || 0);
+    const key = `diary_overdue_reminder:${Number(row.construction_id || 0)}:${equipmentId}:${normalizeDateOnly(row.reference_date)}`;
+    const current = logsByKey.get(key);
+    if (!current || Number(current.id || 0) < Number(row.id || 0)) {
+      logsByKey.set(key, row);
+    }
+  }
+
+  const items = [];
+  for (const construction of activeEquipmentRows) {
+    const constructionId = Number(construction.id || 0);
+    const equipmentId = Number(construction.equipment_id || 0);
+    const startDate = normalizeDateOnly(construction.start_date) || latestOverdueDate;
+    const diaryDates = diariesByConstructionEquipment.get(`${constructionId}:${equipmentId}`) || new Set();
+    const expectedDates = daysBetweenInclusive(startDate, latestOverdueDate);
+    const missingDates = expectedDates.filter((dateText) => {
+      if (diaryDates.has(dateText)) return false;
+      const existingLog = logsByKey.get(`diary_overdue_reminder:${constructionId}:${equipmentId}:${dateText}`);
+      return !shouldSkipDedupeLog(existingLog);
+    });
+
+    if (!missingDates.length) continue;
+    const referenceDate = missingDates[0];
+    items.push({
+      key: `${constructionId}:${equipmentId}:${referenceDate}`,
+      constructionId,
+      constructionNumber: String(construction.construction_number || ""),
+      equipmentId,
+      equipmentName: String(construction.equipment_name || ""),
+      referenceDate,
+      dueAt: `${shiftDateWithTz(referenceDate, 1)} 08:00`,
+      responsibleOperatorUserId: construction.operator_user_id == null ? null : Number(construction.operator_user_id),
+      operatorName: String(construction.operator_name || ""),
+      operatorPhone: String(construction.operator_phone || ""),
+      canSend: Boolean(construction.operator_user_id && normalizeBrazilPhone(construction.operator_phone)),
+      reason: !construction.operator_user_id
+        ? "missing_equipment_operator"
+        : !normalizeBrazilPhone(construction.operator_phone)
+          ? "missing_phone"
+          : "",
+    });
+  }
+
+  return { items, reason: "", generatedAt: saoPauloNow.toISOString() };
+}
+
+async function runDiaryOverdueReminderSweep() {
+  if (whatsappSchedulerState.running) return;
+  whatsappSchedulerState.running = true;
+
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.logsTable || !schema.equipmentOperatorColumn || !isWhatsAppConfigured()) {
+      whatsappSchedulerState.lastRunAt = new Date().toISOString();
+      whatsappSchedulerState.lastError = !schema.logsTable
+        ? "Tabela whatsapp_notification_logs ausente."
+        : !schema.equipmentOperatorColumn
+          ? "Coluna equipments.operator_user_id ausente."
+          : "Z-API não configurada.";
+      return;
+    }
+
+    const { items } = await fetchDiaryReminderCandidates();
+    for (const item of items) {
+      const messageText = renderDiaryReminderMessage("", item);
+
+      if (!item.responsibleOperatorUserId) {
+        await sendLoggedWhatsAppMessage({
+          eventType: "diary_overdue_reminder",
+          userId: null,
+          phone: "",
+          constructionId: item.constructionId,
+          referenceDate: item.referenceDate,
+          dedupeKey: `diary_overdue:${item.constructionId}:${item.equipmentId || 0}:${item.referenceDate}:0`,
+          targetName: item.operatorName,
+          messageText,
+          metadata: {
+            obraNumero: item.constructionNumber,
+            equipmentId: item.equipmentId,
+            equipmentName: item.equipmentName,
+            source: "scheduler",
+          },
+          skipDispatchReason: "missing_responsible_operator",
+          skipDispatchMessage: "A obra ativa não possui operador responsável definido.",
+        });
+        continue;
+      }
+
+      if (!normalizeBrazilPhone(item.operatorPhone)) {
+        await sendLoggedWhatsAppMessage({
+          eventType: "diary_overdue_reminder",
+          userId: item.responsibleOperatorUserId,
+          phone: item.operatorPhone,
+          constructionId: item.constructionId,
+          referenceDate: item.referenceDate,
+          dedupeKey: `diary_overdue:${item.constructionId}:${item.equipmentId || 0}:${item.referenceDate}:${item.responsibleOperatorUserId}`,
+          targetName: item.operatorName,
+          messageText,
+          metadata: {
+            obraNumero: item.constructionNumber,
+            equipmentId: item.equipmentId,
+            equipmentName: item.equipmentName,
+            source: "scheduler",
+          },
+          skipDispatchReason: "missing_phone",
+          skipDispatchMessage: "O operador responsável da obra não possui telefone válido.",
+        });
+        continue;
+      }
+
+      await sendLoggedWhatsAppMessage({
+        eventType: "diary_overdue_reminder",
+        userId: item.responsibleOperatorUserId,
+        phone: item.operatorPhone,
+        constructionId: item.constructionId,
+        referenceDate: item.referenceDate,
+        dedupeKey: `diary_overdue:${item.constructionId}:${item.equipmentId || 0}:${item.referenceDate}:${item.responsibleOperatorUserId || 0}`,
+        targetName: item.operatorName,
+        messageText,
+        metadata: {
+          obraNumero: item.constructionNumber,
+          equipmentId: item.equipmentId,
+          equipmentName: item.equipmentName,
+          source: "scheduler",
+        },
+      });
+    }
+
+    whatsappSchedulerState.lastRunAt = new Date().toISOString();
+    whatsappSchedulerState.lastError = "";
+  } catch (error) {
+    whatsappSchedulerState.lastRunAt = new Date().toISOString();
+    whatsappSchedulerState.lastError = error?.message || "Falha no scheduler de WhatsApp.";
+  } finally {
+    whatsappSchedulerState.running = false;
+  }
+}
+
+function bootstrapWhatsAppScheduler() {
+  const enabled = String(process.env.WHATSAPP_SCHEDULER_ENABLED || "true").trim().toLowerCase() === "true";
+  if (!enabled) return;
+
+  const intervalMinutes = Math.max(5, Number(process.env.WHATSAPP_SCHEDULER_INTERVAL_MINUTES || 30) || 30);
+  setTimeout(() => {
+    void runDiaryOverdueReminderSweep();
+  }, 20 * 1000);
+  setInterval(() => {
+    void runDiaryOverdueReminderSweep();
+  }, intervalMinutes * 60 * 1000);
+}
+
 function buildS3Client() {
   return new S3Client({
     region: process.env.AWS_REGION || "sa-east-1",
@@ -642,6 +1111,111 @@ function getWeekStartFromDate(dateText) {
   date.setUTCDate(date.getUTCDate() - day + 1);
   return formatUtcDate(date);
 }
+
+function formatDateBr(dateText) {
+  const normalized = normalizeDateOnly(dateText);
+  if (!normalized) return "-";
+  const [year, month, day] = normalized.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function shiftDateWithTz(dateText, days) {
+  return shiftDate(normalizeDateOnly(dateText) || getCurrentDateString(), days);
+}
+
+function daysBetweenInclusive(startDateText, endDateText) {
+  const start = parseDateString(startDateText);
+  const end = parseDateString(endDateText);
+  const items = [];
+  while (start <= end) {
+    items.push(formatUtcDate(start));
+    start.setUTCDate(start.getUTCDate() + 1);
+  }
+  return items;
+}
+
+async function tableExists(tableName, conn = db) {
+  const [[row]] = await conn.query(
+    `SELECT COUNT(*) AS total
+     FROM information_schema.tables
+     WHERE table_schema = DATABASE()
+       AND table_name = ?`,
+    [tableName]
+  );
+  return Number(row?.total || 0) > 0;
+}
+
+async function columnExists(tableName, columnName, conn = db) {
+  const [[row]] = await conn.query(
+    `SELECT COUNT(*) AS total
+     FROM information_schema.columns
+     WHERE table_schema = DATABASE()
+       AND table_name = ?
+       AND column_name = ?`,
+    [tableName, columnName]
+  );
+  return Number(row?.total || 0) > 0;
+}
+
+function parseJsonSafe(value, fallback = null) {
+  if (value == null || value === "") return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function stringifyJsonSafe(value) {
+  try {
+    return JSON.stringify(value ?? null);
+  } catch {
+    return JSON.stringify(null);
+  }
+}
+
+function textOrNull(value) {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function eventTypeLabel(eventType) {
+  if (eventType === "diary_overdue_reminder") return "Diário atrasado";
+  if (eventType === "point_missing_reminder") return "Ponto pendente";
+  if (eventType === "course_available_notice") return "Curso disponível";
+  return eventType || "-";
+}
+
+function buildDiaryReminderMessage({ operatorName, obraNumero, referenceDate }) {
+  return `Olá, ${operatorName || "colaborador"}! O diário da obra ${obraNumero || "-"} referente ao dia ${formatDateBr(referenceDate)} está atrasado. Por favor, acesse o app da Gontijo e envie o diário o quanto antes.`;
+}
+
+function renderDiaryReminderMessage(template, item) {
+  const equipmentText = item.equipmentName ? ` / equipamento ${item.equipmentName}` : "";
+  const base = textOrNull(template) || `Ola, ${item.operatorName || "colaborador"}! O diario da obra ${item.constructionNumber || "-"}${equipmentText} referente ao dia ${formatDateBr(item.referenceDate)} esta atrasado. Por favor, acesse o app da Gontijo e envie o diario o quanto antes.`;
+
+  return base
+    .replace(/\{operador\}/gi, item.operatorName || "colaborador")
+    .replace(/\{obra\}/gi, item.constructionNumber || "-")
+    .replace(/\{equipamento\}/gi, item.equipmentName || "-")
+    .replace(/\{data\}/gi, formatDateBr(item.referenceDate))
+    .replace(/\{prazo\}/gi, item.dueAt || "-");
+}
+
+function buildPointReminderMessage({ userName, referenceDate }) {
+  return `Olá, ${userName || "colaborador"}! Identificamos que seu ponto de ${formatDateBr(referenceDate)} ainda precisa ser atualizado no Tangerino. Por favor, regularize o ponto o quanto antes.`;
+}
+
+function buildCourseAvailableMessage({ userName, courseTitle }) {
+  return `Olá, ${userName || "colaborador"}! O curso "${courseTitle || "Treinamento"}" já está disponível na plataforma da Gontijo. Acesse o app, assista ao conteúdo e conclua a prova, se houver.`;
+}
+
+const whatsappSchedulerState = {
+  running: false,
+  lastRunAt: null,
+  lastError: "",
+};
 
 function normalizeLooseText(value) {
   return String(value || "")
@@ -1702,6 +2276,30 @@ function drawLine(doc, x1, y1, x2, y2, color = "#9f988c") {
   doc.restore();
 }
 
+function drawGontijoDiaryLogo(doc, x, y, options = {}) {
+  const logoPath = path.join(__dirname, "public", "gontijo-logo-diarios.png");
+  const width = options.width || 92;
+  const height = options.height || 32;
+
+  if (fs.existsSync(logoPath)) {
+    try {
+      doc.image(logoPath, x, y, { fit: [width, height], align: "left", valign: "center" });
+      return;
+    } catch {
+      // Mantem o PDF gerando mesmo se a imagem falhar.
+    }
+  }
+
+  drawText(doc, "GONTIJO", x, y + 1, width - 10, {
+    font: "Helvetica-Bold",
+    size: 14,
+  });
+  drawText(doc, "FUNDAÇÕES", x + 4, y + 21, width - 14, {
+    size: 7.5,
+    color: "#666666",
+  });
+}
+
 function buildDiaryPdf({ clientLogin, imei, date, items, prefix, machineName }) {
   const doc = new PDFDocument({ size: "A4", margin: 26 });
   const chunks = [];
@@ -1724,6 +2322,10 @@ function buildDiaryPdf({ clientLogin, imei, date, items, prefix, machineName }) 
     size: 7.5,
     color: "#666666",
   });
+  doc.save();
+  doc.fillColor(gray).rect(left + 5, top + 4, 94, 21).fill();
+  doc.restore();
+  drawGontijoDiaryLogo(doc, left + 6, top + 4, { width: 92, height: 20 });
 
   drawText(doc, "DIARIO DE OBRA", left + 120, top + 8, 250, {
     font: "Helvetica-Bold",
@@ -2011,7 +2613,10 @@ function formatDecimalNumber(value, digits = 2) {
   return Number(value).toFixed(digits).replace(".", ",");
 }
 
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"), {
+  maxAge: "1d",
+  etag: true,
+}));
 
 app.post("/api/admin/session", (req, res) => {
   const password = String(req.body?.password || "");
@@ -2175,6 +2780,7 @@ app.get("/api/admin/solides/daily-point-check", requireAdmin, async (req, res) =
         usuarioId: localUser.id,
         nome: localUser.nome,
         cpf: localUser.documento,
+        telefone: localUser.telefone,
         setor: localUser.setorNome || "-",
         setorId: localUser.setorId,
         ativo: localUser.ativo,
@@ -2219,6 +2825,466 @@ app.get("/api/admin/solides/daily-point-check", requireAdmin, async (req, res) =
     return res.status(500).json({
       ok: false,
       message: error.message || "Falha ao verificar pontos diarios na Solides.",
+    });
+  }
+});
+
+app.get("/api/admin/whatsapp/status", requireAdmin, async (_req, res) => {
+  try {
+    const config = getWhatsAppConfig();
+    const schema = await fetchWhatsAppSchemaStatus();
+    const schedulerEnabled = String(process.env.WHATSAPP_SCHEDULER_ENABLED || "true").trim().toLowerCase() === "true";
+    let instance = {
+      connected: null,
+      status: isWhatsAppConfigured(config) ? "unknown" : "not_configured",
+      endpoint: "",
+      error: "",
+    };
+
+    if (isWhatsAppConfigured(config)) {
+      try {
+        const connection = await getConnectionStatus();
+        instance = {
+          connected: connection.connected,
+          status: connection.status,
+          endpoint: connection.endpoint || "",
+          error: "",
+        };
+      } catch (error) {
+        instance = {
+          connected: null,
+          status: "unknown",
+          endpoint: "",
+          error: error?.message || "Falha ao consultar status da instancia.",
+        };
+      }
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        enabled: config.enabled,
+        configured: isWhatsAppConfigured(config),
+        baseUrl: config.baseUrl,
+        instanceId: config.instanceId,
+        clientTokenConfigured: Boolean(config.clientToken),
+        timeoutMs: config.timeoutMs,
+        logsTableReady: schema.logsTable,
+        responsibleColumnReady: schema.responsibleColumn,
+        equipmentOperatorColumnReady: schema.equipmentOperatorColumn,
+        schedulerEnabled,
+        schedulerIntervalMinutes: Math.max(5, Number(process.env.WHATSAPP_SCHEDULER_INTERVAL_MINUTES || 30) || 30),
+        schedulerRunning: whatsappSchedulerState.running,
+        schedulerLastRunAt: whatsappSchedulerState.lastRunAt,
+        schedulerLastError: whatsappSchedulerState.lastError,
+        instance,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao carregar status do WhatsApp.",
+    });
+  }
+});
+
+app.get("/api/admin/whatsapp/qr-code", requireAdmin, async (_req, res) => {
+  try {
+    const config = getWhatsAppConfig();
+    if (!isWhatsAppConfigured(config)) {
+      return res.status(400).json({ ok: false, message: "Z-API ainda nao configurada no .env." });
+    }
+
+    const qrCode = await getQrCodeImage();
+    return res.json({
+      ok: true,
+      data: {
+        image: qrCode.image,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      ok: false,
+      message: error.message || "Falha ao carregar QR Code da Z-API.",
+    });
+  }
+});
+
+app.get("/api/admin/whatsapp/logs", requireAdmin, async (req, res) => {
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.logsTable) {
+      return res.status(503).json({
+        ok: false,
+        message: "A tabela whatsapp_notification_logs ainda não existe no banco.",
+      });
+    }
+
+    const page = Math.max(1, Number(req.query.page || 1) || 1);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit || 20) || 20));
+    const offset = (page - 1) * limit;
+    const where = [];
+    const params = [];
+
+    if (req.query.event_type) {
+      where.push("l.event_type = ?");
+      params.push(String(req.query.event_type));
+    }
+    if (req.query.status) {
+      where.push("l.status = ?");
+      params.push(String(req.query.status));
+    }
+    if (req.query.date_from) {
+      where.push("DATE(l.created_at) >= ?");
+      params.push(normalizeDateOnly(req.query.date_from));
+    }
+    if (req.query.date_to) {
+      where.push("DATE(l.created_at) <= ?");
+      params.push(normalizeDateOnly(req.query.date_to));
+    }
+    if (req.query.obra) {
+      where.push("(c.construction_number LIKE ? OR l.target_name LIKE ?)");
+      params.push(`%${String(req.query.obra).trim()}%`, `%${String(req.query.obra).trim()}%`);
+    }
+    if (req.query.reference_date) {
+      where.push("l.reference_date = ?");
+      params.push(normalizeDateOnly(req.query.reference_date));
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM whatsapp_notification_logs l
+       LEFT JOIN constructions c ON c.id = l.construction_id
+       ${whereSql}`,
+      params
+    );
+
+    const [rows] = await db.query(
+      `SELECT l.*,
+              u.name AS user_name,
+              c.construction_number,
+              cu.titulo AS course_title
+       FROM whatsapp_notification_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       LEFT JOIN constructions c ON c.id = l.construction_id
+       LEFT JOIN cursos cu ON cu.id = l.course_id
+       ${whereSql}
+       ORDER BY l.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    return res.json({
+      ok: true,
+      data: rows.map((row) => ({
+        id: Number(row.id),
+        eventType: String(row.event_type || ""),
+        eventLabel: eventTypeLabel(String(row.event_type || "")),
+        status: String(row.status || ""),
+        userId: row.user_id == null ? null : Number(row.user_id),
+        userName: String(row.user_name || ""),
+        phone: String(row.phone || ""),
+        constructionId: row.construction_id == null ? null : Number(row.construction_id),
+        obraNumero: String(row.construction_number || ""),
+        courseId: row.course_id == null ? null : Number(row.course_id),
+        courseTitle: String(row.course_title || ""),
+        referenceDate: normalizeDateOnly(row.reference_date),
+        targetName: String(row.target_name || ""),
+        messageText: String(row.message_text || ""),
+        providerMessageId: String(row.provider_message_id || ""),
+        errorText: String(row.error_text || ""),
+        createdAt: row.created_at,
+        metadata: parseJsonSafe(row.metadata_json, {}),
+      })),
+      total: Number(total || 0),
+      page,
+      limit,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao carregar logs do WhatsApp.",
+    });
+  }
+});
+
+app.get("/api/admin/whatsapp/diary-overdue-preview", requireAdmin, async (_req, res) => {
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.equipmentOperatorColumn) {
+      return res.status(503).json({ ok: false, message: "A coluna equipments.operator_user_id ainda nao existe no banco. Aplique a migration sql/2026-04-13-add-equipment-operator.sql." });
+    }
+
+    const result = await fetchDiaryReminderCandidates();
+    return res.json({
+      ok: true,
+      data: {
+        ...result,
+        total: result.items.length,
+        sendable: result.items.filter((item) => item.canSend).length,
+        logsTableReady: schema.logsTable,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao montar preview de diarios atrasados.",
+    });
+  }
+});
+
+app.post("/api/admin/whatsapp/diary-overdue-reminders", requireAdmin, async (req, res) => {
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.logsTable) {
+      return res.status(503).json({ ok: false, message: "A tabela whatsapp_notification_logs ainda nao existe no banco." });
+    }
+    if (!schema.equipmentOperatorColumn) {
+      return res.status(503).json({ ok: false, message: "A coluna equipments.operator_user_id ainda nao existe no banco. Aplique a migration sql/2026-04-13-add-equipment-operator.sql." });
+    }
+
+    const keys = [...new Set((Array.isArray(req.body?.keys) ? req.body.keys : []).map((item) => String(item || "").trim()).filter(Boolean))];
+    const messageText = textOrNull(req.body?.message_text);
+    if (!keys.length) {
+      return res.status(400).json({ ok: false, message: "Selecione ao menos um diario atrasado para enviar." });
+    }
+
+    const preview = await fetchDiaryReminderCandidates();
+    const itemsByKey = new Map(preview.items.map((item) => [item.key, item]));
+    const results = [];
+
+    for (const key of keys) {
+      const item = itemsByKey.get(key);
+      if (!item) {
+        results.push({ key, ok: false, skipped: true, reason: "not_found" });
+        continue;
+      }
+
+      const message = renderDiaryReminderMessage(messageText, item);
+      const result = await sendLoggedWhatsAppMessage({
+        eventType: "diary_overdue_reminder",
+        userId: item.responsibleOperatorUserId,
+        phone: item.operatorPhone,
+        constructionId: item.constructionId,
+        referenceDate: item.referenceDate,
+        dedupeKey: `diary_overdue:${item.constructionId}:${item.equipmentId}:${item.referenceDate}:${item.responsibleOperatorUserId || 0}`,
+        targetName: item.operatorName,
+        messageText: message,
+        metadata: {
+          obraNumero: item.constructionNumber,
+          equipmentId: item.equipmentId,
+          equipmentName: item.equipmentName,
+          source: "manual_diary_overdue_preview",
+        },
+        skipDispatchReason: item.reason || "",
+        skipDispatchMessage:
+          item.reason === "missing_equipment_operator"
+            ? "O equipamento nao possui operador vinculado."
+            : item.reason === "missing_phone"
+              ? "O operador da maquina nao possui telefone valido."
+              : "",
+      });
+
+      results.push({
+        key,
+        obraNumero: item.constructionNumber,
+        equipamento: item.equipmentName,
+        operador: item.operatorName,
+        telefone: item.operatorPhone,
+        referenceDate: item.referenceDate,
+        ...result,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        total: results.length,
+        sent: results.filter((item) => item.ok && !item.skipped).length,
+        skipped: results.filter((item) => item.skipped).length,
+        failed: results.filter((item) => item.ok === false && !item.skipped).length,
+        items: results,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao enviar lembretes de diario atrasado.",
+    });
+  }
+});
+
+app.post("/api/admin/whatsapp/point-reminders", requireAdmin, async (req, res) => {
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.logsTable) {
+      return res.status(503).json({ ok: false, message: "A tabela whatsapp_notification_logs ainda não existe no banco." });
+    }
+
+    const referenceDate = normalizeDateOnly(req.body?.date) || shiftDateWithTz(getCurrentDateString(), -1);
+    const userIds = [...new Set((Array.isArray(req.body?.user_ids) ? req.body.user_ids : []).map((item) => Number(item || 0)).filter(Boolean))];
+    const messageText = textOrNull(req.body?.message_text);
+    if (!userIds.length) {
+      return res.status(400).json({ ok: false, message: "Selecione ao menos um colaborador para enviar o lembrete." });
+    }
+
+    const localUsers = await fetchLocalUsersForPointCheck({ onlyActiveUsers: false });
+    const usersById = new Map(localUsers.map((item) => [item.id, item]));
+    const results = [];
+
+    for (const userId of userIds) {
+      const user = usersById.get(userId);
+      if (!user) {
+        results.push({ userId, ok: false, skipped: true, reason: "user_not_found" });
+        continue;
+      }
+
+      const result = await sendLoggedWhatsAppMessage({
+        eventType: "point_missing_reminder",
+        userId: user.id,
+        phone: user.telefone,
+        referenceDate,
+        targetName: user.nome,
+        messageText: messageText || buildPointReminderMessage({ userName: user.nome, referenceDate }),
+        metadata: {
+          source: "manual_point_check",
+          cpf: user.documento,
+        },
+      });
+
+      results.push({
+        userId: user.id,
+        nome: user.nome,
+        telefone: user.telefone,
+        ...result,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        referenceDate,
+        total: results.length,
+        sent: results.filter((item) => item.ok && !item.skipped).length,
+        skipped: results.filter((item) => item.skipped).length,
+        failed: results.filter((item) => item.ok === false && !item.skipped).length,
+        items: results,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao enviar lembretes de ponto.",
+    });
+  }
+});
+
+app.post("/api/admin/whatsapp/courses/:courseId/notify", requireAdmin, async (req, res) => {
+  try {
+    const schema = await fetchWhatsAppSchemaStatus();
+    if (!schema.logsTable) {
+      return res.status(503).json({ ok: false, message: "A tabela whatsapp_notification_logs ainda não existe no banco." });
+    }
+
+    const courseId = Number(req.params.courseId || 0);
+    const assignmentIds = [...new Set((Array.isArray(req.body?.assignment_ids) ? req.body.assignment_ids : []).map((item) => Number(item || 0)).filter(Boolean))];
+    if (!courseId) {
+      return res.status(400).json({ ok: false, message: "Curso inválido para envio do aviso." });
+    }
+
+    const [[course]] = await db.query("SELECT id, titulo FROM cursos WHERE id = ?", [courseId]);
+    if (!course) {
+      return res.status(404).json({ ok: false, message: "Curso não encontrado." });
+    }
+
+    const assignmentWhere = assignmentIds.length ? "AND a.id IN (?)" : "";
+    const assignmentParams = assignmentIds.length ? [courseId, assignmentIds] : [courseId];
+    const [assignments] = await db.query(
+      `SELECT a.id, a.tipo, a.setor_id, a.usuario_id
+       FROM cursos_atribuicoes a
+       WHERE a.curso_id = ?
+       ${assignmentWhere}`,
+      assignmentParams
+    );
+
+    if (!assignments.length) {
+      return res.status(400).json({ ok: false, message: "Nenhuma atribuição encontrada para notificar." });
+    }
+
+    const directUserIds = assignments.map((item) => Number(item.usuario_id || 0)).filter(Boolean);
+    const sectorIds = [...new Set(assignments.map((item) => Number(item.setor_id || 0)).filter(Boolean))];
+    const [sectorUsers] = sectorIds.length
+      ? await db.query(
+          `SELECT id, name, phone
+           FROM users
+           WHERE active = 'S'
+             AND sector_id IN (?)`,
+          [sectorIds]
+        )
+      : [[]];
+
+    const [directUsers] = directUserIds.length
+      ? await db.query(
+          `SELECT id, name, phone
+           FROM users
+           WHERE active = 'S'
+             AND id IN (?)`,
+          [directUserIds]
+        )
+      : [[]];
+
+    const usersById = new Map();
+    [...directUsers, ...sectorUsers].forEach((row) => {
+      const userId = Number(row.id || 0);
+      if (!userId) return;
+      usersById.set(userId, {
+        id: userId,
+        name: String(row.name || ""),
+        phone: String(row.phone || ""),
+      });
+    });
+
+    const results = [];
+    for (const user of usersById.values()) {
+      const result = await sendLoggedWhatsAppMessage({
+        eventType: "course_available_notice",
+        userId: user.id,
+        phone: user.phone,
+        courseId,
+        targetName: user.name,
+        messageText: buildCourseAvailableMessage({ userName: user.name, courseTitle: course.titulo }),
+        metadata: {
+          source: "manual_course_notice",
+          courseTitle: String(course.titulo || ""),
+          selectedAssignmentIds: assignmentIds,
+        },
+      });
+
+      results.push({
+        userId: user.id,
+        nome: user.name,
+        telefone: user.phone,
+        ...result,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        courseId,
+        courseTitle: String(course.titulo || ""),
+        total: results.length,
+        sent: results.filter((item) => item.ok && !item.skipped).length,
+        skipped: results.filter((item) => item.skipped).length,
+        failed: results.filter((item) => item.ok === false && !item.skipped).length,
+        items: results,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao enviar aviso de curso disponível.",
     });
   }
 });
@@ -2739,6 +3805,262 @@ function sumConstructionPlanning(endConstruction) {
   }, 0);
 }
 
+function parsePortalNumber(value) {
+  if (value === undefined || value === null || value === "") return 0;
+  const normalized = String(value).replace(/[^\d,.-]/g, "").replace(",", ".");
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function normalizePortalDiameterKey(value) {
+  const text = firstFilledText(value);
+  if (!text) return "sem_perfil";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatPortalDiameterLabel(value) {
+  const text = firstFilledText(value);
+  return text || "Sem perfil informado";
+}
+
+function formatConstructionTypeForPortal(value) {
+  const text = firstFilledText(value);
+  return text.toLowerCase() === "f" ? "Fundação" : text;
+}
+
+function extractStakeDiameter(row) {
+  if (!row || typeof row !== "object") return "";
+  return firstFilledText(
+    row.diameter,
+    row.diametro,
+    row.section,
+    row.secao,
+    row.secao_id,
+    row.perfil,
+    row.tipo
+  );
+}
+
+function listDiaryStakeObjects(data) {
+  const source = data && typeof data === "object" ? data : {};
+  const regular = Array.isArray(source.stakes) ? source.stakes : [];
+  const driven = Array.isArray(source.stakesBE) ? source.stakesBE : [];
+  return [...regular, ...driven].filter((item) => item && typeof item === "object");
+}
+
+function buildExecutedByDiameter(diarios) {
+  const map = new Map();
+
+  for (const diario of diarios) {
+    for (const stake of listDiaryStakeObjects(diario.rawData)) {
+      const label = formatPortalDiameterLabel(extractStakeDiameter(stake));
+      const key = normalizePortalDiameterKey(label);
+      const current = map.get(key) || { label, executadas: 0 };
+      current.executadas += 1;
+      map.set(key, current);
+    }
+  }
+
+  return map;
+}
+
+function mapPlanningRowsFromDiary(endConstruction) {
+  if (!Array.isArray(endConstruction)) return [];
+  return endConstruction
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const diametro = firstFilledText(item.diametro, item.diameter, item.perfil, item.tipo);
+      const qtd = parsePortalNumber(item.numeroEstacas ?? item.numero_estacas ?? item.qtdEstacas ?? item.piles);
+      if (!diametro && !qtd) return null;
+      return {
+        diametro: formatPortalDiameterLabel(diametro),
+        profundidade: 0,
+        qtdEstacas: qtd,
+        preco: 0,
+        subtotal: 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function fetchPortalProductionRows(constructionId, fallbackRows) {
+  if (await tableExists("obra_producao")) {
+    const [rows] = await db.query(
+      `SELECT diametro, profundidade, qtd_estacas, preco, subtotal
+       FROM obra_producao
+       WHERE obra_id = ?
+       ORDER BY id ASC`,
+      [constructionId]
+    );
+
+    if (rows.length) {
+      return rows.map((row) => ({
+        diametro: formatPortalDiameterLabel(row.diametro),
+        profundidade: parsePortalNumber(row.profundidade),
+        qtdEstacas: parsePortalNumber(row.qtd_estacas),
+        preco: parsePortalNumber(row.preco),
+        subtotal: parsePortalNumber(row.subtotal),
+      }));
+    }
+  }
+
+  return fallbackRows;
+}
+
+function buildProgressByDiameter(productionRows, executedByDiameter) {
+  const rows = [];
+  const seen = new Set();
+
+  for (const row of Array.isArray(productionRows) ? productionRows : []) {
+    const label = formatPortalDiameterLabel(row.diametro);
+    const key = normalizePortalDiameterKey(label);
+    const executed = executedByDiameter.get(key)?.executadas || 0;
+    const planned = parsePortalNumber(row.qtdEstacas);
+    seen.add(key);
+    rows.push({
+      diametro: label,
+      profundidade: parsePortalNumber(row.profundidade),
+      previstas: planned,
+      executadas: executed,
+      restantes: Math.max(planned - executed, 0),
+      percentual: planned > 0 ? Math.min(Math.round((executed / planned) * 100), 100) : 0,
+      subtotal: parsePortalNumber(row.subtotal),
+    });
+  }
+
+  for (const [key, row] of executedByDiameter.entries()) {
+    if (seen.has(key)) continue;
+    rows.push({
+      diametro: row.label,
+      profundidade: 0,
+      previstas: 0,
+      executadas: row.executadas,
+      restantes: 0,
+      percentual: 0,
+      subtotal: 0,
+    });
+  }
+
+  return rows;
+}
+
+function extractPortalOccurrences(data) {
+  const source = data && typeof data === "object" ? data : {};
+  const raw = Array.isArray(source.occurrences)
+    ? source.occurrences
+    : Array.isArray(source.ocorrencias)
+      ? source.ocorrencias
+      : [];
+
+  return raw
+    .map((item) => {
+      if (typeof item === "string") return { descricao: item, inicio: "", fim: "" };
+      if (!item || typeof item !== "object") return null;
+      return {
+        descricao: firstFilledText(item.desc, item.descricao, item.description, item.label, item.text),
+        inicio: firstFilledText(item.hora_ini, item.horaInicial, item.inicio, item.start),
+        fim: firstFilledText(item.hora_fim, item.horaFinal, item.fim, item.end),
+      };
+    })
+    .filter((item) => item && (item.descricao || item.inicio || item.fim));
+}
+
+function extractPortalWeatherLabel(data) {
+  const source = data && typeof data === "object" ? data : {};
+  const clima = source.clima && typeof source.clima === "object" ? source.clima : {};
+  const tempo = source.tempo && typeof source.tempo === "object" ? source.tempo : {};
+  return firstFilledText(
+    clima.label,
+    clima.name,
+    clima.item,
+    clima.id,
+    tempo.label,
+    tempo.name,
+    tempo.item,
+    tempo.id
+  );
+}
+
+function collectPortalPhotoCandidates(value, context, output) {
+  if (!value || output.length >= 18) return;
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    const looksLikeImage =
+      /^data:image\//i.test(text) ||
+      /^https?:\/\/.+\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(text) ||
+      /^\/.+\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(text);
+    if (looksLikeImage) {
+      output.push({
+        url: text,
+        titulo: context.titulo || "Foto da obra",
+        dataDiario: context.dataDiario || "",
+        diarioId: context.diarioId || 0,
+      });
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectPortalPhotoCandidates(item, context, output);
+    return;
+  }
+
+  if (typeof value === "object") {
+    const direct = firstFilledText(
+      value.url,
+      value.src,
+      value.href,
+      value.photo,
+      value.foto,
+      value.image,
+      value.imagem,
+      value.fileUrl,
+      value.publicUrl,
+      value.previewUrl
+    );
+
+    if (direct) {
+      collectPortalPhotoCandidates(direct, {
+        ...context,
+        titulo: firstFilledText(value.title, value.titulo, value.name, value.nome, value.label, context.titulo),
+      }, output);
+    }
+  }
+}
+
+function extractPortalPhotos(data, diaryMeta) {
+  const source = data && typeof data === "object" ? data : {};
+  const keys = [
+    "fotos",
+    "photos",
+    "imagens",
+    "images",
+    "attachments",
+    "anexos",
+    "arquivos",
+    "evidencias",
+    "galeria",
+    "gallery",
+  ];
+  const output = [];
+
+  for (const key of keys) {
+    collectPortalPhotoCandidates(source[key], {
+      titulo: "Foto do diario",
+      dataDiario: diaryMeta.dataDiario,
+      diarioId: diaryMeta.id,
+    }, output);
+  }
+
+  return output;
+}
+
 async function fetchActiveConstructionById(constructionId) {
   const [rows] = await db.query(
     `SELECT c.id,
@@ -2815,6 +4137,20 @@ async function fetchClientPortalAccessByLogin(login) {
 async function fetchClientPortalDashboard(constructionId) {
   const construction = await fetchActiveConstructionById(constructionId);
   if (!construction) return null;
+  let constructionPhotos = [];
+
+  if (await columnExists("constructions", "construction_photos")) {
+    const [[photoRow]] = await db.query(
+      "SELECT construction_photos FROM constructions WHERE id = ? LIMIT 1",
+      [constructionId]
+    );
+    const parsedPhotos = parseJsonSafe(photoRow?.construction_photos, []);
+    collectPortalPhotoCandidates(parsedPhotos, {
+      titulo: "Foto da obra",
+      dataDiario: "",
+      diarioId: 0,
+    }, constructionPhotos);
+  }
 
   const [rows] = await db.query(
     `SELECT d.id,
@@ -2846,19 +4182,30 @@ async function fetchClientPortalDashboard(constructionId) {
   let estacasExecutadas = 0;
   let estacasPlanejadas = 0;
   let latestPlanningCursor = "";
+  let latestPlanningRows = [];
+  const allPhotos = [...constructionPhotos];
 
   const diarios = rows.map((row) => {
     const data = safeParseJsonObject(row.data);
     const estacasNoDia = countDiaryStakeRows(data);
+    const occurrences = extractPortalOccurrences(data);
+    const weather = extractPortalWeatherLabel(data);
+    const diaryDate = firstFilledText(row.data_diario);
     estacasExecutadas += estacasNoDia;
 
     const planned = sumConstructionPlanning(data.endConstruction);
-    const diaryDate = firstFilledText(row.data_diario);
     const planningCursor = `${diaryDate}|${String(row.id).padStart(12, "0")}`;
     if (planned > 0 && planningCursor >= latestPlanningCursor) {
       latestPlanningCursor = planningCursor;
       estacasPlanejadas = planned;
+      latestPlanningRows = mapPlanningRowsFromDiary(data.endConstruction);
     }
+
+    const photos = extractPortalPhotos(data, {
+      id: Number(row.id),
+      dataDiario: diaryDate,
+    });
+    allPhotos.push(...photos);
 
     return {
       id: Number(row.id),
@@ -2868,17 +4215,56 @@ async function fetchClientPortalDashboard(constructionId) {
       equipamento: firstFilledText(row.equipment_name),
       operadorNome: firstFilledText(row.operator_name),
       estacasNoDia,
+      ocorrencias: occurrences,
+      clima: weather,
+      fotos: photos,
       reviewConfirmed: data.review_confirmed === true || data.revisao_confirmed === true,
       pdfUrl: `/api/client-portal/diarios/${row.id}/pdf`,
+      rawData: data,
     };
   });
+
+  const productionRows = await fetchPortalProductionRows(construction.id, latestPlanningRows);
+  const totalPlanejadoPorProducao = productionRows.reduce((sum, row) => sum + parsePortalNumber(row.qtdEstacas), 0);
+  if (totalPlanejadoPorProducao > 0) {
+    estacasPlanejadas = totalPlanejadoPorProducao;
+  }
+
+  const progressByDiameter = buildProgressByDiameter(productionRows, buildExecutedByDiameter(diarios));
+  const percentualConcluido = estacasPlanejadas > 0
+    ? Math.min(Math.round((estacasExecutadas / estacasPlanejadas) * 100), 100)
+    : 0;
+  const diasTrabalhados = new Set(diarios.map((item) => item.dataDiario).filter(Boolean)).size;
+  const diasSemProducao = diarios.filter((item) => item.estacasNoDia === 0).length;
+  const mediaDiaria = diasTrabalhados > 0 ? Number((estacasExecutadas / diasTrabalhados).toFixed(1)) : 0;
+  const ultimaAtualizacao = diarios[0]?.dataDiario || "";
+  const timeline = diarios.slice(0, 12).flatMap((diario) => {
+    const items = [
+      {
+        id: `diario-${diario.id}`,
+        data: diario.dataDiario,
+        tipo: "diario",
+        titulo: "Diario aprovado",
+        descricao: `${diario.equipamento || "Equipamento"} registrou ${diario.estacasNoDia} estaca${diario.estacasNoDia === 1 ? "" : "s"} no dia.`,
+        detalhe: diario.operadorNome ? `Operador: ${diario.operadorNome}` : "",
+        pdfUrl: diario.pdfUrl,
+      },
+    ];
+
+    return items;
+  });
+
+  const publicDiarios = diarios.map(({ rawData, ocorrencias, ...diario }) => ({
+    ...diario,
+    ocorrencias: [],
+  }));
 
   return {
     obra: {
       id: Number(construction.id),
       numero: firstFilledText(construction.construction_number),
       cliente: firstFilledText(construction.client_name),
-      tipo: firstFilledText(construction.type),
+      tipo: formatConstructionTypeForPortal(construction.type),
       cidade: firstFilledText(construction.city_name),
       estado: firstFilledText(construction.state),
       endereco: [construction.street, construction.number, construction.neighborhood, construction.complement]
@@ -2888,12 +4274,20 @@ async function fetchClientPortalDashboard(constructionId) {
       status: "em andamento",
     },
     resumo: {
-      totalDiarios: diarios.length,
+      totalDiarios: publicDiarios.length,
       estacasExecutadas,
       estacasPlanejadas,
       estacasRestantes: Math.max(estacasPlanejadas - estacasExecutadas, 0),
+      percentualConcluido,
+      diasTrabalhados,
+      diasSemProducao,
+      mediaDiaria,
+      ultimaAtualizacao,
     },
-    diarios,
+    progressoPorDiametro: progressByDiameter,
+    fotos: allPhotos.slice(0, 18),
+    timeline,
+    diarios: publicDiarios,
   };
 }
 
@@ -3338,6 +4732,12 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
 
     await conn.commit();
 
+    // Diary is now 'pendente' — trigger auto-approval check against obra_producao
+    const obraIdForConferencia = parseInt(diary.data.construction_id || diary.data.obra_id || 0) || null;
+    if (obraIdForConferencia) {
+      await gontijoRoutes.tryAutoAprovarConferencia(conn, diary.id, obraIdForConferencia);
+    }
+
     const payload = buildSignatureStatusPayload({
       diary: { ...diary, data: nextData },
       link: {
@@ -3571,6 +4971,12 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
     ]);
 
     await conn.commit();
+
+    // Trigger auto-approval check now that the diary is signed
+    const obraId = parseInt(diaryData.construction_id || diaryData.obra_id || 0) || null;
+    if (obraId) {
+      await gontijoRoutes.tryAutoAprovarConferencia(conn, row.diary_id, obraId);
+    }
 
     return res.json({
       ok: true,
@@ -4471,6 +5877,7 @@ app.get("/api/estacas/detail", async (req, res) => {
 });
 
 if (!process.env.VERCEL) {
+  bootstrapWhatsAppScheduler();
   app.listen(port, () => {
     console.log(`Servidor em http://localhost:${port}`);
   });

@@ -16,4 +16,24 @@ export default defineConfig({
       '/api': 'http://localhost:3000',
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+            return 'vendor-react'
+          }
+          if (id.includes('node_modules/@tanstack')) {
+            return 'vendor-query'
+          }
+          if (id.includes('node_modules/lucide-react') || id.includes('node_modules/clsx') || id.includes('node_modules/tailwind-merge')) {
+            return 'vendor-ui'
+          }
+          if (id.includes('node_modules/zustand') || id.includes('node_modules/axios')) {
+            return 'vendor-state'
+          }
+        },
+      },
+    },
+  },
 })
