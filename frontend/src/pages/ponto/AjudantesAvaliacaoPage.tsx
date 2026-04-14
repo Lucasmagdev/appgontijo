@@ -18,6 +18,13 @@ function formatDateTime(value: string) {
   }).format(parsed)
 }
 
+function formatScore(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
 export default function AjudantesAvaliacaoPage() {
   const [pendingFilters, setPendingFilters] = useState({
     dataInicio: '',
@@ -77,7 +84,7 @@ export default function AjudantesAvaliacaoPage() {
       <section className="app-panel toolbar-panel">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
-            <label className="field-label">De</label>
+            <label className="field-label">Criado de</label>
             <input
               type="date"
               value={pendingFilters.dataInicio}
@@ -87,7 +94,7 @@ export default function AjudantesAvaliacaoPage() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="field-label">Ate</label>
+            <label className="field-label">Criado ate</label>
             <input
               type="date"
               value={pendingFilters.dataFim}
@@ -172,7 +179,7 @@ export default function AjudantesAvaliacaoPage() {
                               color: item.score >= 8 ? '#166534' : item.score >= 6 ? '#92400e' : '#b91c1c',
                             }}
                           >
-                            {item.score}
+                            {formatScore(item.score)}
                           </span>
                         </td>
                         <td>{item.operatorName || '-'}</td>

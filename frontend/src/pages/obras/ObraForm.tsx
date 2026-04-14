@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, Plus, Save, Trash2, Upload } from 'lucide-react'
+import { Camera, ChevronDown, ChevronUp, Plus, Save, Trash2, Upload } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -9,9 +9,11 @@ import {
   extractApiErrorMessage,
   modalidadeService,
   obraService,
+  usuarioService,
   type ObraArquivo,
   type ObraContato,
   type ObraDetail,
+  type ObraFoto,
   type ObraProducao,
 } from '@/lib/gontijo-api'
 
@@ -33,19 +35,71 @@ const emptyProducao = (): ObraProducao => ({ diametro: '', profundidade: null, q
 const emptyContato = (): ObraContato => ({ nome: '', funcao: '', telefone: '', email: '' })
 
 const initialForm: ObraDetail = {
-  numero: '', clienteId: null, status: 'em andamento', empresaResponsavel: 'gontijo', tipoObra: 'Fundação', finalidade: '', dataPrevistaInicio: '', estado: '', cidade: '', cep: '', logradouro: '', bairro: '', numeroEnd: '', complemento: '',
+  numero: '', clienteId: null, responsibleOperatorUserId: null, status: 'em andamento', empresaResponsavel: 'gontijo', tipoObra: 'Fundação', finalidade: '', dataPrevistaInicio: '', estado: '', cidade: '', cep: '', logradouro: '', bairro: '', numeroEnd: '', complemento: '',
   projetoGontijo: true, valorProjeto: null, fatMinimoTipo: 'global', fatMinimoValor: null, fatMinimoDias: null, usaBits: false, valorBits: null, transporteNoturno: false, icamento: false, seguroPct: null, totalProducao: null, mobilizacao: null, desmobilizacao: null, totalGeral: null,
   responsavelComercialGontijo: '', telComercialGontijo: '', responsavelContratante: '', telContratante: '', observacoes: '',
   modalidadeContratual: 'FM', faturamentoMinimoDiarioGlobal: null, diasIncidenciaFatMinimo: 'SO', modalidadeFatMinimo: 'D', acrescimoTransporteNoturno: null, responsavelIcamento: 'gontijo', valorIcamento: null, incideSeguro: true, valorSeguro: null,
   necessidadeIntegracao: 'N', valorIntegracao: null, documentacaoEspecifica: 'N', valorDocumentacao: null, mobilizacaoInterna: 'N', valorMobilizacaoInterna: null, responsavelLimpezaTrado: 'cliente', valorLimpezaTrado: null, responsavelHospedagem: 'cliente', valorHospedagem: null, responsavelCafeManha: 'cliente', valorCafeManha: null, responsavelAlmoco: 'cliente', valorAlmoco: null, responsavelJantar: 'cliente', valorJantar: null, responsavelFornecimentoDiesel: 'cliente', responsavelCusteioDiesel: 'cliente',
   razaoSocialFaturamento: '', tipoDocumentoFaturamento: 'cnpj', documentoFaturamento: '', inscricaoMunicipal: '', issqnPct: null, issqnRetidoFonte: false, modalidadeFaturamento: 'FL', informarCeiCnoGuia: true, ceiCno: '', cartaoCeiCno: null, enderecoFaturamentoMesmoCliente: false, faturamentoEstado: '', faturamentoCidade: '', faturamentoCep: '', faturamentoLogradouro: '', faturamentoBairro: '', faturamentoNumero: '', faturamentoComplemento: '',
-  projetosArquivos: [], sondagensArquivos: [], producao: [emptyProducao()], responsabilidades: [], contatos: [emptyContato()], modalidades: [], equipamentos: [],
+  projetosArquivos: [], sondagensArquivos: [], fotosObra: [], producao: [emptyProducao()], responsabilidades: [], contatos: [emptyContato()], modalidades: [], equipamentos: [],
 }
 
 function parseNumberInput(value: string) { if (!value.trim()) return null; const parsed = Number(value.replace(',', '.')); return Number.isFinite(parsed) ? parsed : null }
 function formatCurrency(value: number | null | undefined) { if (value == null || !Number.isFinite(value)) return '0,00'; return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function gridSpan(columns: number): React.CSSProperties { return { gridColumn: `span ${columns} / span ${columns}` } }
 function toggleArrayId(current: number[], value: number) { return current.includes(value) ? current.filter((item) => item !== value) : [...current, value] }
+function calculateProducaoSubtotal(item: ObraProducao) {
+  const profundidade = item.profundidade || 0
+  const qtdEstacas = item.qtdEstacas || 0
+  const preco = item.preco || 0
+  const subtotal = profundidade * qtdEstacas * preco
+  return subtotal > 0 ? subtotal : null
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Nao foi possivel ler a imagem.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function compressPhotoFile(file: File) {
+  const source = await readFileAsDataUrl(file)
+  const image = new Image()
+
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('Nao foi possivel carregar a imagem.'))
+    image.src = source
+  })
+
+  const maxSize = 1400
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return source
+  ctx.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.78)
+}
+
+async function makeObraFoto(file: File): Promise<ObraFoto> {
+  const now = new Date()
+  return {
+    nome: file.name,
+    tipo: file.type || 'image/jpeg',
+    tamanho: Number.isFinite(file.size) ? file.size : null,
+    titulo: file.name.replace(/\.[^.]+$/, '') || 'Foto da obra',
+    url: await compressPhotoFile(file),
+    dataFoto: now.toISOString().slice(0, 10),
+    criadoEm: now.toISOString(),
+  }
+}
 
 function ObraSection({ title, sectionKey, activeSection, setActiveSection, children }: { title: string; sectionKey: SectionKey; activeSection: SectionKey; setActiveSection: (section: SectionKey) => void; children: React.ReactNode }) {
   const open = activeSection === sectionKey
@@ -62,6 +116,7 @@ export default function ObraFormPage() {
   const [activeSection, setActiveSection] = useState<SectionKey>('basicos')
   const projectInputRef = useRef<HTMLInputElement | null>(null)
   const pollInputRef = useRef<HTMLInputElement | null>(null)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const ceiCnoInputRef = useRef<HTMLInputElement | null>(null)
 
   const obraQuery = useQuery({ queryKey: ['obra', id], queryFn: () => obraService.getById(Number(id)), enabled: isEditing })
@@ -69,20 +124,44 @@ export default function ObraFormPage() {
   const clienteDetailQuery = useQuery({ queryKey: ['cliente-detail-for-obra', form.clienteId], queryFn: () => clienteService.getById(form.clienteId as number), enabled: Boolean(form.clienteId) })
   const modalidadesQuery = useQuery({ queryKey: ['modalidades'], queryFn: modalidadeService.list })
   const equipamentosQuery = useQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
+  const operadoresQuery = useQuery({
+    queryKey: ['operadores-obra'],
+    queryFn: async () => {
+      const data = await usuarioService.list({ page: 1, limit: 500, status: 'ativo' })
+      return data.items.filter((item) => item.status === 'ativo' && item.perfil === 'operador')
+    },
+  })
 
   useEffect(() => { if (obraQuery.data) setForm({ ...initialForm, ...obraQuery.data, contatos: obraQuery.data.contatos.length ? obraQuery.data.contatos : [emptyContato()] }) }, [obraQuery.data])
   useEffect(() => { if (!form.enderecoFaturamentoMesmoCliente || !clienteDetailQuery.data) return; setForm((prev) => ({ ...prev, faturamentoEstado: clienteDetailQuery.data.estado, faturamentoCidade: clienteDetailQuery.data.cidade, faturamentoCep: clienteDetailQuery.data.cep, faturamentoLogradouro: clienteDetailQuery.data.logradouro, faturamentoBairro: clienteDetailQuery.data.bairro, faturamentoNumero: clienteDetailQuery.data.numero, faturamentoComplemento: clienteDetailQuery.data.complemento, razaoSocialFaturamento: prev.razaoSocialFaturamento || clienteDetailQuery.data.razaoSocial, tipoDocumentoFaturamento: clienteDetailQuery.data.tipoDoc, documentoFaturamento: prev.documentoFaturamento || clienteDetailQuery.data.documento, inscricaoMunicipal: prev.inscricaoMunicipal || clienteDetailQuery.data.inscricaoMunicipal })) }, [form.enderecoFaturamentoMesmoCliente, clienteDetailQuery.data])
 
   const filteredEquipamentos = useMemo(() => { if (!equipamentosQuery.data) return []; if (!form.modalidades.length) return equipamentosQuery.data; return equipamentosQuery.data.filter((item) => !item.modalidadeId || form.modalidades.includes(item.modalidadeId)) }, [equipamentosQuery.data, form.modalidades])
-  const totalProducaoCalculado = useMemo(() => form.producao.reduce((sum, item) => sum + (item.subtotal || ((item.qtdEstacas || 0) * (item.preco || 0))), 0), [form.producao])
+  const totalProducaoCalculado = useMemo(() => form.producao.reduce((sum, item) => sum + (calculateProducaoSubtotal(item) || 0), 0), [form.producao])
   const totalObraCalculado = useMemo(() => totalProducaoCalculado + (form.mobilizacao || 0) + (form.desmobilizacao || 0), [form.desmobilizacao, form.mobilizacao, totalProducaoCalculado])
 
   const mutation = useMutation({ mutationFn: async (payload: ObraDetail) => isEditing ? (await obraService.update(Number(id), payload), Number(id)) : obraService.create(payload), onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['obras'] }); if (isEditing) await queryClient.invalidateQueries({ queryKey: ['obra', id] }); navigate('/obras') }, onError: (error) => setSubmitError(extractApiErrorMessage(error)) })
 
   function setField<K extends keyof ObraDetail>(field: K, value: ObraDetail[K]) { setForm((prev) => ({ ...prev, [field]: value })) }
   function updateContato(index: number, field: keyof ObraContato, value: string) { setForm((prev) => { const next = [...prev.contatos]; next[index] = { ...next[index], [field]: value }; return { ...prev, contatos: next } }) }
-  function updateProducao(index: number, field: keyof ObraProducao, value: string | number | null) { setForm((prev) => { const next = [...prev.producao]; const updated = { ...next[index], [field]: value }; updated.subtotal = ((updated.qtdEstacas || 0) * (updated.preco || 0)) || null; next[index] = updated; return { ...prev, producao: next } }) }
+  function updateProducao(index: number, field: keyof ObraProducao, value: string | number | null) { setForm((prev) => { const next = [...prev.producao]; const updated = { ...next[index], [field]: value }; updated.subtotal = calculateProducaoSubtotal(updated); next[index] = updated; return { ...prev, producao: next } }) }
   function pushArquivos(field: 'projetosArquivos' | 'sondagensArquivos', files: FileList | null) { if (!files?.length) return; setForm((prev) => ({ ...prev, [field]: [...prev[field], ...Array.from(files).map(emptyArquivo)] })) }
+  async function pushFotosObra(files: FileList | null) {
+    if (!files?.length) return
+    setSubmitError('')
+    try {
+      const images = Array.from(files).filter((file) => file.type.startsWith('image/'))
+      if (!images.length) {
+        setSubmitError('Selecione apenas arquivos de imagem para as fotos da obra.')
+        return
+      }
+      const fotos = await Promise.all(images.map(makeObraFoto))
+      setForm((prev) => ({ ...prev, fotosObra: [...prev.fotosObra, ...fotos] }))
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel anexar as fotos.')
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    }
+  }
   function addProducaoRow() { setForm((prev) => ({ ...prev, producao: [...prev.producao, emptyProducao()] })) }
   function removeProducaoRow(index: number) {
     setForm((prev) => {
@@ -93,7 +172,10 @@ export default function ObraFormPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSubmitError('')
-    await mutation.mutateAsync({ ...form, numero: form.numero.trim(), tipoObra: form.tipoObra.trim(), finalidade: form.finalidade.trim(), estado: form.estado.trim().toUpperCase(), cidade: form.cidade.trim(), cep: form.cep.trim(), logradouro: form.logradouro.trim(), bairro: form.bairro.trim(), numeroEnd: form.numeroEnd.trim(), complemento: form.complemento.trim(), totalProducao: totalProducaoCalculado || null, totalGeral: totalObraCalculado || null, contatos: form.contatos.filter((item) => item.nome || item.funcao || item.telefone || item.email), producao: form.producao.filter((item) => item.diametro || item.profundidade || item.qtdEstacas || item.preco || item.subtotal), responsabilidades: [] })
+    const producao = form.producao
+      .map((item) => ({ ...item, subtotal: calculateProducaoSubtotal(item) }))
+      .filter((item) => item.diametro || item.profundidade || item.qtdEstacas || item.preco || item.subtotal)
+    await mutation.mutateAsync({ ...form, numero: form.numero.trim(), tipoObra: form.tipoObra.trim(), finalidade: form.finalidade.trim(), estado: form.estado.trim().toUpperCase(), cidade: form.cidade.trim(), cep: form.cep.trim(), logradouro: form.logradouro.trim(), bairro: form.bairro.trim(), numeroEnd: form.numeroEnd.trim(), complemento: form.complemento.trim(), totalProducao: totalProducaoCalculado || null, totalGeral: totalObraCalculado || null, contatos: form.contatos.filter((item) => item.nome || item.funcao || item.telefone || item.email), producao, responsabilidades: [] })
   }
 
   return (
@@ -109,6 +191,7 @@ export default function ObraFormPage() {
             <div style={gridSpan(3)}><label className="field-label" style={{ color: 'var(--brand-red)' }}>Número da obra</label><input className="field-input" value={form.numero} onChange={(event) => setField('numero', event.target.value)} placeholder="nº da Obra" required /></div>
             <div style={gridSpan(3)}><label className="field-label">Status da obra</label><select className="field-select" value={form.status} onChange={(event) => setField('status', event.target.value as ObraDetail['status'])}>{STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
             <div style={gridSpan(3)}><label className="field-label">Empresa responsável</label><select className="field-select" value={form.empresaResponsavel} onChange={(event) => setField('empresaResponsavel', event.target.value)}>{EMPRESA_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+            <div style={gridSpan(4)}><label className="field-label">Operador responsável pela obra</label><select className="field-select" value={form.responsibleOperatorUserId ?? ''} onChange={(event) => setField('responsibleOperatorUserId', event.target.value ? Number(event.target.value) : null)}><option value="">- Selecione um operador -</option>{operadoresQuery.data?.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></div>
             <div className="span-12"><label className="field-label">Modalidades</label><div className="selection-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>{modalidadesQuery.data?.map((item) => (<label key={item.id} className="checkbox-card"><input type="checkbox" checked={form.modalidades.includes(item.id)} onChange={() => setField('modalidades', toggleArrayId(form.modalidades, item.id))} />{item.nome}</label>))}</div></div>
             <div className="span-12"><label className="field-label">Equipamentos possíveis</label><div className="stack-list" style={{ maxHeight: '11rem', overflowY: 'auto', border: '1px solid #d7dde5', borderRadius: '8px', padding: '0.75rem', background: '#fff' }}><div className="selection-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>{filteredEquipamentos.map((item) => (<label key={item.id} className="checkbox-card"><input type="checkbox" checked={form.equipamentos.includes(item.id)} onChange={() => setField('equipamentos', toggleArrayId(form.equipamentos, item.id))} />{item.nome}</label>))}</div></div></div>
             <div style={gridSpan(4)}><label className="field-label">Tipo de obra</label><input className="field-input" value={form.tipoObra} onChange={(event) => setField('tipoObra', event.target.value)} /></div>
@@ -125,12 +208,47 @@ export default function ObraFormPage() {
           </div>
         </ObraSection>
 
-        <ObraSection title="Projetos e Sondagens" sectionKey="arquivos" activeSection={activeSection} setActiveSection={setActiveSection}>
+        <ObraSection title="Projetos, Sondagens e Fotos" sectionKey="arquivos" activeSection={activeSection} setActiveSection={setActiveSection}>
           <input ref={projectInputRef} type="file" multiple hidden onChange={(event) => pushArquivos('projetosArquivos', event.target.files)} />
           <input ref={pollInputRef} type="file" multiple hidden onChange={(event) => pushArquivos('sondagensArquivos', event.target.files)} />
+          <input ref={photoInputRef} type="file" accept="image/*" multiple hidden onChange={(event) => void pushFotosObra(event.target.files)} />
           <div className="form-grid">
             <div style={gridSpan(6)}><button type="button" className="btn btn-secondary" onClick={() => projectInputRef.current?.click()}><Upload size={15} />Inserir projetos</button><div className="stack-list mt-3">{form.projetosArquivos.length ? form.projetosArquivos.map((arquivo, index) => (<div key={`${arquivo.nome}-${index}`} className="nested-card" style={{ padding: '0.7rem 0.9rem' }}><div className="flex items-center justify-between gap-3"><div className="text-sm font-medium">{arquivo.nome}</div><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setField('projetosArquivos', form.projetosArquivos.filter((_, current) => current !== index))}><Trash2 size={14} /></button></div></div>)) : <QueryFeedback type="empty" title="Nenhum projeto inserido" description="Adicione os arquivos de projeto vinculados à obra." />}</div></div>
             <div style={gridSpan(6)}><button type="button" className="btn btn-secondary" onClick={() => pollInputRef.current?.click()}><Upload size={15} />Inserir sondagens</button><div className="stack-list mt-3">{form.sondagensArquivos.length ? form.sondagensArquivos.map((arquivo, index) => (<div key={`${arquivo.nome}-${index}`} className="nested-card" style={{ padding: '0.7rem 0.9rem' }}><div className="flex items-center justify-between gap-3"><div className="text-sm font-medium">{arquivo.nome}</div><button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setField('sondagensArquivos', form.sondagensArquivos.filter((_, current) => current !== index))}><Trash2 size={14} /></button></div></div>)) : <QueryFeedback type="empty" title="Nenhuma sondagem inserida" description="Adicione os arquivos de sondagem vinculados à obra." />}</div></div>
+            <div className="span-12 mt-2">
+              <div className="rounded-2xl border border-red-100 bg-[linear-gradient(180deg,#fff8f7_0%,#ffffff_100%)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--brand-red)]">Fotos para o portal do cliente</div>
+                    <p className="mt-1 text-sm text-slate-500">Essas fotos aparecem na galeria pública do cliente, sem entrar no PDF do diário.</p>
+                  </div>
+                  <button type="button" className="btn btn-primary" onClick={() => photoInputRef.current?.click()}><Camera size={15} />Anexar fotos</button>
+                </div>
+
+                {form.fotosObra.length ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {form.fotosObra.map((foto, index) => (
+                      <div key={`${foto.nome}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="aspect-[4/3] bg-slate-100">
+                          <img src={foto.url} alt={foto.titulo || foto.nome} className="h-full w-full object-cover" loading="lazy" />
+                        </div>
+                        <div className="flex items-center justify-between gap-2 p-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold text-slate-800">{foto.titulo || foto.nome}</div>
+                            <div className="text-xs text-slate-400">{foto.tamanho ? `${Math.round(foto.tamanho / 1024)} KB` : 'Imagem anexada'}</div>
+                          </div>
+                          <button type="button" className="btn btn-secondary btn-icon text-red-600" onClick={() => setField('fotosObra', form.fotosObra.filter((_, current) => current !== index))} title="Remover foto">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <QueryFeedback type="empty" title="Nenhuma foto anexada" description="Adicione fotos de acompanhamento para enriquecer o portal do cliente." />
+                )}
+              </div>
+            </div>
           </div>
         </ObraSection>
 

@@ -153,12 +153,17 @@ function normalizeStakeRow(value: unknown): DiaryStakeRow {
   return { ...EMPTY_STAKE_ROW, ...row }
 }
 
+function parseStaffScore(value: unknown) {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(String(value).replace(',', '.'))
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 10 ? parsed : null
+}
+
 function normalizeStaffRow(value: unknown): DiaryStaffRow {
   const source = asRecord(value)
-  const notaValue = Number(source.nota)
   return {
     item: toText(source.item || source.name || source.nome),
-    nota: Number.isInteger(notaValue) && notaValue >= 1 && notaValue <= 10 ? notaValue : null,
+    nota: parseStaffScore(source.nota),
   }
 }
 

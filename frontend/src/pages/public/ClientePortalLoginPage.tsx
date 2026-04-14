@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 
 export default function ClientePortalLoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { login } = useClientePortalAuth()
-  const [form, setForm] = useState({ login: '', password: '' })
+  const [form, setForm] = useState({ login: searchParams.get('login') || '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 

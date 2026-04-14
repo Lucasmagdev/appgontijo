@@ -29,9 +29,12 @@ export default function LoginPage() {
       <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.28)] lg:grid-cols-[1.05fr_0.95fr]">
         <section className="hidden bg-[linear-gradient(160deg,#3a4048_0%,#31363e_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div>
-            <div className="app-title text-5xl tracking-[0.2em]">GONTIJO</div>
-            <div className="mt-2 text-sm font-semibold uppercase tracking-[0.34em] text-slate-300">
-              Fundacoes
+            <div className="inline-flex rounded-2xl px-5 py-4">
+              <img
+                src="/gontijo-logo-diarios.png"
+                alt="Gontijo Fundações"
+                className="h-20 w-auto object-contain"
+              />
             </div>
           </div>
 

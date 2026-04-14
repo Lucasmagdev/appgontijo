@@ -7,6 +7,7 @@ type ApiEnvelope<T> = {
   total?: number
   page?: number
   limit?: number
+  summary?: unknown
 }
 
 type ApiListResult<T> = {
@@ -73,6 +74,7 @@ export type SolidesPointCheckRecord = {
   usuarioId: number
   nome: string
   cpf: string
+  telefone: string
   setor: string
   setorId: number | null
   ativo: boolean
@@ -106,6 +108,106 @@ export type SolidesPointCheckResult = {
     reprovado: number
   }
   items: SolidesPointCheckRecord[]
+}
+
+export type WhatsAppIntegrationStatus = {
+  enabled: boolean
+  configured: boolean
+  baseUrl: string
+  instanceId: string
+  clientTokenConfigured: boolean
+  timeoutMs: number
+  logsTableReady: boolean
+  responsibleColumnReady: boolean
+  equipmentOperatorColumnReady: boolean
+  schedulerEnabled: boolean
+  schedulerIntervalMinutes: number
+  schedulerRunning: boolean
+  schedulerLastRunAt: string
+  schedulerLastError: string
+  instance: {
+    connected: boolean | null
+    status: string
+    endpoint: string
+    error: string
+  }
+}
+
+export type WhatsAppQrCode = {
+  image: string
+}
+
+export type WhatsAppDiaryOverdueItem = {
+  key: string
+  constructionId: number
+  constructionNumber: string
+  equipmentId: number
+  equipmentName: string
+  referenceDate: string
+  dueAt: string
+  responsibleOperatorUserId: number | null
+  operatorName: string
+  operatorPhone: string
+  canSend: boolean
+  reason: string
+}
+
+export type WhatsAppLogRecord = {
+  id: number
+  eventType: string
+  eventLabel: string
+  historyText: string
+  status: 'queued' | 'sent' | 'failed' | 'skipped'
+  userId: number | null
+  userName: string
+  phone: string
+  constructionId: number | null
+  obraNumero: string
+  courseId: number | null
+  courseTitle: string
+  referenceDate: string
+  targetName: string
+  messageText: string
+  providerMessageId: string
+  errorText: string
+  createdAt: string
+  metadata: Record<string, unknown>
+}
+
+export type WhatsAppDiaryDelaySummary = {
+  total: number
+  sent: number
+  failed: number
+  skipped: number
+  operators: number
+  constructions: number
+  topOperators: Array<{
+    name: string
+    total: number
+    sent: number
+    lastDelayAt: string
+  }>
+}
+
+export type WhatsAppBulkSendResultItem = {
+  userId?: number
+  nome?: string
+  telefone?: string
+  ok: boolean
+  skipped?: boolean
+  reason?: string
+  error?: string
+}
+
+export type WhatsAppBulkSendResult = {
+  total: number
+  sent: number
+  skipped: number
+  failed: number
+  items: WhatsAppBulkSendResultItem[]
+  referenceDate?: string
+  courseId?: number
+  courseTitle?: string
 }
 
 export type UsuarioRecord = {
@@ -162,6 +264,9 @@ export type EquipamentoRecord = {
   status: 'ativo' | 'inativo'
   imei: string
   obraNumero: string
+  operadorId: number | null
+  operadorNome: string
+  operadorTelefone: string
 }
 
 export type EquipamentoPayload = {
@@ -171,6 +276,7 @@ export type EquipamentoPayload = {
   status?: 'ativo' | 'inativo'
   imei?: string
   obraNumero?: string
+  operadorId?: number | null
 }
 
 export type ObraResumo = {
@@ -217,10 +323,18 @@ export type ObraArquivo = {
   tamanho: number | null
 }
 
+export type ObraFoto = ObraArquivo & {
+  url: string
+  titulo: string
+  dataFoto: string
+  criadoEm: string
+}
+
 export type ObraDetail = {
   id?: number
   numero: string
   clienteId: number | null
+  responsibleOperatorUserId: number | null
   status: 'em andamento' | 'finalizada' | 'pausada' | 'cancelada'
   empresaResponsavel: string
   tipoObra: string
@@ -299,6 +413,7 @@ export type ObraDetail = {
   faturamentoComplemento: string
   projetosArquivos: ObraArquivo[]
   sondagensArquivos: ObraArquivo[]
+  fotosObra: ObraFoto[]
   producao: ObraProducao[]
   responsabilidades: ObraResponsabilidade[]
   contatos: ObraContato[]
@@ -608,6 +723,11 @@ function toDateOnly(value: unknown): string {
   return match ? match[1] : text
 }
 
+function formatConstructionType(value: unknown): string {
+  const text = toStringValue(value).trim()
+  return text.toLowerCase() === 'f' ? 'Fundação' : text
+}
+
 function toFileValue(value: unknown): ObraArquivo | null {
   if (!value || typeof value !== 'object') return null
   const row = value as Record<string, unknown>
@@ -622,6 +742,26 @@ function toFileValue(value: unknown): ObraArquivo | null {
 
 function toFileListValue(value: unknown): ObraArquivo[] {
   return Array.isArray(value) ? value.map((item) => toFileValue(item)).filter((item): item is ObraArquivo => Boolean(item)) : []
+}
+
+function toPhotoValue(value: unknown): ObraFoto | null {
+  if (!value || typeof value !== 'object') return null
+  const row = value as Record<string, unknown>
+  const url = toStringValue(row.url || row.src || row.image || row.imagem)
+  if (!url) return null
+  return {
+    nome: toStringValue(row.nome || row.name || row.titulo || row.title || 'Foto da obra'),
+    tipo: toStringValue(row.tipo || row.type || 'image/jpeg'),
+    tamanho: toNumberValue(row.tamanho || row.size),
+    url,
+    titulo: toStringValue(row.titulo || row.title || row.nome || row.name || 'Foto da obra'),
+    dataFoto: toDateOnly(row.dataFoto || row.data_foto || row.photoDate || row.photo_date || row.date || row.data || row.criadoEm || row.criado_em || row.createdAt || row.created_at),
+    criadoEm: toStringValue(row.criadoEm || row.criado_em || row.createdAt || row.created_at),
+  }
+}
+
+function toPhotoListValue(value: unknown): ObraFoto[] {
+  return Array.isArray(value) ? value.map((item) => toPhotoValue(item)).filter((item): item is ObraFoto => Boolean(item)) : []
 }
 
 function adaptUsuario(row: Record<string, unknown>): UsuarioRecord {
@@ -666,6 +806,9 @@ function adaptEquipamento(row: Record<string, unknown>): EquipamentoRecord {
     status: row.status === 'inativo' ? 'inativo' : 'ativo',
     imei: toStringValue(row.imei),
     obraNumero: toStringValue(row.obra_numero),
+    operadorId: toNumberValue(row.operador_id),
+    operadorNome: toStringValue(row.operador_nome),
+    operadorTelefone: toStringValue(row.operador_telefone),
   }
 }
 
@@ -674,7 +817,7 @@ function adaptObraResumo(row: Record<string, unknown>): ObraResumo {
     id: Number(row.id),
     numero: toStringValue(row.numero),
     status: (toStringValue(row.status) || 'em andamento') as ObraResumo['status'],
-    tipoObra: toStringValue(row.tipo_obra),
+    tipoObra: formatConstructionType(row.tipo_obra),
     cidade: toStringValue(row.cidade),
     estado: toStringValue(row.estado),
     dataPrevistaInicio: toStringValue(row.data_prevista_inicio),
@@ -730,9 +873,10 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
     id: toNumberValue(row.id) || undefined,
     numero: toStringValue(row.numero),
     clienteId: toNumberValue(row.cliente_id),
+    responsibleOperatorUserId: toNumberValue(row.responsible_operator_user_id),
     status: (toStringValue(row.status) || 'em andamento') as ObraDetail['status'],
     empresaResponsavel: toStringValue(row.empresa_responsavel),
-    tipoObra: toStringValue(row.tipo_obra),
+    tipoObra: formatConstructionType(row.tipo_obra),
     finalidade: toStringValue(row.finalidade),
     dataPrevistaInicio: toStringValue(row.data_prevista_inicio),
     estado: toStringValue(row.estado),
@@ -808,6 +952,7 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
     faturamentoComplemento: toStringValue(row.faturamento_complemento),
     projetosArquivos: toFileListValue(row.projetos_arquivos),
     sondagensArquivos: toFileListValue(row.sondagens_arquivos),
+    fotosObra: toPhotoListValue(row.fotos_obra),
     producao,
     responsabilidades,
     contatos,
@@ -912,6 +1057,7 @@ function buildObraPayload(payload: ObraDetail) {
   return {
     numero: payload.numero,
     cliente_id: payload.clienteId,
+    responsible_operator_user_id: payload.responsibleOperatorUserId,
     status: payload.status,
     empresa_responsavel: payload.empresaResponsavel,
     tipo_obra: payload.tipoObra,
@@ -990,6 +1136,7 @@ function buildObraPayload(payload: ObraDetail) {
     faturamento_complemento: payload.faturamentoComplemento,
     projetos_arquivos: payload.projetosArquivos,
     sondagens_arquivos: payload.sondagensArquivos,
+    fotos_obra: payload.fotosObra,
     producao: payload.producao.map((item) => ({
       diametro: item.diametro,
       profundidade: item.profundidade,
@@ -1013,12 +1160,39 @@ function buildObraPayload(payload: ObraDetail) {
   }
 }
 
-export function extractApiErrorMessage(error: unknown) {
+export function isNetworkError(error: unknown): boolean {
   if (error instanceof AxiosError) {
     return (
-      (error.response?.data as { error?: string } | undefined)?.error ||
+      !error.response &&
+      (error.code === 'ERR_NETWORK' ||
+        error.code === 'ECONNABORTED' ||
+        error.message === 'Network Error' ||
+        error.message?.toLowerCase().includes('network') ||
+        error.message?.toLowerCase().includes('failed to fetch'))
+    )
+  }
+  if (error instanceof TypeError) {
+    return error.message?.toLowerCase().includes('failed to fetch') ||
+      error.message?.toLowerCase().includes('network')
+  }
+  return !navigator.onLine
+}
+
+export function extractApiErrorMessage(error: unknown) {
+  if (isNetworkError(error)) {
+    return 'Sem conexão com a internet. Verifique sua rede e tente novamente.'
+  }
+
+  if (error instanceof AxiosError) {
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      return 'A conexão demorou demais para responder. Verifique sua rede e tente novamente.'
+    }
+
+    return (
+      (error.response?.data as { error?: string; message?: string } | undefined)?.error ||
+      (error.response?.data as { error?: string; message?: string } | undefined)?.message ||
       error.message ||
-      'Nao foi possivel completar a operacao.'
+      'Não foi possível completar a operação.'
     )
   }
 
@@ -1026,7 +1200,7 @@ export function extractApiErrorMessage(error: unknown) {
     return error.message
   }
 
-  return 'Nao foi possivel completar a operacao.'
+  return 'Não foi possível completar a operação.'
 }
 
 export const dashboardService = {
@@ -1173,6 +1347,13 @@ export const usuarioService = {
       status: payload.status,
     })
   },
+  async remove(id: number) {
+    await api.delete(`/gontijo/usuarios/${id}`)
+  },
+  async listOptions() {
+    const result = await usuarioService.list({ status: 'ativo', page: 1, limit: 500 })
+    return result.items.map((item) => ({ id: item.id, nome: item.nome }))
+  },
 }
 
 export const clienteService = {
@@ -1279,6 +1460,7 @@ export const equipamentoService = {
       modalidade_id: payload.modalidadeId,
       imei: payload.imei,
       obra_numero: payload.obraNumero,
+      operador_id: payload.operadorId,
     })
     return data.id
   },
@@ -1290,6 +1472,7 @@ export const equipamentoService = {
       status: payload.status,
       imei: payload.imei,
       obra_numero: payload.obraNumero,
+      operador_id: payload.operadorId,
     })
   },
 }
@@ -1318,6 +1501,13 @@ export const obraService = {
   },
   async update(id: number, payload: ObraDetail) {
     await api.put(`/gontijo/obras/${id}`, buildObraPayload(payload))
+  },
+  async updateFotos(id: number, fotos: ObraFoto[]) {
+    const { data } = await api.patch<ApiEnvelope<Record<string, unknown>>>(`/gontijo/obras/${id}/fotos`, {
+      fotos_obra: fotos,
+    })
+    const payload = data.data || {}
+    return toPhotoListValue(payload.fotos_obra)
   },
 }
 
@@ -1506,7 +1696,7 @@ function adaptClientPortalAccess(row: Record<string, unknown>): ClientPortalAcce
     cliente: toStringValue(row.client_name || row.cliente),
     cidade: toStringValue(row.city_name || row.city || row.cidade),
     estado: toStringValue(row.state || row.estado),
-    tipoObra: toStringValue(row.construction_type || row.tipoObra),
+    tipoObra: formatConstructionType(row.construction_type || row.tipoObra),
     login: toStringValue(row.login),
     status: toStringValue(row.active) === 'N' ? 'inativo' : 'ativo',
     lastLoginAt: toStringValue(row.last_login_at || row.lastLoginAt),
@@ -1629,6 +1819,7 @@ export const solidesPointService = {
               usuarioId: Number(item.usuarioId || 0),
               nome: toStringValue(item.nome),
               cpf: toStringValue(item.cpf),
+              telefone: toStringValue(item.telefone),
               setor: toStringValue(item.setor),
               setorId: toNumberValue(item.setorId),
               ativo: toBooleanValue(item.ativo),
@@ -1650,6 +1841,200 @@ export const solidesPointService = {
               observacao: toStringValue(item.observacao),
             }
           })
+        : [],
+    }
+  },
+}
+
+export const whatsappAdminService = {
+  async getStatus(): Promise<WhatsAppIntegrationStatus> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/admin/whatsapp/status')
+    const payload = data.data || {}
+    return {
+      enabled: toBooleanValue(payload.enabled),
+      configured: toBooleanValue(payload.configured),
+      baseUrl: toStringValue(payload.baseUrl),
+      instanceId: toStringValue(payload.instanceId),
+      clientTokenConfigured: toBooleanValue(payload.clientTokenConfigured),
+      timeoutMs: Number(payload.timeoutMs || 0),
+      logsTableReady: toBooleanValue(payload.logsTableReady),
+      responsibleColumnReady: toBooleanValue(payload.responsibleColumnReady),
+      equipmentOperatorColumnReady: toBooleanValue(payload.equipmentOperatorColumnReady),
+      schedulerEnabled: toBooleanValue(payload.schedulerEnabled),
+      schedulerIntervalMinutes: Number(payload.schedulerIntervalMinutes || 0),
+      schedulerRunning: toBooleanValue(payload.schedulerRunning),
+      schedulerLastRunAt: toStringValue(payload.schedulerLastRunAt),
+      schedulerLastError: toStringValue(payload.schedulerLastError),
+      instance: {
+        connected:
+          (payload.instance as Record<string, unknown> | undefined)?.connected === true
+            ? true
+            : (payload.instance as Record<string, unknown> | undefined)?.connected === false
+              ? false
+              : null,
+        status: toStringValue((payload.instance as Record<string, unknown> | undefined)?.status),
+        endpoint: toStringValue((payload.instance as Record<string, unknown> | undefined)?.endpoint),
+        error: toStringValue((payload.instance as Record<string, unknown> | undefined)?.error),
+      },
+    }
+  },
+  async getQrCode(): Promise<WhatsAppQrCode> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/admin/whatsapp/qr-code')
+    return {
+      image: toStringValue((data.data || {}).image),
+    }
+  },
+  async getDiaryOverduePreview(): Promise<{ total: number; sendable: number; items: WhatsAppDiaryOverdueItem[] }> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/admin/whatsapp/diary-overdue-preview')
+    const payload = data.data || {}
+    return {
+      total: Number(payload.total || 0),
+      sendable: Number(payload.sendable || 0),
+      items: Array.isArray(payload.items)
+        ? (payload.items as Record<string, unknown>[]).map((item) => ({
+            key: toStringValue(item.key),
+            constructionId: Number(item.constructionId || 0),
+            constructionNumber: toStringValue(item.constructionNumber),
+            equipmentId: Number(item.equipmentId || 0),
+            equipmentName: toStringValue(item.equipmentName),
+            referenceDate: toDateOnly(item.referenceDate),
+            dueAt: toStringValue(item.dueAt),
+            responsibleOperatorUserId: toNumberValue(item.responsibleOperatorUserId),
+            operatorName: toStringValue(item.operatorName),
+            operatorPhone: toStringValue(item.operatorPhone),
+            canSend: toBooleanValue(item.canSend),
+            reason: toStringValue(item.reason),
+          }))
+        : [],
+    }
+  },
+  async sendDiaryOverdueReminders(payload: { keys: string[]; messageText?: string }): Promise<WhatsAppBulkSendResult> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>('/admin/whatsapp/diary-overdue-reminders', {
+      keys: payload.keys,
+      message_text: payload.messageText,
+    })
+    return {
+      total: Number((data.data || {}).total || 0),
+      sent: Number((data.data || {}).sent || 0),
+      skipped: Number((data.data || {}).skipped || 0),
+      failed: Number((data.data || {}).failed || 0),
+      items: Array.isArray((data.data || {}).items)
+        ? ((data.data || {}).items as Record<string, unknown>[]).map((item) => ({
+            nome: toStringValue(item.operador) || undefined,
+            telefone: toStringValue(item.telefone) || undefined,
+            ok: toBooleanValue(item.ok),
+            skipped: toBooleanValue(item.skipped),
+            reason: toStringValue(item.reason) || undefined,
+            error: toStringValue(item.error) || undefined,
+          }))
+        : [],
+    }
+  },
+  async listLogs(params: { page?: number; limit?: number; eventType?: string; status?: string; dateFrom?: string; dateTo?: string; obra?: string; operator?: string; referenceDate?: string }) {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/admin/whatsapp/logs', {
+      params: {
+        page: params.page,
+        limit: params.limit,
+        event_type: params.eventType || undefined,
+        status: params.status || undefined,
+        date_from: params.dateFrom || undefined,
+        date_to: params.dateTo || undefined,
+        obra: params.obra || undefined,
+        operator: params.operator || undefined,
+        reference_date: params.referenceDate || undefined,
+      },
+    })
+    const payload = listResult(data)
+    const summary = ((data.summary as Record<string, unknown> | undefined) || {})
+    const diaryDelays = ((summary.diaryDelays as Record<string, unknown> | undefined) || {})
+    return {
+      ...payload,
+      diaryDelaySummary: {
+        total: Number(diaryDelays.total || 0),
+        sent: Number(diaryDelays.sent || 0),
+        failed: Number(diaryDelays.failed || 0),
+        skipped: Number(diaryDelays.skipped || 0),
+        operators: Number(diaryDelays.operators || 0),
+        constructions: Number(diaryDelays.constructions || 0),
+        topOperators: Array.isArray(diaryDelays.topOperators)
+          ? (diaryDelays.topOperators as Record<string, unknown>[]).map((item) => ({
+              name: toStringValue(item.name),
+              total: Number(item.total || 0),
+              sent: Number(item.sent || 0),
+              lastDelayAt: toStringValue(item.lastDelayAt),
+            }))
+          : [],
+      } satisfies WhatsAppDiaryDelaySummary,
+      items: payload.items.map((row) => ({
+        id: Number((row as Record<string, unknown>).id || 0),
+        eventType: toStringValue((row as Record<string, unknown>).eventType),
+        eventLabel: toStringValue((row as Record<string, unknown>).eventLabel),
+        historyText: toStringValue((row as Record<string, unknown>).historyText),
+        status: (toStringValue((row as Record<string, unknown>).status) || 'queued') as WhatsAppLogRecord['status'],
+        userId: toNumberValue((row as Record<string, unknown>).userId),
+        userName: toStringValue((row as Record<string, unknown>).userName),
+        phone: toStringValue((row as Record<string, unknown>).phone),
+        constructionId: toNumberValue((row as Record<string, unknown>).constructionId),
+        obraNumero: toStringValue((row as Record<string, unknown>).obraNumero),
+        courseId: toNumberValue((row as Record<string, unknown>).courseId),
+        courseTitle: toStringValue((row as Record<string, unknown>).courseTitle),
+        referenceDate: toDateOnly((row as Record<string, unknown>).referenceDate),
+        targetName: toStringValue((row as Record<string, unknown>).targetName),
+        messageText: toStringValue((row as Record<string, unknown>).messageText),
+        providerMessageId: toStringValue((row as Record<string, unknown>).providerMessageId),
+        errorText: toStringValue((row as Record<string, unknown>).errorText),
+        createdAt: toStringValue((row as Record<string, unknown>).createdAt),
+        metadata: (((row as Record<string, unknown>).metadata as Record<string, unknown> | null) || {}),
+      })),
+    }
+  },
+  async sendPointReminders(payload: { date: string; userIds: number[]; messageText?: string }): Promise<WhatsAppBulkSendResult> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>('/admin/whatsapp/point-reminders', {
+      date: payload.date,
+      user_ids: payload.userIds,
+      message_text: payload.messageText,
+    })
+    return {
+      referenceDate: toDateOnly((data.data || {}).referenceDate),
+      total: Number((data.data || {}).total || 0),
+      sent: Number((data.data || {}).sent || 0),
+      skipped: Number((data.data || {}).skipped || 0),
+      failed: Number((data.data || {}).failed || 0),
+      items: Array.isArray((data.data || {}).items)
+        ? ((data.data || {}).items as Record<string, unknown>[]).map((item) => ({
+            userId: toNumberValue(item.userId) || undefined,
+            nome: toStringValue(item.nome) || undefined,
+            telefone: toStringValue(item.telefone) || undefined,
+            ok: toBooleanValue(item.ok),
+            skipped: toBooleanValue(item.skipped),
+            reason: toStringValue(item.reason) || undefined,
+            error: toStringValue(item.error) || undefined,
+          }))
+        : [],
+    }
+  },
+  async sendCourseNotice(payload: { courseId: number; assignmentIds?: number[]; messageText?: string }): Promise<WhatsAppBulkSendResult> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/admin/whatsapp/courses/${payload.courseId}/notify`, {
+      assignment_ids: payload.assignmentIds || [],
+      message_text: payload.messageText || undefined,
+    })
+    return {
+      courseId: Number((data.data || {}).courseId || 0),
+      courseTitle: toStringValue((data.data || {}).courseTitle),
+      total: Number((data.data || {}).total || 0),
+      sent: Number((data.data || {}).sent || 0),
+      skipped: Number((data.data || {}).skipped || 0),
+      failed: Number((data.data || {}).failed || 0),
+      items: Array.isArray((data.data || {}).items)
+        ? ((data.data || {}).items as Record<string, unknown>[]).map((item) => ({
+            userId: toNumberValue(item.userId) || undefined,
+            nome: toStringValue(item.nome) || undefined,
+            telefone: toStringValue(item.telefone) || undefined,
+            ok: toBooleanValue(item.ok),
+            skipped: toBooleanValue(item.skipped),
+            reason: toStringValue(item.reason) || undefined,
+            error: toStringValue(item.error) || undefined,
+          }))
         : [],
     }
   },
@@ -2023,19 +2408,23 @@ export const cursosApi = {
   },
 
   // Resultados
-  getResultados: async (params?: { curso_id?: number; usuario_id?: number; page?: number; limit?: number }) => {
+  getResultados: async (params?: { curso_id?: number; usuario_id?: number; busca?: string; status?: string; page?: number; limit?: number }) => {
     const q = new URLSearchParams()
     if (params?.curso_id) q.set('curso_id', String(params.curso_id))
     if (params?.usuario_id) q.set('usuario_id', String(params.usuario_id))
+    if (params?.busca) q.set('busca', params.busca)
+    if (params?.status) q.set('status', params.status)
     q.set('page', String(params?.page ?? 1))
     q.set('limit', String(params?.limit ?? 20))
     const res = await api.get<ApiEnvelope<null> & { items: TentativaRecord[]; total: number }>(`/gontijo/cursos/resultados?${q}`)
     return res.data
   },
 
-  getResultadosMatriz: async (params?: { busca?: string; page?: number; limit?: number }) => {
+  getResultadosMatriz: async (params?: { busca?: string; curso_id?: number; status?: string; page?: number; limit?: number }) => {
     const q = new URLSearchParams()
     if (params?.busca) q.set('busca', params.busca)
+    if (params?.curso_id) q.set('curso_id', String(params.curso_id))
+    if (params?.status) q.set('status', params.status)
     q.set('page', String(params?.page ?? 1))
     q.set('limit', String(params?.limit ?? 20))
     const res = await api.get<ApiEnvelope<ResultadoMatriz>>(`/gontijo/cursos/resultados/matriz?${q}`)
@@ -2147,6 +2536,7 @@ export type ProducaoPlanejada = {
 }
 
 export type ComparacaoDetalhe = {
+  index: number
   estaca: string
   diametroExec: number | null
   diametroPlan?: number | null
@@ -2155,6 +2545,10 @@ export type ComparacaoDetalhe = {
   diferencaPct?: number
   ok: boolean
   motivo?: string
+  conferenciaStatus?: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaObs?: string | null
+  conferenciaPorNome?: string | null
+  conferenciaEm?: string | null
 }
 
 export type AutoComparacao = {
@@ -2198,6 +2592,10 @@ export const conferenciaEstacasApi = {
 
   async rejeitar(id: number, obs: string): Promise<void> {
     await api.post(`/gontijo/conferencia-estacas/${id}/rejeitar`, { obs })
+  },
+
+  async definirStatusEstaca(id: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/estacas/${stakeIndex}/status`, { status, obs })
   },
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -6,76 +6,144 @@ import { conferenciaEstacasApi, type ConferenciaEstacaItem, extractApiErrorMessa
 import { formatDate } from '@/lib/utils'
 
 type ConferenciaStatus = 'pendente' | 'aprovado' | 'rejeitado'
+type StakeActionState = { diaryId: number; stakeIndex: number; status: 'aprovado' | 'rejeitado' } | null
 
-function statusLabel(s: ConferenciaStatus) {
-  if (s === 'aprovado') return 'Aprovado'
-  if (s === 'rejeitado') return 'Rejeitado'
+function statusLabel(status: ConferenciaStatus) {
+  if (status === 'aprovado') return 'Aprovado'
+  if (status === 'rejeitado') return 'Rejeitado'
   return 'Pendente'
 }
 
-function statusStyle(s: ConferenciaStatus): React.CSSProperties {
-  if (s === 'aprovado') return { background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4' }
-  if (s === 'rejeitado') return { background: '#fed7d7', color: '#9b2c2c', border: '1px solid #fc8181' }
+function statusStyle(status: ConferenciaStatus): React.CSSProperties {
+  if (status === 'aprovado') return { background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4' }
+  if (status === 'rejeitado') return { background: '#fed7d7', color: '#9b2c2c', border: '1px solid #fc8181' }
   return { background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e' }
 }
 
-function Badge({ status }: { status: ConferenciaStatus }) {
+function Badge({ status, rounded = false }: { status: ConferenciaStatus; rounded?: boolean }) {
   return (
-    <span style={{ ...statusStyle(status), borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+    <span style={{ ...statusStyle(status), borderRadius: rounded ? 999 : 4, padding: rounded ? '3px 9px' : '2px 8px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
       {statusLabel(status)}
     </span>
   )
 }
 
-function ExpandedRow({ item }: { item: ConferenciaEstacaItem }) {
+function ExpandedRow({
+  item,
+  pendingStakeAction,
+  onStakeAction,
+}: {
+  item: ConferenciaEstacaItem
+  pendingStakeAction: StakeActionState
+  onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
+}) {
   const { autoComparacao, estacas, producaoPlanejada } = item
 
   if (autoComparacao.semEstacas) {
     return <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
   }
-  if (autoComparacao.semProducao) {
+
+  if (autoComparacao.semProducao && autoComparacao.detalhes.length === 0) {
     return <p style={{ color: '#718096', fontSize: 13 }}>Sem composição de produção cadastrada para esta obra. Revisão manual necessária.</p>
   }
 
   return (
     <div>
       <p style={{ fontSize: 12, marginBottom: 8, color: '#4a5568' }}>
-        Comparação com composição de produção da obra ({producaoPlanejada.length} tipo{producaoPlanejada.length !== 1 ? 's' : ''} cadastrado{producaoPlanejada.length !== 1 ? 's' : ''})
+        Comparação com composição de produção da obra ({producaoPlanejada.length} tipo{producaoPlanejada.length !== 1 ? 's' : ''} cadastrado{producaoPlanejada.length !== 1 ? 's' : ''}).
       </p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr style={{ background: '#f7fafc' }}>
-            <th style={thStyle}>Estaca</th>
-            <th style={thStyle}>Diâm. Exec.</th>
-            <th style={thStyle}>Diâm. Plan.</th>
-            <th style={thStyle}>Prof. Exec. (m)</th>
-            <th style={thStyle}>Prof. Plan. (m)</th>
-            <th style={thStyle}>Diferença</th>
-            <th style={thStyle}>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {autoComparacao.detalhes.map((d, i) => (
-            <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-              <td style={tdStyle}>{d.estaca || '-'}</td>
-              <td style={tdStyle}>{d.diametroExec != null ? `${d.diametroExec} mm` : '-'}</td>
-              <td style={tdStyle}>{d.diametroPlan != null ? `${d.diametroPlan} mm` : '-'}</td>
-              <td style={tdStyle}>{d.profExec != null ? d.profExec : '-'}</td>
-              <td style={tdStyle}>{d.profPlan != null ? d.profPlan : '-'}</td>
-              <td style={tdStyle}>{d.diferencaPct != null ? `${d.diferencaPct}%` : d.motivo === 'sem_referencia' ? 'sem ref.' : '-'}</td>
-              <td style={tdStyle}>
-                {d.ok
-                  ? <span style={{ color: '#276749', fontWeight: 600 }}>✓ OK</span>
-                  : <span style={{ color: '#9b2c2c', fontWeight: 600 }}>✗ Fora</span>
-                }
-              </td>
+
+      {autoComparacao.semProducao ? (
+        <div style={{ marginBottom: 10, border: '1px solid #fbd38d', background: '#fffaf0', color: '#744210', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontWeight: 700 }}>
+          Sem composição de produção cadastrada para esta obra. Confira manualmente as estacas abaixo.
+        </div>
+      ) : null}
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: '#f7fafc' }}>
+              <th style={thStyle}>Estaca</th>
+              <th style={thStyle}>Diâm. Exec.</th>
+              <th style={thStyle}>Diâm. Plan.</th>
+              <th style={thStyle}>Prof. Exec. (m)</th>
+              <th style={thStyle}>Prof. Plan. (m)</th>
+              <th style={thStyle}>Diferença</th>
+              <th style={thStyle}>Sistema</th>
+              <th style={thStyle}>Conferência</th>
+              <th style={thStyle}>Ações</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {estacas.length === 0 && (
+          </thead>
+          <tbody>
+            {autoComparacao.detalhes.map((detail, fallbackIndex) => {
+              const stakeIndex = detail.index ?? fallbackIndex
+              const isApproving = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'aprovado'
+              const isRejecting = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'rejeitado'
+              const isThisPending = isApproving || isRejecting
+
+              return (
+                <tr key={stakeIndex} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={tdStyle}>{detail.estaca || '-'}</td>
+                  <td style={tdStyle}>{detail.diametroExec != null ? `${detail.diametroExec} cm` : '-'}</td>
+                  <td style={tdStyle}>{detail.diametroPlan != null ? `${detail.diametroPlan} cm` : '-'}</td>
+                  <td style={tdStyle}>{detail.profExec != null ? detail.profExec : '-'}</td>
+                  <td style={tdStyle}>{detail.profPlan != null ? detail.profPlan : '-'}</td>
+                  <td style={tdStyle}>
+                    {detail.diferencaPct != null
+                      ? `${detail.diferencaPct}%`
+                      : detail.motivo === 'sem_referencia' || detail.motivo === 'sem_producao'
+                        ? 'sem ref.'
+                        : '-'}
+                  </td>
+                  <td style={tdStyle}>
+                    {detail.ok
+                      ? <span style={{ color: '#276749', fontWeight: 700 }}>OK</span>
+                      : <span style={{ color: '#9b2c2c', fontWeight: 700 }}>Fora</span>
+                    }
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <Badge status={detail.conferenciaStatus || 'pendente'} rounded />
+                      {detail.conferenciaPorNome ? <span style={{ color: '#718096', fontSize: 11 }}>{detail.conferenciaPorNome}</span> : null}
+                      {detail.conferenciaObs ? <span style={{ color: '#718096', fontSize: 11, fontStyle: 'italic' }}>{detail.conferenciaObs}</span> : null}
+                    </div>
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
+                        disabled={Boolean(pendingStakeAction)}
+                        onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
+                      >
+                        {isApproving ? 'Aprovando...' : 'Aprovar'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 96 }}
+                        disabled={Boolean(pendingStakeAction)}
+                        onClick={() => {
+                          const obs = window.prompt(`Motivo para reprovar a estaca ${detail.estaca || fallbackIndex + 1}:`)
+                          if (obs?.trim()) onStakeAction(item.id, stakeIndex, 'rejeitado', obs.trim())
+                        }}
+                      >
+                        {isRejecting ? 'Reprovando...' : 'Reprovar'}
+                      </button>
+                      {isThisPending ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {estacas.length === 0 ? (
         <p style={{ color: '#718096', fontSize: 13, marginTop: 8 }}>Sem dados de estacas no diário.</p>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -85,6 +153,7 @@ const tdStyle: React.CSSProperties = { padding: '6px 10px', color: '#2d3748' }
 
 function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => void; onCancel: () => void }) {
   const [obs, setObs] = useState('')
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
@@ -92,7 +161,7 @@ function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => vo
         <p style={{ fontSize: 13, color: '#4a5568', marginBottom: 12 }}>Informe o motivo da rejeição (obrigatório):</p>
         <textarea
           value={obs}
-          onChange={(e) => setObs(e.target.value)}
+          onChange={(event) => setObs(event.target.value)}
           rows={4}
           style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 4, padding: 8, fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
           placeholder="Ex: Profundidade fora do padrão da obra..."
@@ -123,6 +192,7 @@ export default function DiarioConferenciaPage() {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
+  const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
 
   const query = useQuery({
     queryKey: ['conferencia-estacas', applied],
@@ -142,7 +212,7 @@ export default function DiarioConferenciaPage() {
       setActionError('')
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
-    onError: (e) => setActionError(extractApiErrorMessage(e)),
+    onError: (error) => setActionError(extractApiErrorMessage(error)),
   })
 
   const rejeitarMutation = useMutation({
@@ -152,7 +222,21 @@ export default function DiarioConferenciaPage() {
       setRejeitarId(null)
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
-    onError: (e) => setActionError(extractApiErrorMessage(e)),
+    onError: (error) => setActionError(extractApiErrorMessage(error)),
+  })
+
+  const estacaMutation = useMutation({
+    mutationFn: ({ id, stakeIndex, status, obs }: { id: number; stakeIndex: number; status: 'aprovado' | 'rejeitado'; obs?: string }) =>
+      conferenciaEstacasApi.definirStatusEstaca(id, stakeIndex, status, obs),
+    onMutate: (variables) => {
+      setActionError('')
+      setPendingStakeAction({ diaryId: variables.id, stakeIndex: variables.stakeIndex, status: variables.status })
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    },
+    onError: (error) => setActionError(extractApiErrorMessage(error)),
+    onSettled: () => setPendingStakeAction(null),
   })
 
   function handleApply() {
@@ -160,7 +244,7 @@ export default function DiarioConferenciaPage() {
   }
 
   function toggleExpanded(id: number) {
-    setExpanded((prev) => (prev === id ? null : id))
+    setExpanded((previous) => (previous === id ? null : id))
   }
 
   const items = query.data?.items ?? []
@@ -177,7 +261,7 @@ export default function DiarioConferenciaPage() {
             <input
               type="text"
               value={filters.obra_numero}
-              onChange={(e) => setFilters((f) => ({ ...f, obra_numero: e.target.value }))}
+              onChange={(event) => setFilters((current) => ({ ...current, obra_numero: event.target.value }))}
               placeholder="N° da Obra"
               className="field-input w-32"
             />
@@ -187,7 +271,7 @@ export default function DiarioConferenciaPage() {
             <label className="field-label">Status Conferência</label>
             <select
               value={filters.conferencia_status}
-              onChange={(e) => setFilters((f) => ({ ...f, conferencia_status: e.target.value }))}
+              onChange={(event) => setFilters((current) => ({ ...current, conferencia_status: event.target.value }))}
               className="field-select w-40"
             >
               <option value="">Todos</option>
@@ -208,21 +292,19 @@ export default function DiarioConferenciaPage() {
         </div>
       </section>
 
-      {actionError && (
-        <QueryFeedback type="error" title="Erro" description={actionError} />
-      )}
+      {actionError ? <QueryFeedback type="error" title="Erro" description={actionError} /> : null}
 
-      {query.isError && (
+      {query.isError ? (
         <QueryFeedback type="error" title="Erro ao carregar" description={extractApiErrorMessage(query.error)} />
-      )}
+      ) : null}
 
-      {query.isLoading && <p style={{ padding: 24, color: '#718096' }}>Carregando...</p>}
+      {query.isLoading ? <p style={{ padding: 24, color: '#718096' }}>Carregando...</p> : null}
 
-      {!query.isLoading && items.length === 0 && !query.isError && (
+      {!query.isLoading && items.length === 0 && !query.isError ? (
         <p style={{ padding: 24, color: '#718096' }}>Nenhum diário assinado encontrado.</p>
-      )}
+      ) : null}
 
-      {items.length > 0 && (
+      {items.length > 0 ? (
         <section className="app-panel" style={{ padding: 0, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
@@ -234,14 +316,14 @@ export default function DiarioConferenciaPage() {
                 <th style={thStyle}>Operador</th>
                 <th style={thStyle}>Estacas</th>
                 <th style={thStyle}>Conferência</th>
+                <th style={thStyle}>Portal</th>
                 <th style={thStyle}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
-                <>
+                <Fragment key={item.id}>
                   <tr
-                    key={item.id}
                     style={{ borderBottom: '1px solid #e2e8f0', cursor: 'pointer', background: expanded === item.id ? '#f0f9ff' : undefined }}
                     onClick={() => toggleExpanded(item.id)}
                   >
@@ -259,27 +341,29 @@ export default function DiarioConferenciaPage() {
                         : <span style={{ color: '#a0aec0' }}>Sem dados</span>
                       }
                     </td>
-                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
+                    <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Badge status={item.conferenciaStatus} />
-                        {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'aprovado' && !item.conferenciaPorNome && (
+                        {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'aprovado' && !item.conferenciaPorNome ? (
                           <span style={{ fontSize: 11, color: '#718096' }}>Auto-aprovado</span>
-                        )}
-                        {item.conferenciaPorNome && (
-                          <span style={{ fontSize: 11, color: '#718096' }}>{item.conferenciaPorNome}</span>
-                        )}
-                        {item.conferenciaEm && (
-                          <span style={{ fontSize: 11, color: '#718096' }}>{formatDate(item.conferenciaEm.slice(0, 10))}</span>
-                        )}
-                        {item.conferenciaObs && (
+                        ) : null}
+                        {item.conferenciaPorNome ? <span style={{ fontSize: 11, color: '#718096' }}>{item.conferenciaPorNome}</span> : null}
+                        {item.conferenciaEm ? <span style={{ fontSize: 11, color: '#718096' }}>{formatDate(item.conferenciaEm.slice(0, 10))}</span> : null}
+                        {item.conferenciaObs ? (
                           <span style={{ fontSize: 11, color: '#718096', fontStyle: 'italic' }} title={item.conferenciaObs}>
-                            {item.conferenciaObs.length > 40 ? item.conferenciaObs.slice(0, 40) + '…' : item.conferenciaObs}
+                            {item.conferenciaObs.length > 40 ? `${item.conferenciaObs.slice(0, 40)}...` : item.conferenciaObs}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </td>
-                    <td style={tdStyle} onClick={(e) => e.stopPropagation()}>
-                      {item.conferenciaStatus === 'pendente' && (
+                    <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
+                      {item.conferenciaStatus === 'aprovado'
+                        ? <span style={{ background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Visível</span>
+                        : <span style={{ background: '#edf2f7', color: '#718096', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Oculto</span>
+                      }
+                    </td>
+                    <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
+                      {item.conferenciaStatus === 'pendente' ? (
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             type="button"
@@ -288,7 +372,7 @@ export default function DiarioConferenciaPage() {
                             disabled={aprovarMutation.isPending}
                             onClick={() => aprovarMutation.mutate({ id: item.id })}
                           >
-                            Aprovar
+                            {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
                           </button>
                           <button
                             type="button"
@@ -300,8 +384,8 @@ export default function DiarioConferenciaPage() {
                             Rejeitar
                           </button>
                         </div>
-                      )}
-                      {item.conferenciaStatus === 'rejeitado' && (
+                      ) : null}
+                      {item.conferenciaStatus === 'rejeitado' ? (
                         <button
                           type="button"
                           className="btn"
@@ -309,40 +393,44 @@ export default function DiarioConferenciaPage() {
                           disabled={aprovarMutation.isPending}
                           onClick={() => aprovarMutation.mutate({ id: item.id })}
                         >
-                          Aprovar
+                          {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
                         </button>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
-                  {expanded === item.id && (
-                    <tr key={`${item.id}-detail`} style={{ background: '#f0f9ff' }}>
-                      <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '2px solid #bee3f8' }}>
-                        <ExpandedRow item={item} />
+                  {expanded === item.id ? (
+                    <tr style={{ background: '#f0f9ff' }}>
+                      <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '2px solid #bee3f8' }}>
+                        <ExpandedRow
+                          item={item}
+                          pendingStakeAction={pendingStakeAction}
+                          onStakeAction={(id, stakeIndex, status, obs) => estacaMutation.mutate({ id, stakeIndex, status, obs })}
+                        />
                       </td>
                     </tr>
-                  )}
-                </>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </section>
-      )}
+      ) : null}
 
-      {total > 0 && (
+      {total > 0 ? (
         <PaginationControls
           page={applied.page}
           limit={20}
           total={total}
-          onPageChange={(p) => setApplied((a) => ({ ...a, page: p }))}
+          onPageChange={(page) => setApplied((current) => ({ ...current, page }))}
         />
-      )}
+      ) : null}
 
-      {rejeitarId !== null && (
+      {rejeitarId !== null ? (
         <RejeitarModal
           onConfirm={(obs) => rejeitarMutation.mutate({ id: rejeitarId, obs })}
           onCancel={() => setRejeitarId(null)}
         />
-      )}
+      ) : null}
     </div>
   )
 }

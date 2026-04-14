@@ -71,7 +71,7 @@ export default function ObrasPage() {
                   setPage(1)
                 }}
                 placeholder="Numero da obra ou cliente"
-                className="field-input pl-9"
+                className="field-input field-input-with-icon"
               />
             </div>
           </div>

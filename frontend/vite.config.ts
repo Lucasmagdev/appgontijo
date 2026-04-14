@@ -12,6 +12,7 @@ export default defineConfig({
   },
   server: {
     port: 5200,
+    allowedHosts: ['.loca.lt'],
     proxy: {
       '/api': 'http://localhost:3000',
     },

@@ -91,7 +91,7 @@ export default function ClientesPage() {
                   setPage(1)
                 }}
                 placeholder="Razao social, email ou documento"
-                className="field-input pl-9"
+                className="field-input field-input-with-icon"
               />
             </div>
           </div>

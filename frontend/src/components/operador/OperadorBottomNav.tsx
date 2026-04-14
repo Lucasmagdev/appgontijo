@@ -85,11 +85,11 @@ export default function OperadorBottomNav() {
     >
       <div
         style={{
-          borderRadius: '24px',
+          borderRadius: '8px',
           background: 'rgba(255,255,255,0.96)',
-          border: '1px solid rgba(226,232,240,0.95)',
-          boxShadow: '0 18px 44px rgba(15,23,42,0.16)',
-          padding: '10px 8px calc(10px + env(safe-area-inset-bottom, 0px))',
+          border: '1px solid rgba(192,57,43,0.12)',
+          boxShadow: '0 12px 28px rgba(41,26,25,0.16)',
+          padding: '8px 8px calc(9px + env(safe-area-inset-bottom, 0px))',
           backdropFilter: 'blur(14px)',
         }}
       >
@@ -103,9 +103,9 @@ export default function OperadorBottomNav() {
                 onClick={() => navigate(item.route)}
                 style={{
                   border: 'none',
-                  background: active ? 'linear-gradient(180deg, #fee2e2 0%, #ffffff 100%)' : 'transparent',
-                  borderRadius: '18px',
-                  minHeight: '62px',
+                  background: active ? '#fff4f3' : 'transparent',
+                  borderRadius: '8px',
+                  minHeight: '58px',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -114,7 +114,7 @@ export default function OperadorBottomNav() {
                   cursor: 'pointer',
                   color: active ? '#c0392b' : '#94a3b8',
                   transition: 'all 0.2s ease',
-                  boxShadow: active ? 'inset 0 0 0 1px rgba(192,57,43,0.12)' : 'none',
+                  boxShadow: active ? 'inset 0 0 0 1px rgba(192,57,43,0.14)' : 'none',
                 }}
               >
                 <div style={{ display: 'grid', placeItems: 'center', width: '22px', height: '22px' }}>{item.icon}</div>

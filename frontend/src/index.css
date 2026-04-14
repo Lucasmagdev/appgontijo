@@ -6,7 +6,7 @@
   --app-bg: #edf0f4;
   --panel-bg: #ffffff;
   --panel-border: #d6dbe2;
-  --panel-shadow: 0 10px 28px rgba(16, 24, 40, 0.06);
+  --panel-shadow: 0 2px 8px rgba(16, 24, 40, 0.08);
   --sidebar-bg: #3a4048;
   --sidebar-border: #4a5058;
   --topbar-bg: #c60926;
@@ -31,10 +31,8 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Barlow', 'Segoe UI', sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 30%),
-    linear-gradient(180deg, #f3f5f8 0%, #ebeff3 100%);
+  font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: #f5f6f8;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
 }
@@ -52,9 +50,9 @@ a {
 }
 
 .app-title {
-  font-family: 'Rajdhani', 'Barlow', sans-serif;
+  font-family: inherit;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .page-shell {
@@ -73,9 +71,9 @@ a {
 }
 
 .page-heading {
-  font-family: 'Rajdhani', 'Barlow', sans-serif;
-  font-size: 2rem;
-  line-height: 1;
+  font-family: inherit;
+  font-size: 1.85rem;
+  line-height: 1.1;
   font-weight: 700;
   color: #1f2937;
   margin: 0;
@@ -90,7 +88,7 @@ a {
 .app-panel {
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 10px;
+  border-radius: 8px;
   box-shadow: var(--panel-shadow);
 }
 
@@ -104,10 +102,11 @@ a {
 
 .section-heading {
   margin: 0 0 1rem;
-  font-family: 'Rajdhani', 'Barlow', sans-serif;
-  font-size: 1.1rem;
+  font-family: inherit;
+  font-size: 1.05rem;
   color: #334155;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
+  font-weight: 700;
 }
 
 .filter-grid {
@@ -166,6 +165,10 @@ a {
   border-color: rgba(198, 9, 38, 0.55);
   box-shadow: 0 0 0 3px rgba(198, 9, 38, 0.12);
   background: #ffffff;
+}
+
+.field-input-with-icon {
+  padding-left: 2.35rem;
 }
 
 .field-textarea {

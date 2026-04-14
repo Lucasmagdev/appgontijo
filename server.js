@@ -901,6 +901,8 @@ async function runDiaryOverdueReminderSweep() {
             obraNumero: item.constructionNumber,
             equipmentId: item.equipmentId,
             equipmentName: item.equipmentName,
+            dueAt: item.dueAt,
+            delayedDiary: true,
             source: "scheduler",
           },
           skipDispatchReason: "missing_responsible_operator",
@@ -923,6 +925,8 @@ async function runDiaryOverdueReminderSweep() {
             obraNumero: item.constructionNumber,
             equipmentId: item.equipmentId,
             equipmentName: item.equipmentName,
+            dueAt: item.dueAt,
+            delayedDiary: true,
             source: "scheduler",
           },
           skipDispatchReason: "missing_phone",
@@ -944,6 +948,8 @@ async function runDiaryOverdueReminderSweep() {
           obraNumero: item.constructionNumber,
           equipmentId: item.equipmentId,
           equipmentName: item.equipmentName,
+          dueAt: item.dueAt,
+          delayedDiary: true,
           source: "scheduler",
         },
       });
@@ -1187,6 +1193,38 @@ function eventTypeLabel(eventType) {
   return eventType || "-";
 }
 
+function buildWhatsAppHistoryText(row, metadata = {}) {
+  const eventType = String(row.event_type || "");
+  const status = String(row.status || "");
+  const targetName = String(row.target_name || row.user_name || "colaborador");
+  const obraNumero = String(row.construction_number || metadata.obraNumero || "-");
+  const equipmentName = String(metadata.equipmentName || "");
+  const referenceDate = formatDateBr(normalizeDateOnly(row.reference_date));
+  const statusPrefix =
+    status === "sent"
+      ? "Mensagem enviada"
+      : status === "failed"
+        ? "Falha no envio"
+        : status === "skipped"
+          ? "Envio ignorado"
+          : "Envio registrado";
+
+  if (eventType === "diary_overdue_reminder") {
+    const equipmentText = equipmentName ? ` / equipamento ${equipmentName}` : "";
+    return `${statusPrefix}: ${targetName} atrasou o diario da obra ${obraNumero}${equipmentText}, referente ao dia ${referenceDate}.`;
+  }
+
+  if (eventType === "point_missing_reminder") {
+    return `${statusPrefix}: lembrete de ponto para ${targetName}, referente ao dia ${referenceDate}.`;
+  }
+
+  if (eventType === "course_available_notice") {
+    return `${statusPrefix}: aviso de curso disponivel para ${targetName}${row.course_title ? ` (${row.course_title})` : ""}.`;
+  }
+
+  return `${statusPrefix}: ${eventTypeLabel(eventType)} para ${targetName}.`;
+}
+
 function buildDiaryReminderMessage({ operatorName, obraNumero, referenceDate }) {
   return `Olá, ${operatorName || "colaborador"}! O diário da obra ${obraNumero || "-"} referente ao dia ${formatDateBr(referenceDate)} está atrasado. Por favor, acesse o app da Gontijo e envie o diário o quanto antes.`;
 }
@@ -1209,6 +1247,20 @@ function buildPointReminderMessage({ userName, referenceDate }) {
 
 function buildCourseAvailableMessage({ userName, courseTitle }) {
   return `Olá, ${userName || "colaborador"}! O curso "${courseTitle || "Treinamento"}" já está disponível na plataforma da Gontijo. Acesse o app, assista ao conteúdo e conclua a prova, se houver.`;
+}
+
+function renderCourseNoticeMessage(template, { userName, courseTitle }) {
+  const base = textOrNull(template) || buildCourseAvailableMessage({ userName, courseTitle });
+  return base
+    .replace(/\{colaborador\}/gi, userName || "colaborador")
+    .replace(/\{curso\}/gi, courseTitle || "Treinamento");
+}
+
+function renderPointReminderMessage(template, { userName, referenceDate }) {
+  const base = textOrNull(template) || buildPointReminderMessage({ userName, referenceDate });
+  return base
+    .replace(/\{colaborador\}/gi, userName || "colaborador")
+    .replace(/\{data\}/gi, formatDateBr(referenceDate));
 }
 
 const whatsappSchedulerState = {
@@ -2946,6 +2998,10 @@ app.get("/api/admin/whatsapp/logs", requireAdmin, async (req, res) => {
       where.push("(c.construction_number LIKE ? OR l.target_name LIKE ?)");
       params.push(`%${String(req.query.obra).trim()}%`, `%${String(req.query.obra).trim()}%`);
     }
+    if (req.query.operator) {
+      where.push("(l.target_name LIKE ? OR u.name LIKE ?)");
+      params.push(`%${String(req.query.operator).trim()}%`, `%${String(req.query.operator).trim()}%`);
+    }
     if (req.query.reference_date) {
       where.push("l.reference_date = ?");
       params.push(normalizeDateOnly(req.query.reference_date));
@@ -2955,9 +3011,44 @@ app.get("/api/admin/whatsapp/logs", requireAdmin, async (req, res) => {
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total
        FROM whatsapp_notification_logs l
+       LEFT JOIN users u ON u.id = l.user_id
        LEFT JOIN constructions c ON c.id = l.construction_id
        ${whereSql}`,
       params
+    );
+
+    const diarySummaryWhere = [...where, "l.event_type = 'diary_overdue_reminder'"];
+    const diarySummaryWhereSql = `WHERE ${diarySummaryWhere.join(" AND ")}`;
+    const diarySummaryParams = [...params];
+    const [[summaryRow]] = await db.query(
+      `SELECT COUNT(*) AS total_delays,
+              SUM(CASE WHEN l.status = 'sent' THEN 1 ELSE 0 END) AS sent_delays,
+              SUM(CASE WHEN l.status = 'failed' THEN 1 ELSE 0 END) AS failed_delays,
+              SUM(CASE WHEN l.status = 'skipped' THEN 1 ELSE 0 END) AS skipped_delays,
+              COUNT(DISTINCT COALESCE(l.user_id, l.target_name)) AS operators_count,
+              COUNT(DISTINCT l.construction_id) AS constructions_count
+       FROM whatsapp_notification_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       LEFT JOIN constructions c ON c.id = l.construction_id
+       LEFT JOIN cursos cu ON cu.id = l.course_id
+       ${diarySummaryWhereSql}`,
+      diarySummaryParams
+    );
+
+    const [operatorSummaryRows] = await db.query(
+      `SELECT COALESCE(NULLIF(l.target_name, ''), u.name, 'Sem operador') AS operator_name,
+              COUNT(*) AS total_delays,
+              SUM(CASE WHEN l.status = 'sent' THEN 1 ELSE 0 END) AS sent_delays,
+              MAX(l.created_at) AS last_delay_at
+       FROM whatsapp_notification_logs l
+       LEFT JOIN users u ON u.id = l.user_id
+       LEFT JOIN constructions c ON c.id = l.construction_id
+       LEFT JOIN cursos cu ON cu.id = l.course_id
+       ${diarySummaryWhereSql}
+       GROUP BY operator_name
+       ORDER BY total_delays DESC, operator_name ASC
+       LIMIT 8`,
+      diarySummaryParams
     );
 
     const [rows] = await db.query(
@@ -2977,29 +3068,49 @@ app.get("/api/admin/whatsapp/logs", requireAdmin, async (req, res) => {
 
     return res.json({
       ok: true,
-      data: rows.map((row) => ({
-        id: Number(row.id),
-        eventType: String(row.event_type || ""),
-        eventLabel: eventTypeLabel(String(row.event_type || "")),
-        status: String(row.status || ""),
-        userId: row.user_id == null ? null : Number(row.user_id),
-        userName: String(row.user_name || ""),
-        phone: String(row.phone || ""),
-        constructionId: row.construction_id == null ? null : Number(row.construction_id),
-        obraNumero: String(row.construction_number || ""),
-        courseId: row.course_id == null ? null : Number(row.course_id),
-        courseTitle: String(row.course_title || ""),
-        referenceDate: normalizeDateOnly(row.reference_date),
-        targetName: String(row.target_name || ""),
-        messageText: String(row.message_text || ""),
-        providerMessageId: String(row.provider_message_id || ""),
-        errorText: String(row.error_text || ""),
-        createdAt: row.created_at,
-        metadata: parseJsonSafe(row.metadata_json, {}),
-      })),
+      data: rows.map((row) => {
+        const metadata = parseJsonSafe(row.metadata_json, {});
+        return {
+          id: Number(row.id),
+          eventType: String(row.event_type || ""),
+          eventLabel: eventTypeLabel(String(row.event_type || "")),
+          historyText: buildWhatsAppHistoryText(row, metadata),
+          status: String(row.status || ""),
+          userId: row.user_id == null ? null : Number(row.user_id),
+          userName: String(row.user_name || ""),
+          phone: String(row.phone || ""),
+          constructionId: row.construction_id == null ? null : Number(row.construction_id),
+          obraNumero: String(row.construction_number || ""),
+          courseId: row.course_id == null ? null : Number(row.course_id),
+          courseTitle: String(row.course_title || ""),
+          referenceDate: normalizeDateOnly(row.reference_date),
+          targetName: String(row.target_name || ""),
+          messageText: String(row.message_text || ""),
+          providerMessageId: String(row.provider_message_id || ""),
+          errorText: String(row.error_text || ""),
+          createdAt: row.created_at,
+          metadata,
+        };
+      }),
       total: Number(total || 0),
       page,
       limit,
+      summary: {
+        diaryDelays: {
+          total: Number(summaryRow?.total_delays || 0),
+          sent: Number(summaryRow?.sent_delays || 0),
+          failed: Number(summaryRow?.failed_delays || 0),
+          skipped: Number(summaryRow?.skipped_delays || 0),
+          operators: Number(summaryRow?.operators_count || 0),
+          constructions: Number(summaryRow?.constructions_count || 0),
+          topOperators: operatorSummaryRows.map((row) => ({
+            name: String(row.operator_name || "Sem operador"),
+            total: Number(row.total_delays || 0),
+            sent: Number(row.sent_delays || 0),
+            lastDelayAt: row.last_delay_at,
+          })),
+        },
+      },
     });
   } catch (error) {
     return res.status(500).json({
@@ -3075,6 +3186,8 @@ app.post("/api/admin/whatsapp/diary-overdue-reminders", requireAdmin, async (req
           obraNumero: item.constructionNumber,
           equipmentId: item.equipmentId,
           equipmentName: item.equipmentName,
+          dueAt: item.dueAt,
+          delayedDiary: true,
           source: "manual_diary_overdue_preview",
         },
         skipDispatchReason: item.reason || "",
@@ -3146,7 +3259,7 @@ app.post("/api/admin/whatsapp/point-reminders", requireAdmin, async (req, res) =
         phone: user.telefone,
         referenceDate,
         targetName: user.nome,
-        messageText: messageText || buildPointReminderMessage({ userName: user.nome, referenceDate }),
+        messageText: renderPointReminderMessage(messageText, { userName: user.nome, referenceDate }),
         metadata: {
           source: "manual_point_check",
           cpf: user.documento,
@@ -3189,6 +3302,7 @@ app.post("/api/admin/whatsapp/courses/:courseId/notify", requireAdmin, async (re
 
     const courseId = Number(req.params.courseId || 0);
     const assignmentIds = [...new Set((Array.isArray(req.body?.assignment_ids) ? req.body.assignment_ids : []).map((item) => Number(item || 0)).filter(Boolean))];
+    const messageText = textOrNull(req.body?.message_text);
     if (!courseId) {
       return res.status(400).json({ ok: false, message: "Curso inválido para envio do aviso." });
     }
@@ -3253,7 +3367,7 @@ app.post("/api/admin/whatsapp/courses/:courseId/notify", requireAdmin, async (re
         phone: user.phone,
         courseId,
         targetName: user.name,
-        messageText: buildCourseAvailableMessage({ userName: user.name, courseTitle: course.titulo }),
+        messageText: renderCourseNoticeMessage(messageText, { userName: user.name, courseTitle: course.titulo }),
         metadata: {
           source: "manual_course_notice",
           courseTitle: String(course.titulo || ""),
@@ -4000,6 +4114,7 @@ function collectPortalPhotoCandidates(value, context, output) {
         url: text,
         titulo: context.titulo || "Foto da obra",
         dataDiario: context.dataDiario || "",
+        dataFoto: context.dataFoto || context.dataDiario || "",
         diarioId: context.diarioId || 0,
       });
     }
@@ -4029,6 +4144,20 @@ function collectPortalPhotoCandidates(value, context, output) {
       collectPortalPhotoCandidates(direct, {
         ...context,
         titulo: firstFilledText(value.title, value.titulo, value.name, value.nome, value.label, context.titulo),
+        dataFoto: firstFilledText(
+          value.dataFoto,
+          value.data_foto,
+          value.photoDate,
+          value.photo_date,
+          value.date,
+          value.data,
+          value.createdAt,
+          value.created_at,
+          value.criadoEm,
+          value.criado_em,
+          context.dataFoto,
+          context.dataDiario
+        ),
       }, output);
     }
   }

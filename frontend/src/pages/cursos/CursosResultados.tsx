@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { AlertCircle, ArrowLeft, BarChart2, BookOpen, CheckCircle, CircleDashed, FileText, Grid2x2, List, Search, XCircle } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BarChart2, BookOpen, CheckCircle, CircleDashed, FileText, Filter, Grid2x2, List, Search, XCircle } from 'lucide-react'
 import { cursosApi, type ResultadoMatriz, type TentativaRecord } from '@/lib/gontijo-api'
 
 function StatusBadge({ aprovado }: { aprovado: number }) {
@@ -80,30 +80,46 @@ export default function CursosResultadosPage() {
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [cursoId, setCursoId] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [view, setView] = useState<'lista' | 'matriz'>('matriz')
 
+  const { data: cursosData } = useQuery({
+    queryKey: ['cursos-filter-options'],
+    queryFn: () => cursosApi.list(1, 500),
+  })
+
   const { data: listaData, isLoading: listaLoading } = useQuery({
-    queryKey: ['resultados', page],
-    queryFn: () => cursosApi.getResultados({ page, limit: 30 }),
+    queryKey: ['resultados', page, search, cursoId, statusFilter],
+    queryFn: () =>
+      cursosApi.getResultados({
+        page,
+        limit: 30,
+        busca: search || undefined,
+        curso_id: cursoId ? Number(cursoId) : undefined,
+        status: statusFilter || undefined,
+      }),
     enabled: view === 'lista',
   })
 
   const { data: matrizData, isLoading: matrizLoading } = useQuery({
-    queryKey: ['resultados-matriz', page, search],
-    queryFn: () => cursosApi.getResultadosMatriz({ page, limit: 20, busca: search }),
+    queryKey: ['resultados-matriz', page, search, cursoId, statusFilter],
+    queryFn: () =>
+      cursosApi.getResultadosMatriz({
+        page,
+        limit: 20,
+        busca: search,
+        curso_id: cursoId ? Number(cursoId) : undefined,
+        status: statusFilter || undefined,
+      }),
     enabled: view === 'matriz',
   })
 
   const items = useMemo(() => {
-    const base = listaData?.items ?? []
-    if (!search.trim()) return base
-    const q = search.toLowerCase()
-    return base.filter((r) =>
-      r.usuario_nome?.toLowerCase().includes(q) ||
-      r.curso_titulo?.toLowerCase().includes(q) ||
-      r.prova_titulo?.toLowerCase().includes(q)
-    )
-  }, [listaData?.items, search])
+    return listaData?.items ?? []
+  }, [listaData?.items])
+
+  const cursos = cursosData?.items ?? []
 
   const totalLista = listaData?.total ?? 0
   const totalListaPages = Math.max(1, Math.ceil(totalLista / 30))
@@ -145,21 +161,80 @@ export default function CursosResultadosPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative max-w-sm">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value)
-              setPage(1)
-            }}
-            placeholder={view === 'matriz' ? 'Buscar colaborador, apelido ou CPF...' : 'Buscar por colaborador ou curso...'}
-            className="app-input w-full pl-9 text-sm"
-          />
+      <div className="app-panel p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+          <Filter size={16} className="text-[var(--brand-red)]" />
+          Filtros dos resultados
         </div>
 
-        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(180px,1fr)_minmax(180px,1fr)_auto] lg:items-end">
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Busca</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
+                placeholder={view === 'matriz' ? 'Colaborador, apelido ou CPF...' : 'Colaborador, curso ou prova...'}
+                className="app-input w-full pl-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Curso</label>
+            <select
+              value={cursoId}
+              onChange={(event) => {
+                setCursoId(event.target.value)
+                setPage(1)
+              }}
+              className="app-input w-full text-sm"
+            >
+              <option value="">Todos os cursos</option>
+              {cursos.map((curso) => (
+                <option key={curso.id} value={curso.id}>{curso.titulo}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value)
+                setPage(1)
+              }}
+              className="app-input w-full text-sm"
+            >
+              <option value="">Todos os status</option>
+              <option value="pendente">Prova pendente</option>
+              <option value="aprovado">Aprovado</option>
+              <option value="reprovado">Precisa refazer</option>
+              <option value="somente_curso">Somente curso</option>
+              <option value="nao_atribuido">Nao atribuido</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('')
+              setCursoId('')
+              setStatusFilter('')
+              setPage(1)
+            }}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+          >
+            Limpar
+          </button>
+        </div>
+
+        <div className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <button
             onClick={() => { setView('matriz'); setPage(1) }}
             className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${view === 'matriz' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}

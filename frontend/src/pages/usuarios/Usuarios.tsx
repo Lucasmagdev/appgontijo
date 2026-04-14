@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Search, UserPlus } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Pencil, Search, Trash2, UserPlus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -46,6 +46,15 @@ export default function UsuariosPage() {
     })
   }, [debouncedSearch, page, queryClient, statusFilter, usuariosQuery.data])
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await usuarioService.remove(id)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+    },
+  })
+
   return (
     <div className="page-shell">
       <div className="page-header">
@@ -76,7 +85,7 @@ export default function UsuariosPage() {
                   setSearch(event.target.value)
                   setPage(1)
                 }}
-                className="field-input pl-9"
+                className="field-input field-input-with-icon"
                 placeholder="Nome, apelido ou login"
               />
             </div>
@@ -164,6 +173,18 @@ export default function UsuariosPage() {
                             >
                               <Pencil size={14} />
                             </Link>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-icon text-red-600"
+                              title="Excluir usuario"
+                              onClick={async () => {
+                                const ok = window.confirm(`Excluir o usuario ${user.nome}?`)
+                                if (!ok) return
+                                await deleteMutation.mutateAsync(user.id)
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </td>
                       </tr>

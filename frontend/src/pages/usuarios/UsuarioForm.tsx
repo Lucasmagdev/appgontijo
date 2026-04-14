@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { extractApiErrorMessage, type UsuarioPayload, usuarioService } from '@/lib/gontijo-api'
@@ -58,6 +58,20 @@ export default function UsuarioFormPage() {
       if (isEditing) {
         await queryClient.invalidateQueries({ queryKey: ['usuario', id] })
       }
+      navigate('/usuarios')
+    },
+    onError: (error) => {
+      setSubmitError(extractApiErrorMessage(error))
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!id) return
+      await usuarioService.remove(Number(id))
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       navigate('/usuarios')
     },
     onError: (error) => {
@@ -211,7 +225,24 @@ export default function UsuarioFormPage() {
             </div>
           </section>
 
-          <div className="inline-actions justify-end">
+          <div className="inline-actions justify-between">
+            {isEditing ? (
+              <button
+                type="button"
+                className="btn btn-secondary text-red-600"
+                disabled={deleteMutation.isPending}
+                onClick={async () => {
+                  const ok = window.confirm('Tem certeza que deseja excluir este usuario? Essa acao nao pode ser desfeita.')
+                  if (!ok) return
+                  await deleteMutation.mutateAsync()
+                }}
+              >
+                <Trash2 size={15} />
+                {deleteMutation.isPending ? 'Excluindo...' : 'Excluir usuario'}
+              </button>
+            ) : (
+              <span />
+            )}
             <Link to="/usuarios" className="btn btn-secondary">
               Cancelar
             </Link>

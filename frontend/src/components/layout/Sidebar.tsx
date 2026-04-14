@@ -4,12 +4,13 @@ import {
   FileText, BarChart3, KeyRound, BookOpen,
   Fingerprint,
   ClipboardCheck,
+  MessageCircle,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   clienteService, dashboardService, diarioService,
-  equipamentoService, modalidadeService, obraService, usuarioService, solidesPointService,
+  equipamentoService, modalidadeService, obraService, usuarioService, solidesPointService, whatsappAdminService,
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ const navItems = [
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
   { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
+  { label: 'WhatsApp', to: '/whatsapp', icon: MessageCircle },
   { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
   { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
@@ -57,6 +59,8 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
       void queryClient.prefetchQuery({ queryKey: ['equipamentos'], queryFn: equipamentoService.list })
     } else if (to === '/ponto-verificacao') {
       void queryClient.prefetchQuery({ queryKey: ['solides-status'], queryFn: solidesPointService.getStatus })
+    } else if (to === '/whatsapp') {
+      void queryClient.prefetchQuery({ queryKey: ['whatsapp-status'], queryFn: whatsappAdminService.getStatus })
     }
   }
 
@@ -69,14 +73,21 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
     >
       <div className="flex h-[70px] items-center border-b border-white/8 px-4">
         {open ? (
-          <div className="leading-none">
-            <div className="app-title text-[28px] tracking-[0.16em] text-white">GONTIJO</div>
-            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-300">
-              Fundacoes
-            </div>
+          <div className="flex h-12 w-32 items-center justify-center">
+            <img
+              src="/gontijo-logo-diarios.png"
+              alt="Gontijo Fundações"
+              className="max-h-full max-w-full object-contain"
+            />
           </div>
         ) : (
-          <div className="app-title mx-auto text-2xl tracking-[0.2em] text-white">G</div>
+          <div className="mx-auto flex h-10 w-10 items-center justify-center">
+            <img
+              src="/gontijo-logo-diarios.png"
+              alt="Gontijo"
+              className="h-full w-full object-contain"
+            />
+          </div>
         )}
 
         {open && (
@@ -133,7 +144,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
                 )
               }
             >
-              <Icon size={16} className="shrink-0" />
+              <Icon size={27} className="shrink-0" strokeWidth={2.2} />
               {open && <span className="truncate">{item.label}</span>}
             </NavLink>
           )

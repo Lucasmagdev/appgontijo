@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
@@ -65,10 +65,71 @@ function AppBootstrap() {
   return null
 }
 
+function useOnlineStatus() {
+  const [online, setOnline] = useState(navigator.onLine)
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+  return online
+}
+
+function OperadorOfflineBanner() {
+  const online = useOnlineStatus()
+  const [justReconnected, setJustReconnected] = useState(false)
+  const isFirstRender = useRef(true)
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return }
+    if (online) {
+      setJustReconnected(true)
+      const t = setTimeout(() => setJustReconnected(false), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [online])
+
+  if (online && !justReconnected) return null
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        padding: '10px 16px',
+        textAlign: 'center',
+        fontSize: '13px',
+        fontWeight: 700,
+        letterSpacing: '0.02em',
+        background: online ? '#16a34a' : '#b91c1c',
+        color: '#fff',
+        transition: 'background 0.3s',
+      }}
+    >
+      {online
+        ? '✓ Conexão restabelecida'
+        : '⚠ Sem conexão com a internet — salvar não funcionará até voltar a rede'}
+    </div>
+  )
+}
+
 function OperadorPrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isReady } = useOperadorAuth()
   if (!isReady) return null
-  return isAuthenticated ? <>{children}</> : <Navigate to="/operador/login" replace />
+  return isAuthenticated ? (
+    <>
+      <OperadorOfflineBanner />
+      {children}
+    </>
+  ) : <Navigate to="/operador/login" replace />
 }
 
 function OperadorLoginRoute() {

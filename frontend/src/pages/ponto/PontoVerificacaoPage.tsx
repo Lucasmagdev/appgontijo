@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,6 +10,8 @@ import {
   Search,
   ShieldAlert,
   UserRoundX,
+  MessageCircle,
+  X,
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -17,11 +19,13 @@ import {
   setorService,
   solidesPointService,
   usuarioService,
+  whatsappAdminService,
   type SolidesPointCheckParams,
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
 type FiltersState = SolidesPointCheckParams
+type PointAudienceFilter = 'todos' | 'sem_ponto' | 'com_ponto'
 
 const DEFAULT_FILTERS: FiltersState = {
   date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }),
@@ -56,6 +60,10 @@ function formatCpf(value: string) {
   const digits = String(value || '').replace(/\D/g, '')
   if (digits.length !== 11) return value || '-'
   return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+}
+
+function buildDefaultPointReminderMessage(userName: string, dateLabel: string) {
+  return `Olá, ${userName || 'colaborador'}! Identificamos que seu ponto de ${dateLabel} precisa ser conferido no Tangerino. Por favor, atualize ou regularize o ponto o quanto antes.`
 }
 
 function SummaryCard({
@@ -99,6 +107,18 @@ export default function PontoVerificacaoPage() {
   const [showOnlyLinked, setShowOnlyLinked] = useState(false)
   const [submittedFilters, setSubmittedFilters] = useState<FiltersState | null>(null)
   const [requestVersion, setRequestVersion] = useState(0)
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([])
+  const [sendSummary, setSendSummary] = useState('')
+  const [pointAudienceFilter, setPointAudienceFilter] = useState<PointAudienceFilter>('todos')
+  const [sendModalUserIds, setSendModalUserIds] = useState<number[]>([])
+  const [sendMessage, setSendMessage] = useState('')
+  const [sendProgress, setSendProgress] = useState(0)
+  const sendProgressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const POINT_MESSAGE_VARIABLES = [
+    { token: '{colaborador}', label: 'Colaborador' },
+    { token: '{data}', label: 'Data' },
+  ]
 
   const statusQuery = useQuery({
     queryKey: ['solides-status'],
@@ -156,9 +176,51 @@ export default function PontoVerificacaoPage() {
   const isFirstVerificationLoading = verificationQuery.isLoading && !hasVerificationData
   const visibleItems = useMemo(() => {
     const items = verificationQuery.data?.items ?? []
-    if (!showOnlyLinked) return items
-    return items.filter((item) => Boolean(item.solidesEmployeeId))
-  }, [showOnlyLinked, verificationQuery.data?.items])
+    const linkedItems = showOnlyLinked ? items.filter((item) => Boolean(item.solidesEmployeeId)) : items
+    if (pointAudienceFilter === 'sem_ponto') return linkedItems.filter((item) => item.status === 'sem_ponto')
+    if (pointAudienceFilter === 'com_ponto') return linkedItems.filter((item) => item.totalBatidas > 0 && item.status !== 'sem_ponto')
+    return linkedItems
+  }, [pointAudienceFilter, showOnlyLinked, verificationQuery.data?.items])
+
+  useEffect(() => {
+    setSelectedUserIds([])
+  }, [pointAudienceFilter, verificationQuery.data?.date, showOnlyLinked])
+
+  const sendRemindersMutation = useMutation({
+    mutationFn: (payload: { userIds: number[]; messageText: string }) =>
+      whatsappAdminService.sendPointReminders({
+        date: verificationQuery.data?.date || filters.date,
+        userIds: payload.userIds,
+        messageText: payload.messageText,
+      }),
+    onSuccess: (result) => {
+      setSendSummary(
+        `WhatsApp processado: ${result.sent} enviado(s), ${result.skipped} ignorado(s) e ${result.failed} falha(s).`
+      )
+      setSelectedUserIds([])
+      setSendModalUserIds([])
+      setSendMessage('')
+    },
+    onError: (error) => {
+      setSendSummary(extractApiErrorMessage(error))
+    },
+  })
+
+  useEffect(() => {
+    if (sendRemindersMutation.isPending) {
+      setSendProgress(0)
+      const total = Math.max(1, sendModalUserIds.length)
+      const estimatedMs = Math.max(2000, total * 1800)
+      const step = 92 / (estimatedMs / 100)
+      sendProgressRef.current = setInterval(() => {
+        setSendProgress((prev) => Math.min(prev + step, 92))
+      }, 100)
+    } else {
+      if (sendProgressRef.current) clearInterval(sendProgressRef.current)
+      if (sendRemindersMutation.isSuccess) setSendProgress(100)
+    }
+    return () => { if (sendProgressRef.current) clearInterval(sendProgressRef.current) }
+  }, [sendRemindersMutation.isPending, sendRemindersMutation.isSuccess])
 
   function updateField<K extends keyof FiltersState>(key: K, value: FiltersState[K]) {
     setFilters((current) => ({ ...current, [key]: value }))
@@ -166,9 +228,46 @@ export default function PontoVerificacaoPage() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSendSummary('')
     setSubmittedFilters({ ...filters })
     setRequestVersion((current) => current + 1)
     setHasSearched(true)
+  }
+
+  function toggleUserSelection(userId: number) {
+    setSelectedUserIds((current) =>
+      current.includes(userId) ? current.filter((item) => item !== userId) : [...current, userId]
+    )
+  }
+
+  const selectedVisibleCount = selectedUserIds.filter((item) =>
+    visibleItems.some((row) => row.usuarioId === item)
+  ).length
+
+  function openSendModal(userIds: number[]) {
+    const uniqueUserIds = [...new Set(userIds)].filter((userId) =>
+      visibleItems.some((row) => row.usuarioId === userId)
+    )
+    if (!uniqueUserIds.length) return
+    const firstUser = visibleItems.find((row) => row.usuarioId === uniqueUserIds[0])
+    setSendModalUserIds(uniqueUserIds)
+    if (!sendMessage.trim()) {
+      setSendMessage(buildDefaultPointReminderMessage(firstUser?.nome || 'colaborador', checkedDateLabel))
+    }
+    setSendSummary('')
+  }
+
+  function closeSendModal() {
+    if (sendRemindersMutation.isPending) return
+    setSendModalUserIds([])
+    setSendMessage('')
+  }
+
+  function confirmSendReminders() {
+    sendRemindersMutation.mutate({
+      userIds: sendModalUserIds,
+      messageText: sendMessage.trim(),
+    })
   }
 
   return (
@@ -502,6 +601,16 @@ export default function PontoVerificacaoPage() {
                 >
                   {showOnlyLinked ? 'Mostrando somente com vínculo' : 'Filtrar: somente com vínculo'}
                 </button>
+                <select
+                  className="field-select"
+                  style={{ width: '13rem' }}
+                  value={pointAudienceFilter}
+                  onChange={(event) => setPointAudienceFilter(event.target.value as PointAudienceFilter)}
+                >
+                  <option value="todos">Todos os pontos</option>
+                  <option value="sem_ponto">Somente sem ponto</option>
+                  <option value="com_ponto">Somente com ponto</option>
+                </select>
                 <div className="rounded-full bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
                   {visibleItems.length}
                   {showOnlyLinked ? ` de ${verificationQuery.data.items.length}` : ''} registro(s)
@@ -509,10 +618,105 @@ export default function PontoVerificacaoPage() {
               </div>
             </div>
 
+            <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!visibleItems.length || sendRemindersMutation.isPending}
+                onClick={() => openSendModal(visibleItems.map((item) => item.usuarioId))}
+              >
+                {sendRemindersMutation.isPending ? <LoaderCircle size={15} className="animate-spin" /> : <MessageCircle size={15} />}
+                Enviar WhatsApp para todos os filtrados
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={!selectedVisibleCount || sendRemindersMutation.isPending}
+                onClick={() => openSendModal(selectedUserIds)}
+              >
+                <MessageCircle size={15} />
+                Enviar para selecionados ({selectedVisibleCount})
+              </button>
+              <div className="text-sm text-slate-600">
+                Lembrete manual para atualizar o ponto no Tangerino usando o recorte atual.
+              </div>
+            </div>
+
+            {/* Builder de mensagem — sempre visível */}
+            <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Mensagem do lembrete</div>
+                <button
+                  type="button"
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-red-200 hover:text-red-700"
+                  onClick={() => setSendMessage(buildDefaultPointReminderMessage('colaborador', checkedDateLabel))}
+                >
+                  Restaurar padrão
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {POINT_MESSAGE_VARIABLES.map((v) => (
+                  <button
+                    key={v.token}
+                    type="button"
+                    onClick={() => setSendMessage((cur) => cur + v.token)}
+                    className="rounded-xl border border-white bg-white px-3 py-2 text-left shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:border-red-200 hover:ring-red-100"
+                  >
+                    <span className="block text-sm font-black text-red-700">{v.token}</span>
+                    <span className="block text-xs text-slate-500">{v.label}</span>
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className="field-textarea min-h-[90px]"
+                value={sendMessage}
+                onChange={(e) => setSendMessage(e.target.value)}
+                placeholder="Digite a mensagem que será enviada no WhatsApp"
+              />
+              <p className="text-xs text-slate-500">As variáveis são substituídas pelo dado real de cada colaborador no envio.</p>
+            </div>
+
+            {/* Barra de progresso / resultado */}
+            {(sendRemindersMutation.isPending || sendRemindersMutation.isSuccess) ? (
+              <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
+                  {sendRemindersMutation.isPending
+                    ? <span className="animate-pulse">Enviando... {Math.round(sendProgress / 100 * sendModalUserIds.length)} de {sendModalUserIds.length}</span>
+                    : <span className="text-emerald-700">Concluído — {sendRemindersMutation.data.total} processado(s)</span>}
+                  <span className="text-xs text-slate-400">{Math.round(sendProgress)}%</span>
+                </div>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100">
+                  {sendRemindersMutation.isPending ? (
+                    <div className="h-full rounded-full bg-red-500 transition-all duration-200" style={{ width: `${sendProgress}%` }} />
+                  ) : (
+                    <div className="flex h-full w-full overflow-hidden rounded-full">
+                      {sendRemindersMutation.data.sent > 0 && <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(sendRemindersMutation.data.sent / sendRemindersMutation.data.total) * 100}%` }} />}
+                      {sendRemindersMutation.data.skipped > 0 && <div className="h-full bg-amber-400 transition-all duration-500" style={{ width: `${(sendRemindersMutation.data.skipped / sendRemindersMutation.data.total) * 100}%` }} />}
+                      {sendRemindersMutation.data.failed > 0 && <div className="h-full bg-red-500 transition-all duration-500" style={{ width: `${(sendRemindersMutation.data.failed / sendRemindersMutation.data.total) * 100}%` }} />}
+                    </div>
+                  )}
+                </div>
+                {sendRemindersMutation.isSuccess && (
+                  <div className="flex flex-wrap gap-4 text-xs font-semibold">
+                    <span className="flex items-center gap-1.5 text-emerald-700"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />{sendRemindersMutation.data.sent} enviado(s)</span>
+                    <span className="flex items-center gap-1.5 text-amber-700"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />{sendRemindersMutation.data.skipped} ignorado(s)</span>
+                    <span className="flex items-center gap-1.5 text-red-700"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />{sendRemindersMutation.data.failed} falha(s)</span>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {sendSummary && !sendRemindersMutation.isPending && !sendRemindersMutation.isSuccess ? (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {sendSummary}
+              </div>
+            ) : null}
+
             <div className="table-scroll">
               <table className="data-table min-w-[1550px]">
                 <thead>
                   <tr>
+                    <th>Enviar</th>
                     <th>Colaborador</th>
                     <th>Setor</th>
                     <th>CPF</th>
@@ -535,6 +739,13 @@ export default function PontoVerificacaoPage() {
                           item.statusTone === 'amber' && 'bg-amber-50/30'
                         )}
                       >
+                        <td className="text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.includes(item.usuarioId)}
+                            onChange={() => toggleUserSelection(item.usuarioId)}
+                          />
+                        </td>
                         <td className="font-semibold text-slate-800">
                           <div>{item.nome}</div>
                           <div className="text-xs text-slate-400">
@@ -585,7 +796,7 @@ export default function PontoVerificacaoPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={10}>
+                      <td colSpan={11}>
                         <QueryFeedback
                           type="empty"
                           title={
@@ -606,6 +817,41 @@ export default function PontoVerificacaoPage() {
               </table>
             </div>
           </section>
+
+          {sendModalUserIds.length ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6">
+              <div className="w-full max-w-xl rounded-lg border border-slate-200 bg-white p-5 shadow-2xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900">Enviar WhatsApp</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {sendModalUserIds.length} colaborador(es) selecionado(s) para {checkedDateLabel}.
+                    </p>
+                  </div>
+                  <button type="button" className="btn btn-secondary btn-icon" onClick={closeSendModal}>
+                    <X size={15} />
+                  </button>
+                </div>
+                <label className="field-label mt-4">Mensagem</label>
+                <textarea
+                  className="field-textarea"
+                  value={sendMessage}
+                  onChange={(event) => setSendMessage(event.target.value)}
+                  placeholder="Digite a mensagem que sera enviada no WhatsApp"
+                />
+
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <button type="button" className="btn btn-secondary" onClick={closeSendModal} disabled={sendRemindersMutation.isPending}>
+                    Cancelar
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={confirmSendReminders} disabled={sendRemindersMutation.isPending || !sendMessage.trim()}>
+                    {sendRemindersMutation.isPending ? <LoaderCircle size={15} className="animate-spin" /> : <MessageCircle size={15} />}
+                    Enviar mensagem
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

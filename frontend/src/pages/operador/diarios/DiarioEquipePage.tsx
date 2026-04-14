@@ -33,6 +33,16 @@ function normalizeTeamRows(value: unknown) {
     .filter((item) => item.nome)
 }
 
+function parseMemberScore(value: string) {
+  const parsed = Number(String(value).replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function isInvalidMemberScore(value: string) {
+  const nota = parseMemberScore(value)
+  return nota === null || nota < 1 || nota > 10
+}
+
 export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -97,7 +107,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   }
 
   function updateMemberScore(index: number, value: string) {
-    const sanitized = value.replace(/[^\d]/g, '').slice(0, 2)
+    const sanitized = value.replace(/[^\d,.]/g, '').replace('.', ',').slice(0, 4)
     setMembers((prev) =>
       prev.map((item, current) => (current === index ? { ...item, nota: sanitized } : item))
     )
@@ -111,10 +121,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!diarioQuery.data) return
-      const invalidMember = members.find((item) => {
-        const nota = Number(item.nota)
-        return !Number.isInteger(nota) || nota < 1 || nota > 10
-      })
+      const invalidMember = members.find((item) => isInvalidMemberScore(item.nota))
       if (invalidMember) {
         throw new Error(`Informe uma nota de 1 a 10 para ${invalidMember.nome}.`)
       }
@@ -131,7 +138,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
             userId: item.userId,
             nome: item.nome,
             item: item.nome,
-            nota: Number(item.nota),
+            nota: parseMemberScore(item.nota),
           })),
         },
       })
@@ -409,8 +416,8 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
                     type="number"
                     min={1}
                     max={10}
-                    step={1}
-                    inputMode="numeric"
+                    step={0.5}
+                    inputMode="decimal"
                     value={member.nota}
                     onChange={(event) => updateMemberScore(index, event.target.value)}
                     placeholder="1 a 10"
@@ -467,20 +474,14 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
             onClick={() => void mutation.mutateAsync()}
             disabled={
               mutation.isPending ||
-              members.some((item) => {
-                const nota = Number(item.nota)
-                return !Number.isInteger(nota) || nota < 1 || nota > 10
-              })
+              members.some((item) => isInvalidMemberScore(item.nota))
             }
             style={{
               border: 'none',
               borderRadius: '18px',
               background:
                 mutation.isPending ||
-                members.some((item) => {
-                  const nota = Number(item.nota)
-                  return !Number.isInteger(nota) || nota < 1 || nota > 10
-                })
+                members.some((item) => isInvalidMemberScore(item.nota))
                   ? '#cbd5e1'
                   : '#16a34a',
               color: '#fff',
@@ -489,18 +490,12 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
               fontWeight: 800,
               cursor:
                 mutation.isPending ||
-                members.some((item) => {
-                  const nota = Number(item.nota)
-                  return !Number.isInteger(nota) || nota < 1 || nota > 10
-                })
+                members.some((item) => isInvalidMemberScore(item.nota))
                   ? 'not-allowed'
                   : 'pointer',
               boxShadow:
                 mutation.isPending ||
-                members.some((item) => {
-                  const nota = Number(item.nota)
-                  return !Number.isInteger(nota) || nota < 1 || nota > 10
-                })
+                members.some((item) => isInvalidMemberScore(item.nota))
                   ? 'none'
                   : '0 14px 28px rgba(22,163,74,0.22)',
             }}

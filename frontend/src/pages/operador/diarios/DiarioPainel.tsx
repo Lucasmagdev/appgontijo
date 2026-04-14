@@ -24,9 +24,9 @@ import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { diarioService, equipamentoService, extractApiErrorMessage, obraService } from '@/lib/gontijo-api'
 
 const TOP_BUTTONS = [
-  { key: 'data', label: 'Data', icon: CalendarDays },
-  { key: 'entrada', label: 'Entrada', icon: DoorOpen },
-  { key: 'saida', label: 'Saida', icon: DoorClosed },
+  { key: 'data', label: 'Data', icon: CalendarDays, required: true },
+  { key: 'entrada', label: 'Entrada', icon: DoorOpen, required: true },
+  { key: 'saida', label: 'Saida', icon: DoorClosed, required: true },
 ] as const
 
 const MODULE_BUTTONS = [
@@ -221,8 +221,9 @@ function ActionCard(_props: {
   compact?: boolean
   complete?: boolean
   value?: string
+  required?: boolean
 }) {
-  const { label, icon: Icon, onClick, compact = false, complete = false, value } = _props
+  const { label, icon: Icon, onClick, compact = false, complete = false, value, required = false } = _props
 
   return (
     <button
@@ -279,6 +280,25 @@ function ActionCard(_props: {
           boxShadow: `inset 0 0 0 1px ${complete ? 'rgba(22,163,74,0.14)' : 'rgba(167,39,39,0.1)'}`,
         }}
       >
+        {required && compact && !complete ? (
+          <span
+            style={{
+              position: 'absolute',
+              right: '10px',
+              top: '10px',
+              borderRadius: '10px',
+              background: 'rgba(167,39,39,0.08)',
+              color: '#a72727',
+              padding: '3px 6px',
+              fontSize: '9px',
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Obrig.
+          </span>
+        ) : null}
         <Icon size={compact ? 28 : 27} color={complete ? '#16a34a' : '#a72727'} strokeWidth={2.1} />
       </div>
 
@@ -802,6 +822,7 @@ export default function DiarioPainel() {
   const { user } = useOperadorAuth()
   const selectedId = Number(equipamentoId)
   const [activeTopModal, setActiveTopModal] = useState<TopFieldKey | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [topModalValue, setTopModalValue] = useState('')
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
@@ -1114,6 +1135,8 @@ export default function DiarioPainel() {
     )
   }
 
+  const helpText = `Como preencher o diario:\n\n1. Defina Data, Entrada e Saida.\n2. Informe a Equipe e as notas obrigatorias.\n3. Preencha Estacas, Horimetro, Abastecimento e Clima (se aplicavel).\n4. Revise tudo e finalize o diario.\n\nSe precisar de ajuda agora, fale com o suporte tecnico.`
+
   return (
     <>
       <div
@@ -1126,18 +1149,18 @@ export default function DiarioPainel() {
           margin: '0 auto',
         }}
       >
-        <div
-          style={{
-            background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)',
-            padding: '0 16px',
-            height: '72px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-            flexShrink: 0,
-            boxShadow: '0 10px 22px rgba(167,39,39,0.18)',
-          }}
-        >
+          <div
+            style={{
+              background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)',
+              padding: '0 16px',
+              height: '72px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '14px',
+              flexShrink: 0,
+              boxShadow: '0 10px 22px rgba(167,39,39,0.18)',
+            }}
+          >
           <button
             onClick={() => navigate('/operador/diario-de-obras/novo')}
             style={{
@@ -1157,15 +1180,37 @@ export default function DiarioPainel() {
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ color: 'rgba(255,255,255,0.72)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Operador
-            </span>
-            <span style={{ color: '#fff', fontSize: '21px', fontWeight: 800, letterSpacing: '0.02em' }}>
-              Diario de obras
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: 'rgba(255,255,255,0.72)', fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Operador
+              </span>
+              <span style={{ color: '#fff', fontSize: '21px', fontWeight: 800, letterSpacing: '0.02em' }}>
+                Diario de obras
+              </span>
+            </div>
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                onClick={() => setHelpOpen(true)}
+                style={{
+                  background: 'rgba(255,255,255,0.16)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  borderRadius: '12px',
+                  width: '40px',
+                  height: '40px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontWeight: 800,
+                }}
+                aria-label="Ajuda"
+                title="Ajuda"
+              >
+                ?
+              </button>
+            </div>
           </div>
-        </div>
 
         <div style={{ padding: '22px 18px 24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div
@@ -1260,17 +1305,18 @@ export default function DiarioPainel() {
           <SectionLabel text="Inicio do diario" />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
-            {TOP_BUTTONS.map((item) => (
-              <ActionCard
-                key={item.key}
-                label={item.label}
-                icon={item.icon}
-                compact
-                complete={topCompletion[item.key]}
-                value={topValues[item.key]}
-                onClick={() => openTopModal(item.key)}
-              />
-            ))}
+              {TOP_BUTTONS.map((item) => (
+                <ActionCard
+                  key={item.key}
+                  label={item.label}
+                  icon={item.icon}
+                  compact
+                  complete={topCompletion[item.key]}
+                  value={topValues[item.key]}
+                  required={Boolean(item.required)}
+                  onClick={() => openTopModal(item.key)}
+                />
+              ))}
           </div>
 
           {topModalError ? (
@@ -1401,6 +1447,57 @@ export default function DiarioPainel() {
           isSaving={topSaveMutation.isPending}
         />
       ) : null}
-    </>
-  )
-}
+        {helpOpen ? (
+          <ModalShell>
+            <div style={{ padding: '18px 18px 14px' }}>
+              <div style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Ajuda rapida</div>
+              <div style={{ marginTop: '10px', fontSize: '13px', color: '#6b7280', lineHeight: '1.6', whiteSpace: 'pre-line' }}>
+                {helpText}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: '10px', padding: '0 18px 18px' }}>
+              <button
+                onClick={() => setHelpOpen(false)}
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  background: '#fff',
+                  color: '#111827',
+                  minHeight: '44px',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Fechar
+              </button>
+              <a
+                href="https://wa.me/553199308765"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  textDecoration: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    borderRadius: '12px',
+                    background: '#16a34a',
+                    color: '#fff',
+                    minHeight: '46px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 800,
+                  }}
+                >
+                  Suporte tecnico no WhatsApp
+                </div>
+              </a>
+            </div>
+          </ModalShell>
+        ) : null}
+      </>
+    )
+  }

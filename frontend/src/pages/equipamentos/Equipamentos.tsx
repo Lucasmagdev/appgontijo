@@ -6,6 +6,7 @@ import {
   equipamentoService,
   extractApiErrorMessage,
   modalidadeService,
+  usuarioService,
   type EquipamentoPayload,
 } from '@/lib/gontijo-api'
 
@@ -23,6 +24,7 @@ function createDraft(): DraftEquipamento {
     status: 'ativo',
     imei: '',
     obraNumero: '',
+    operadorId: null,
   }
 }
 
@@ -45,6 +47,13 @@ export default function EquipamentosPage() {
     placeholderData: keepPreviousData,
   })
 
+  const operadoresQuery = useQuery({
+    queryKey: ['usuarios-options'],
+    queryFn: usuarioService.listOptions,
+    staleTime: 1000 * 60 * 15,
+    placeholderData: keepPreviousData,
+  })
+
   useEffect(() => {
     if (equipamentosQuery.data) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -53,11 +62,12 @@ export default function EquipamentosPage() {
           localId: `eq-${item.id}`,
           id: item.id,
           nome: item.nome,
-          computadorGeo: item.computadorGeo,
+          computadorGeo: item.computadorGeo || item.imei,
           modalidadeId: item.modalidadeId,
           status: item.status,
           imei: item.imei,
           obraNumero: item.obraNumero,
+          operadorId: item.operadorId,
         }))
       )
     }
@@ -70,8 +80,9 @@ export default function EquipamentosPage() {
         computadorGeo: draft.computadorGeo.trim(),
         modalidadeId: draft.modalidadeId,
         status: draft.status,
-        imei: draft.imei?.trim(),
+        imei: draft.computadorGeo.trim(),
         obraNumero: draft.obraNumero?.trim(),
+        operadorId: draft.operadorId,
       }
 
       if (draft.id) {
@@ -107,7 +118,7 @@ export default function EquipamentosPage() {
       <div className="page-header">
         <div>
           <h1 className="page-heading">Equipamentos</h1>
-          <p className="page-subtitle">Vinculo entre maquinas, computadores Geodigitus e modalidades.</p>
+          <p className="page-subtitle">Vinculo entre maquinas, identificador Geodigitus/IMEI e modalidades.</p>
         </div>
 
         <button type="button" onClick={() => setDrafts((prev) => [...prev, createDraft()])} className="btn btn-primary">
@@ -186,6 +197,24 @@ export default function EquipamentosPage() {
                 </div>
 
                 <div>
+                  <label className="field-label">Operador da máquina</label>
+                  <select
+                    value={card.operadorId ?? ''}
+                    onChange={(event) =>
+                      updateDraft(card.localId, 'operadorId', event.target.value ? Number(event.target.value) : null)
+                    }
+                    className="field-select"
+                  >
+                    <option value="">Sem operador vinculado</option>
+                    {operadoresQuery.data?.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="field-label">Numero da obra</label>
                   <input
                     type="text"
@@ -193,17 +222,6 @@ export default function EquipamentosPage() {
                     onChange={(event) => updateDraft(card.localId, 'obraNumero', event.target.value)}
                     className="field-input"
                     placeholder="Ex: 1042"
-                  />
-                </div>
-
-                <div>
-                  <label className="field-label">IMEI</label>
-                  <input
-                    type="text"
-                    value={card.imei || ''}
-                    onChange={(event) => updateDraft(card.localId, 'imei', event.target.value)}
-                    className="field-input"
-                    placeholder="Mesmo valor do Computador Geodigitus"
                   />
                 </div>
 

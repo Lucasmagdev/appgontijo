@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Check, Clock, Copy, Eye, EyeOff, KeyRound, MapPin, Pencil, Search, ShieldOff, Trash2, X } from 'lucide-react'
+import { Building2, Camera, Check, Clock, Copy, Eye, EyeOff, ImagePlus, KeyRound, Link2, MapPin, Pencil, Search, ShieldOff, Trash2, X } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   clientPortalAdminService,
   extractApiErrorMessage,
   obraService,
   type ClientPortalAccessRecord,
+  type ObraFoto,
 } from '@/lib/gontijo-api'
 import { cn, formatDate } from '@/lib/utils'
 
@@ -29,12 +30,75 @@ const EMPTY_FORM: FormState = {
 function useClipboard() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   function copy(text: string, key: string) {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopiedKey(key)
-      setTimeout(() => setCopiedKey(null), 2000)
-    })
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(text).then(() => {
+        setCopiedKey(key)
+        setTimeout(() => setCopiedKey(null), 2000)
+      })
+      return
+    }
+
+    const area = document.createElement('textarea')
+    area.value = text
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    document.execCommand('copy')
+    document.body.removeChild(area)
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), 2000)
   }
   return { copy, copiedKey }
+}
+
+function buildClientPortalLink(login: string) {
+  return `${window.location.origin}/portal-cliente/login?login=${encodeURIComponent(login)}`
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('Nao foi possivel ler a imagem.'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function compressPhotoFile(file: File) {
+  const source = await readFileAsDataUrl(file)
+  const image = new Image()
+
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('Nao foi possivel carregar a imagem.'))
+    image.src = source
+  })
+
+  const maxSize = 1400
+  const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return source
+  ctx.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.78)
+}
+
+async function makePortalPhoto(file: File): Promise<ObraFoto> {
+  const now = new Date()
+  return {
+    nome: file.name,
+    tipo: file.type || 'image/jpeg',
+    tamanho: Number.isFinite(file.size) ? file.size : null,
+    titulo: file.name.replace(/\.[^.]+$/, '') || 'Foto da obra',
+    url: await compressPhotoFile(file),
+    dataFoto: now.toISOString().slice(0, 10),
+    criadoEm: now.toISOString(),
+  }
 }
 
 export default function PortalClientesPage() {
@@ -45,6 +109,11 @@ export default function PortalClientesPage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [search, setSearch] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
+  const [photoAccessId, setPhotoAccessId] = useState<number | null>(null)
+  const [photoError, setPhotoError] = useState('')
+  const [pendingPhotos, setPendingPhotos] = useState<ObraFoto[]>([])
+  const selectedPhotoAccessRef = useRef<ClientPortalAccessRecord | null>(null)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const { copy, copiedKey } = useClipboard()
 
   const obrasQuery = useQuery({
@@ -66,6 +135,27 @@ export default function PortalClientesPage() {
     [accessesQuery.data, form.id]
   )
 
+  const selectedPhotoAccess = useMemo(
+    () => accessesQuery.data?.find((item) => item.id === photoAccessId) ?? null,
+    [accessesQuery.data, photoAccessId]
+  )
+
+  const selectedPhotoObraQuery = useQuery({
+    queryKey: ['portal-cliente-obra-fotos', selectedPhotoAccess?.constructionId],
+    queryFn: () => obraService.getById(selectedPhotoAccess!.constructionId),
+    enabled: Boolean(selectedPhotoAccess?.constructionId),
+  })
+
+  const updatePhotosMutation = useMutation({
+    mutationFn: ({ constructionId, fotos }: { constructionId: number; fotos: ObraFoto[] }) =>
+      obraService.updateFotos(constructionId, fotos),
+    onSuccess: async () => {
+      setPhotoError('')
+      await queryClient.invalidateQueries({ queryKey: ['portal-cliente-obra-fotos', selectedPhotoAccess?.constructionId] })
+    },
+    onError: (error) => setPhotoError(extractApiErrorMessage(error)),
+  })
+
   const filteredAccesses = useMemo(() => {
     const list = accessesQuery.data ?? []
     if (!search.trim()) return list
@@ -80,6 +170,7 @@ export default function PortalClientesPage() {
 
   const activeCount = accessesQuery.data?.filter((a) => a.status === 'ativo').length ?? 0
   const totalCount = accessesQuery.data?.length ?? 0
+  const fotosObra = selectedPhotoObraQuery.data?.fotosObra ?? []
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => clientPortalAdminService.delete(id),
@@ -147,10 +238,90 @@ export default function PortalClientesPage() {
     setShowPassword(false)
   }
 
+  function openPhotoManager(access: ClientPortalAccessRecord, openPicker = false) {
+    selectedPhotoAccessRef.current = access
+    setPhotoAccessId(access.id)
+    setPhotoError('')
+    if (openPicker) {
+      photoInputRef.current?.click()
+    }
+  }
+
+  async function pushPortalPhotos(files: FileList | null) {
+    const targetAccess = selectedPhotoAccessRef.current || selectedPhotoAccess
+    if (!files?.length || !targetAccess) return
+    setPhotoError('')
+
+    try {
+      if (pendingPhotos.length >= 10) {
+        setPhotoError('Salve ou remova as fotos selecionadas antes de escolher mais imagens.')
+        return
+      }
+
+      const images = Array.from(files).filter((file) => file.type.startsWith('image/'))
+      if (!images.length) {
+        setPhotoError('Selecione apenas arquivos de imagem.')
+        return
+      }
+
+      if (images.length + pendingPhotos.length > 10) {
+        setPhotoError('Selecione no maximo 10 fotos por envio para manter a tela leve.')
+        return
+      }
+
+      const nextPhotos = await Promise.all(images.map(makePortalPhoto))
+      setPendingPhotos((current) => [...current, ...nextPhotos])
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'Nao foi possivel anexar as fotos.')
+    } finally {
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    }
+  }
+
+  function updatePendingPhotoTitle(index: number, titulo: string) {
+    setPendingPhotos((current) => current.map((foto, currentIndex) => (currentIndex === index ? { ...foto, titulo } : foto)))
+  }
+
+  function updatePendingPhotoDate(index: number, dataFoto: string) {
+    setPendingPhotos((current) => current.map((foto, currentIndex) => (currentIndex === index ? { ...foto, dataFoto } : foto)))
+  }
+
+  function removePendingPhoto(index: number) {
+    setPendingPhotos((current) => current.filter((_, currentIndex) => currentIndex !== index))
+  }
+
+  async function savePendingPhotos() {
+    const targetAccess = selectedPhotoAccessRef.current || selectedPhotoAccess
+    if (!targetAccess || !pendingPhotos.length) return
+    await updatePhotosMutation.mutateAsync({
+      constructionId: targetAccess.constructionId,
+      fotos: [...fotosObra, ...pendingPhotos],
+    })
+    setPendingPhotos([])
+  }
+
+  function removePortalPhoto(index: number) {
+    if (!selectedPhotoAccess) return
+    updatePhotosMutation.mutate({
+      constructionId: selectedPhotoAccess.constructionId,
+      fotos: fotosObra.filter((_, current) => current !== index),
+    })
+  }
+
   const isEditing = Boolean(form.id)
 
   return (
     <div className="page-shell">
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(event) => void pushPortalPhotos(event.target.files)}
+      />
+
       {/* Header */}
       <div className="page-header">
         <div>
@@ -413,7 +584,10 @@ export default function PortalClientesPage() {
                   key={access.id}
                   access={access}
                   isSelected={form.id === access.id}
+                  isManagingPhotos={photoAccessId === access.id}
                   onEdit={() => startEdit(access)}
+                  onManagePhotos={() => openPhotoManager(access, false)}
+                  onAddPhoto={() => openPhotoManager(access, true)}
                   onCopy={copy}
                   copiedKey={copiedKey}
                   confirmingDelete={deleteConfirmId === access.id}
@@ -421,20 +595,53 @@ export default function PortalClientesPage() {
                   onDeleteCancel={() => setDeleteConfirmId(null)}
                   onDeleteConfirm={() => deleteMutation.mutate(access.id)}
                   isDeleting={deleteMutation.isPending && deleteConfirmId === access.id}
+                  photoManager={photoAccessId === access.id ? {
+                    fotosObra,
+                    pendingPhotos,
+                    isLoading: selectedPhotoObraQuery.isLoading,
+                    isSaving: updatePhotosMutation.isPending,
+                    error: photoError,
+                    onAddPhotos: () => photoInputRef.current?.click(),
+                    onSavePhotos: () => void savePendingPhotos(),
+                    onRemoveSaved: (index) => removePortalPhoto(index),
+                    onUpdatePendingTitle: updatePendingPhotoTitle,
+                    onUpdatePendingDate: updatePendingPhotoDate,
+                    onRemovePending: removePendingPhoto,
+                    onClose: () => { setPhotoAccessId(null); setPendingPhotos([]); selectedPhotoAccessRef.current = null },
+                  } : undefined}
                 />
               ))}
             </div>
           ) : null}
+
         </section>
       </div>
     </div>
   )
 }
 
+type PhotoManager = {
+  fotosObra: ObraFoto[]
+  pendingPhotos: ObraFoto[]
+  isLoading: boolean
+  isSaving: boolean
+  error: string
+  onAddPhotos: () => void
+  onSavePhotos: () => void
+  onRemoveSaved: (index: number) => void
+  onUpdatePendingTitle: (index: number, titulo: string) => void
+  onUpdatePendingDate: (index: number, dataFoto: string) => void
+  onRemovePending: (index: number) => void
+  onClose: () => void
+}
+
 function AccessCard({
   access,
   isSelected,
+  isManagingPhotos,
   onEdit,
+  onManagePhotos,
+  onAddPhoto,
   onCopy,
   copiedKey,
   confirmingDelete,
@@ -442,10 +649,14 @@ function AccessCard({
   onDeleteCancel,
   onDeleteConfirm,
   isDeleting,
+  photoManager,
 }: {
   access: ClientPortalAccessRecord
   isSelected: boolean
+  isManagingPhotos: boolean
   onEdit: () => void
+  onManagePhotos: () => void
+  onAddPhoto: () => void
   onCopy: (text: string, key: string) => void
   copiedKey: string | null
   confirmingDelete: boolean
@@ -453,9 +664,12 @@ function AccessCard({
   onDeleteCancel: () => void
   onDeleteConfirm: () => void
   isDeleting: boolean
+  photoManager?: PhotoManager
 }) {
   const isActive = access.status === 'ativo'
   const loginKey = `login-${access.id}`
+  const linkKey = `link-${access.id}`
+  const portalLink = buildClientPortalLink(access.login)
 
   return (
     <article
@@ -515,6 +729,29 @@ function AccessCard({
             {isSelected ? 'Editando...' : 'Editar'}
           </button>
 
+          <button
+            type="button"
+            onClick={onManagePhotos}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              isManagingPhotos
+                ? 'border-red-300 bg-red-50 text-[var(--brand-red)]'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-red-50 hover:text-[var(--brand-red)]'
+            )}
+          >
+            <Camera size={12} />
+            Ver fotos
+          </button>
+
+          <button
+            type="button"
+            onClick={onAddPhoto}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-[var(--brand-red)] transition-colors hover:bg-red-100"
+          >
+            <ImagePlus size={12} />
+            Anexar nova foto
+          </button>
+
           {confirmingDelete ? (
             <div className="flex items-center gap-1.5">
               <button
@@ -569,6 +806,22 @@ function AccessCard({
         </div>
 
         {/* Localização */}
+        <div className="col-span-2 flex items-center justify-between gap-2 rounded-lg border border-red-100 bg-red-50/70 px-3 py-2 sm:col-span-2">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-red-400">Link de entrada</div>
+            <div className="mt-0.5 truncate text-sm font-semibold text-red-800">Portal do cliente</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onCopy(portalLink, linkKey)}
+            className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-white px-2 text-xs font-semibold text-[var(--brand-red)] transition hover:border-red-300 hover:bg-red-50"
+            title="Copiar link de entrada do cliente"
+          >
+            {copiedKey === linkKey ? <Check size={13} className="text-emerald-600" /> : <Link2 size={13} />}
+            {copiedKey === linkKey ? 'Copiado' : 'Copiar link'}
+          </button>
+        </div>
+
         {access.cidade || access.estado ? (
           <MetaCell
             label="Local"
@@ -596,6 +849,164 @@ function AccessCard({
           </span>
         </span>
       </div>
+
+      {/* Inline photo panel */}
+      {photoManager && (
+        <div className="mt-4 rounded-2xl border border-red-100 bg-[linear-gradient(180deg,#fff8f7_0%,#ffffff_100%)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                <Camera size={16} className="text-[var(--brand-red)]" />
+                Fotos do portal - obra {access.obraNumero}
+              </div>
+              <p className="mt-1 text-sm text-slate-500">
+                Essas fotos aparecem na galeria do cliente, sem entrar no PDF do diario.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={photoManager.onAddPhotos}
+                disabled={photoManager.isSaving}
+              >
+                <ImagePlus size={15} />
+                Anexar fotos
+              </button>
+              {photoManager.pendingPhotos.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-neutral"
+                  onClick={photoManager.onSavePhotos}
+                  disabled={photoManager.isSaving}
+                >
+                  Salvar {photoManager.pendingPhotos.length} foto{photoManager.pendingPhotos.length !== 1 ? 's' : ''}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={photoManager.onClose}
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+
+          {photoManager.isLoading && (
+            <div className="mt-3 text-sm text-slate-500">Carregando fotos...</div>
+          )}
+
+          {photoManager.error ? (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {photoManager.error}
+            </div>
+          ) : null}
+
+          {photoManager.isSaving ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+              Salvando galeria...
+            </div>
+          ) : null}
+
+          {photoManager.pendingPhotos.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-black text-amber-900">Fotos selecionadas para envio</div>
+                  <p className="mt-1 text-sm text-amber-700">Revise, edite o titulo ou remova antes de salvar no portal.</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={photoManager.onSavePhotos}
+                  disabled={photoManager.isSaving}
+                >
+                  Salvar fotos
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {photoManager.pendingPhotos.map((foto, index) => (
+                  <div key={`${foto.nome}-${index}`} className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+                    <div className="aspect-[4/3] bg-slate-100">
+                      <img src={foto.url} alt={foto.titulo || foto.nome} className="h-full w-full object-cover" loading="lazy" />
+                    </div>
+                    <div className="space-y-2 p-3">
+                      <label className="field-label">Titulo da foto</label>
+                      <input
+                        className="field-input"
+                        value={foto.titulo}
+                        onChange={(event) => photoManager.onUpdatePendingTitle(index, event.target.value)}
+                        placeholder="Titulo que aparece no portal"
+                      />
+                      <label className="field-label">Data da foto</label>
+                      <input
+                        type="date"
+                        className="field-input"
+                        value={foto.dataFoto || foto.criadoEm?.slice(0, 10) || ''}
+                        onChange={(event) => photoManager.onUpdatePendingDate(index, event.target.value)}
+                      />
+                      <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
+                        <span>{foto.tamanho ? `${Math.round(foto.tamanho / 1024)} KB` : 'Imagem selecionada'}</span>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-icon text-red-600"
+                          onClick={() => photoManager.onRemovePending(index)}
+                          title="Remover da selecao"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!photoManager.isLoading && photoManager.fotosObra.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-red-200 bg-white/80 px-5 py-8 text-center">
+              <Camera size={30} className="mx-auto text-[var(--brand-red)]" />
+              <div className="mt-2 text-sm font-bold text-slate-800">Nenhuma foto cadastrada para este cliente</div>
+              <p className="mt-1 text-sm text-slate-500">Clique em anexar fotos para alimentar a galeria do portal.</p>
+            </div>
+          ) : null}
+
+          {photoManager.fotosObra.length > 0 && (
+            <div className="mt-4">
+              <div className="text-sm font-black text-slate-900">Fotos ja publicadas no portal</div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {photoManager.fotosObra.map((foto, index) => (
+                  <div key={`${foto.nome}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="aspect-[4/3] bg-slate-100">
+                      <img src={foto.url} alt={foto.titulo || foto.nome} className="h-full w-full object-cover" loading="lazy" />
+                    </div>
+                    <div className="flex items-center justify-between gap-2 p-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-bold text-slate-800">{foto.titulo || foto.nome}</div>
+                        <div className="text-xs text-slate-400">
+                          {(foto.dataFoto || foto.criadoEm?.slice(0, 10)) ? new Date(`${foto.dataFoto || foto.criadoEm.slice(0, 10)}T00:00:00`).toLocaleDateString('pt-BR') : 'Sem data'} - {foto.tamanho ? `${Math.round(foto.tamanho / 1024)} KB` : 'Imagem anexada'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-icon text-red-600"
+                        onClick={() => photoManager.onRemoveSaved(index)}
+                        disabled={photoManager.isSaving}
+                        title="Remover foto"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </article>
   )
 }

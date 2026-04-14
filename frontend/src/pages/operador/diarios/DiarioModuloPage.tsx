@@ -63,6 +63,7 @@ export default function DiarioModuloPage() {
   const isFinalizarModule = moduloParam === 'finalizar'
   const supportedModule = isSupportedModule(moduloParam)
   const config = supportedModule ? FIELD_CONFIG[moduloParam] : null
+  const isRequiredField = moduloParam === 'data' || moduloParam === 'entrada' || moduloParam === 'saida'
 
   if (isEquipeModule) {
     return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />
@@ -179,6 +180,9 @@ export default function DiarioModuloPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!supportedModule || !config || !diarioQuery.data) return
+      if (isRequiredField && !value) {
+        throw new Error('Este campo e obrigatorio.')
+      }
 
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
       const nextJson = {
@@ -299,8 +303,31 @@ export default function DiarioModuloPage() {
             gap: '12px',
           }}
         >
-          <div style={{ fontSize: '24px', fontWeight: 900, color: '#a72727' }}>{config.title}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#a72727' }}>{config.title}</div>
+            {isRequiredField ? (
+              <span
+                style={{
+                  borderRadius: '10px',
+                  background: 'rgba(167,39,39,0.08)',
+                  color: '#a72727',
+                  padding: '3px 8px',
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Obrigatorio
+              </span>
+            ) : null}
+          </div>
           <div style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>{config.helper}</div>
+          {isRequiredField ? (
+            <div style={{ fontSize: '12px', color: '#b91c1c', fontWeight: 700 }}>
+              Campo obrigatorio para finalizar o diario.
+            </div>
+          ) : null}
 
           {diarioQuery.isLoading ? (
             <div style={{ color: '#6b7280', fontSize: '14px' }}>Carregando dados do diario...</div>
@@ -359,7 +386,7 @@ export default function DiarioModuloPage() {
                     minHeight: '58px',
                     width: '100%',
                     borderRadius: '18px',
-                    border: '1.5px solid #d8dee7',
+                    border: !value && isRequiredField ? '1.5px solid #fca5a5' : '1.5px solid #d8dee7',
                     padding: '0 16px',
                     fontSize: '18px',
                     fontWeight: 700,
