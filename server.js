@@ -59,9 +59,16 @@ function ensureGoalTargetsSanitized() {
 
 app.use((req, res, next) => {
   const requestOrigin = req.headers.origin;
-  const allowedOrigin =
-    process.env.CORS_ORIGIN ||
-    (/^https?:\/\/localhost:\d+$/.test(String(requestOrigin || "")) ? requestOrigin : "");
+  const configuredOrigins = String(process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((item) => item.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+  const normalizedRequestOrigin = String(requestOrigin || "").trim().replace(/\/+$/, "");
+  const allowedOrigin = configuredOrigins.includes(normalizedRequestOrigin)
+    ? normalizedRequestOrigin
+    : /^https?:\/\/localhost:\d+$/.test(normalizedRequestOrigin)
+      ? normalizedRequestOrigin
+      : "";
   if (allowedOrigin) {
     res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
     res.setHeader("Vary", "Origin");

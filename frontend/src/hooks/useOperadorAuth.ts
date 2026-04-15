@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import axios from 'axios'
+import { API_BASE_URL } from '@/lib/api'
 
-const operadorApi = axios.create({ baseURL: '/api', withCredentials: true })
+const operadorApi = axios.create({ baseURL: API_BASE_URL, withCredentials: true })
 
 interface OperadorUser {
   id: number

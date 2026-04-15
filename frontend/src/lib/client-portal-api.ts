@@ -1,7 +1,8 @@
 import axios from 'axios'
+import { API_BASE_URL } from '@/lib/api'
 
 export const clientPortalApi = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   withCredentials: true,
 })
 
