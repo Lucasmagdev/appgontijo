@@ -7,6 +7,8 @@ interface User {
   name: string
   login: string
   role: string
+  cpf?: string
+  isAdmin?: boolean
 }
 
 interface AuthState {
@@ -14,32 +16,9 @@ interface AuthState {
   isAuthenticated: boolean
   isReady: boolean
   initialize: () => Promise<void>
-  login: (login: string, password: string, remember: boolean) => Promise<void>
+  login: (cpf: string, password: string, remember: boolean) => Promise<void>
   logout: () => Promise<void>
   setUser: (user: User) => void
-}
-
-function buildMockUser(loginValue: string, user?: Partial<User> | null): User {
-  if (user?.id && user.name && user.login && user.role) {
-    return user as User
-  }
-
-  const normalizedLogin = loginValue.trim() || 'admin'
-  const displayName =
-    user?.name ||
-    normalizedLogin
-      .split(/[.@\s_-]+/)
-      .filter(Boolean)
-      .map((part) => part[0]?.toUpperCase() + part.slice(1))
-      .join(' ') ||
-    'Administrador'
-
-  return {
-    id: user?.id ?? 1,
-    name: displayName,
-    login: user?.login ?? normalizedLogin,
-    role: user?.role ?? 'admin',
-  }
 }
 
 export const useAuth = create<AuthState>()(
@@ -53,8 +32,17 @@ export const useAuth = create<AuthState>()(
           const { data } = await api.get('/admin/status')
 
           if (data?.authenticated) {
+            const serverUser = data.user
+            const stored = get().user
             set({
-              user: buildMockUser(get().user?.login ?? 'admin', get().user),
+              user: {
+                id: serverUser?.id ?? stored?.id ?? 1,
+                name: stored?.name ?? 'Usuario',
+                login: serverUser?.cpf ?? stored?.login ?? '',
+                role: serverUser?.isAdmin ? 'admin' : 'operador',
+                cpf: serverUser?.cpf ?? stored?.cpf,
+                isAdmin: serverUser?.isAdmin ?? false,
+              },
               isAuthenticated: true,
               isReady: true,
             })
@@ -66,10 +54,18 @@ export const useAuth = create<AuthState>()(
 
         set({ user: null, isAuthenticated: false, isReady: true })
       },
-      login: async (login, password, remember) => {
-        const { data } = await api.post('/admin/session', { login, password, remember })
+      login: async (cpf, password, remember) => {
+        const { data } = await api.post('/admin/session', { cpf, password, remember })
+        const u = data.user
         set({
-          user: buildMockUser(login, data.user),
+          user: {
+            id: u?.id ?? 1,
+            name: u?.nome ?? cpf,
+            login: cpf,
+            role: u?.isAdmin ? 'admin' : 'operador',
+            cpf: u?.cpf ?? cpf,
+            isAdmin: u?.isAdmin ?? false,
+          },
           isAuthenticated: true,
           isReady: true,
         })

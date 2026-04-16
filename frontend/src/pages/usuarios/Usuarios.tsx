@@ -7,8 +7,11 @@ import QueryFeedback from '@/components/ui/QueryFeedback'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { extractApiErrorMessage, usuarioService } from '@/lib/gontijo-api'
 import { cn, formatDate } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 
 export default function UsuariosPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin ?? false
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -63,10 +66,12 @@ export default function UsuariosPage() {
           <p className="page-subtitle">Gestao administrativa de acessos e perfis.</p>
         </div>
 
-        <Link to="/usuarios/novo" className="btn btn-primary">
-          <UserPlus size={15} />
-          Adicionar usuario
-        </Link>
+        {isAdmin && (
+          <Link to="/usuarios/novo" className="btn btn-primary">
+            <UserPlus size={15} />
+            Adicionar usuario
+          </Link>
+        )}
       </div>
 
       <section className="app-panel toolbar-panel">
@@ -165,27 +170,29 @@ export default function UsuariosPage() {
                         </td>
                         <td>{user.criadoEm ? formatDate(user.criadoEm) : '-'}</td>
                         <td>
-                          <div className="action-row">
-                            <Link
-                              to={`/usuarios/${user.id}/editar`}
-                              className="btn btn-secondary btn-icon"
-                              title="Editar usuario"
-                            >
-                              <Pencil size={14} />
-                            </Link>
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-icon text-red-600"
-                              title="Excluir usuario"
-                              onClick={async () => {
-                                const ok = window.confirm(`Excluir o usuario ${user.nome}?`)
-                                if (!ok) return
-                                await deleteMutation.mutateAsync(user.id)
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          {isAdmin && (
+                            <div className="action-row">
+                              <Link
+                                to={`/usuarios/${user.id}/editar`}
+                                className="btn btn-secondary btn-icon"
+                                title="Editar usuario"
+                              >
+                                <Pencil size={14} />
+                              </Link>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-icon text-red-600"
+                                title="Excluir usuario"
+                                onClick={async () => {
+                                  const ok = window.confirm(`Excluir o usuario ${user.nome}?`)
+                                  if (!ok) return
+                                  await deleteMutation.mutateAsync(user.id)
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))

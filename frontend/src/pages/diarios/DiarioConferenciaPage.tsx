@@ -2,8 +2,9 @@ import { Fragment, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { conferenciaEstacasApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { conferenciaEstacasApi, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
+import { useAuth } from '@/hooks/useAuth'
 
 type ConferenciaStatus = 'pendente' | 'aprovado' | 'rejeitado'
 type StakeActionState = { diaryId: number; stakeIndex: number; status: 'aprovado' | 'rejeitado' } | null
@@ -186,9 +187,30 @@ function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => vo
 
 export default function DiarioConferenciaPage() {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin ?? false
 
   const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '' })
   const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', page: 1 })
+  const [toleranciaEdit, setToleranciaEdit] = useState<string>('')
+  const [toleranciaSaved, setToleranciasSaved] = useState(false)
+
+  const toleranciaQuery = useQuery({
+    queryKey: ['tolerancia-conferencia', applied.obra_numero],
+    queryFn: () => toleranciaConferenciaApi.get(applied.obra_numero),
+    enabled: Boolean(applied.obra_numero),
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const toleranciaMutation = useMutation({
+    mutationFn: (valor: number) => toleranciaConferenciaApi.set(applied.obra_numero, valor),
+    onSuccess: async () => {
+      setToleranciasSaved(true)
+      setTimeout(() => setToleranciasSaved(false), 2000)
+      await queryClient.invalidateQueries({ queryKey: ['tolerancia-conferencia', applied.obra_numero] })
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    },
+  })
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
@@ -253,6 +275,50 @@ export default function DiarioConferenciaPage() {
   return (
     <div className="page-shell">
       <h1 className="page-heading">Conferência de Estacas</h1>
+
+      {applied.obra_numero ? (
+        <section className="app-panel" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Tolerância de conferência — Obra {applied.obra_numero}
+            </span>
+            <span style={{ fontSize: 12, color: '#4a5568' }}>
+              Diferença máxima aceita entre profundidade executada e planejada.
+              {' '}<strong>Atual: {toleranciaQuery.data ?? 10}%</strong>
+              {' '}— diários já aprovados/rejeitados não são afetados.
+            </span>
+          </div>
+          {isAdmin ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={toleranciaEdit !== '' ? toleranciaEdit : (toleranciaQuery.data ?? 10)}
+                onChange={(e) => setToleranciaEdit(e.target.value)}
+                style={{ width: 72, border: '1px solid #e2e8f0', borderRadius: 4, padding: '4px 8px', fontSize: 13 }}
+                placeholder="10"
+              />
+              <span style={{ fontSize: 13, color: '#718096' }}>%</span>
+              <button
+                type="button"
+                className="btn"
+                style={{ background: '#3182ce', color: '#fff', padding: '4px 14px', fontSize: 13 }}
+                disabled={toleranciaMutation.isPending}
+                onClick={() => {
+                  const val = parseFloat(toleranciaEdit !== '' ? toleranciaEdit : String(toleranciaQuery.data ?? 10))
+                  if (!isNaN(val)) toleranciaMutation.mutate(val)
+                }}
+              >
+                {toleranciaSaved ? 'Salvo!' : toleranciaMutation.isPending ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          ) : (
+            <span style={{ fontSize: 12, color: '#a0aec0', marginLeft: 'auto' }}>Apenas administradores podem alterar.</span>
+          )}
+        </section>
+      ) : null}
 
       <section className="app-panel toolbar-panel">
         <div className="flex flex-wrap items-end gap-3">

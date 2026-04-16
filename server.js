@@ -45,6 +45,41 @@ const port = Number(process.env.PORT || 3000);
 app.use(compression());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const portalDocsUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      const dir = path.join(__dirname, 'uploads', 'portal-docs')
+      fs.mkdirSync(dir, { recursive: true })
+      cb(null, dir)
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname)
+      const safe = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 40)
+      cb(null, `${Date.now()}-${safe}${ext}`)
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024 },
+})
+
+let _portalDocsTableEnsured = false
+async function ensurePortalDocumentsTable() {
+  if (_portalDocsTableEnsured) return
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS portal_documents (
+      id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      construction_id INT UNSIGNED NOT NULL,
+      tipo         VARCHAR(30)  NOT NULL DEFAULT 'outro',
+      nome_original VARCHAR(255) NOT NULL,
+      nome_arquivo  VARCHAR(255) NOT NULL,
+      tamanho      INT UNSIGNED,
+      mime_type    VARCHAR(100),
+      criado_em    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_pd_construction (construction_id)
+    )
+  `)
+  _portalDocsTableEnsured = true
+}
 let goalTargetSanitizePromise = null;
 
 function ensureGoalTargetsSanitized() {
@@ -2677,32 +2712,52 @@ app.use(express.static(path.join(__dirname, "public"), {
   etag: true,
 }));
 
-app.post("/api/admin/session", (req, res) => {
+app.post("/api/admin/session", async (req, res) => {
+  const cpf = String(req.body?.cpf || "").replace(/\D/g, "");
   const password = String(req.body?.password || "");
   const remember = Boolean(req.body?.remember);
-  const configuredPassword = process.env.ADMIN_PASSWORD || "admin";
 
-  if (password !== configuredPassword) {
-    return res.status(401).json({
-      ok: false,
-      message: "Senha admin invalida.",
-    });
+  if (!cpf || !password) {
+    return res.status(400).json({ ok: false, message: "CPF e senha sao obrigatorios." });
   }
 
-  const token = crypto.randomUUID();
-  adminSessions.set(token, {
-    createdAt: new Date().toISOString(),
-    remember,
-  });
-  setCookie(res, "admin_session", token, {
-    ...cookieOptionsForRequest(),
-    ...(remember ? { maxAge: 60 * 60 * 12 } : {}),
-  });
+  try {
+    const [[user]] = await db.query(
+      "SELECT id, name, document, password FROM users WHERE document = ? AND active = 'S'",
+      [cpf]
+    );
 
-  return res.json({
-    ok: true,
-    mode: adminStore.getMode(),
-  });
+    if (!user) {
+      return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
+    }
+
+    const senhaOk = await bcrypt.compare(password, user.password);
+    if (!senhaOk) {
+      return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
+    }
+
+    const isAdmin = user.document === "09653344650";
+    const token = crypto.randomUUID();
+    adminSessions.set(token, {
+      userId: user.id,
+      cpf: user.document,
+      isAdmin,
+      createdAt: new Date().toISOString(),
+      remember,
+    });
+    setCookie(res, "admin_session", token, {
+      ...cookieOptionsForRequest(),
+      ...(remember ? { maxAge: 60 * 60 * 12 } : {}),
+    });
+
+    return res.json({
+      ok: true,
+      mode: adminStore.getMode(),
+      user: { id: user.id, nome: user.name, cpf: user.document, isAdmin },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
 });
 
 app.post("/api/admin/logout", (_req, res) => {
@@ -2716,6 +2771,9 @@ app.get("/api/admin/status", (req, res) => {
     ok: true,
     authenticated: Boolean(session),
     mode: adminStore.getMode(),
+    user: session
+      ? { id: session.userId, cpf: session.cpf, isAdmin: session.isAdmin ?? false }
+      : null,
   });
 });
 
@@ -3566,6 +3624,98 @@ app.delete("/api/admin/client-portals/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// ── Portal documentos (admin) ─────────────────────────────────────────────────
+
+app.post("/api/admin/client-portals/:id/documentos", requireAdmin, portalDocsUpload.single("arquivo"), async (req, res) => {
+  const accessId = parsePositiveInteger(req.params.id)
+  if (!accessId) return res.status(400).json({ ok: false, message: "Acesso invalido." })
+  try {
+    await ensurePortalDocumentsTable()
+    const access = await fetchClientPortalAccessById(accessId)
+    if (!access) return res.status(404).json({ ok: false, message: "Acesso nao encontrado." })
+    if (!req.file) return res.status(400).json({ ok: false, message: "Nenhum arquivo enviado." })
+    const tipo = String(req.body?.tipo || "outro")
+    await db.query(
+      `INSERT INTO portal_documents (construction_id, tipo, nome_original, nome_arquivo, tamanho, mime_type)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [access.construction_id, tipo, req.file.originalname, req.file.filename, req.file.size, req.file.mimetype]
+    )
+    return res.json({ ok: true })
+  } catch (error) {
+    if (req.file) { try { fs.unlinkSync(req.file.path) } catch {} }
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
+app.get("/api/admin/client-portals/:id/documentos", requireAdmin, async (req, res) => {
+  const accessId = parsePositiveInteger(req.params.id)
+  if (!accessId) return res.status(400).json({ ok: false, message: "Acesso invalido." })
+  try {
+    await ensurePortalDocumentsTable()
+    const access = await fetchClientPortalAccessById(accessId)
+    if (!access) return res.status(404).json({ ok: false, message: "Acesso nao encontrado." })
+    const [docs] = await db.query(
+      `SELECT id, tipo, nome_original, nome_arquivo, tamanho, mime_type, criado_em
+       FROM portal_documents WHERE construction_id = ? ORDER BY tipo, criado_em DESC`,
+      [access.construction_id]
+    )
+    return res.json({ ok: true, data: docs })
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
+app.delete("/api/admin/portal-documentos/:docId", requireAdmin, async (req, res) => {
+  const docId = parsePositiveInteger(req.params.docId)
+  if (!docId) return res.status(400).json({ ok: false, message: "Documento invalido." })
+  try {
+    await ensurePortalDocumentsTable()
+    const [[doc]] = await db.query("SELECT nome_arquivo FROM portal_documents WHERE id = ?", [docId])
+    if (!doc) return res.status(404).json({ ok: false, message: "Documento nao encontrado." })
+    await db.query("DELETE FROM portal_documents WHERE id = ?", [docId])
+    try { fs.unlinkSync(path.join(__dirname, "uploads", "portal-docs", doc.nome_arquivo)) } catch {}
+    return res.json({ ok: true })
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
+// ── Portal documentos (cliente) ───────────────────────────────────────────────
+
+app.get("/api/client-portal/documentos", requireClientPortal, async (req, res) => {
+  const session = req.clientPortalSession
+  try {
+    await ensurePortalDocumentsTable()
+    const [docs] = await db.query(
+      `SELECT id, tipo, nome_original, tamanho, mime_type, criado_em
+       FROM portal_documents WHERE construction_id = ? ORDER BY tipo, criado_em DESC`,
+      [session.constructionId]
+    )
+    return res.json({ ok: true, data: docs })
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
+app.get("/api/client-portal/documentos/:docId/download", requireClientPortal, async (req, res) => {
+  const session = req.clientPortalSession
+  const docId = parsePositiveInteger(req.params.docId)
+  if (!docId) return res.status(400).json({ ok: false, message: "Documento invalido." })
+  try {
+    await ensurePortalDocumentsTable()
+    const [[doc]] = await db.query(
+      "SELECT nome_original, nome_arquivo FROM portal_documents WHERE id = ? AND construction_id = ?",
+      [docId, session.constructionId]
+    )
+    if (!doc) return res.status(404).json({ ok: false, message: "Documento nao encontrado." })
+    const filePath = path.join(__dirname, "uploads", "portal-docs", doc.nome_arquivo)
+    if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, message: "Arquivo nao encontrado no servidor." })
+    return res.download(filePath, doc.nome_original)
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
 app.post("/api/client-portal/session", async (req, res) => {
   const login = normalizePortalLogin(req.body?.login);
   const password = String(req.body?.password || "");
@@ -3843,15 +3993,20 @@ app.get("/api/gontijo/operador/cursos/:id/certificado", async (req, res) => {
 
 app.use("/api/gontijo", (req, _res, next) => {
   const operadorSession = getOperadorSession(req);
+  const adminSession = getAdminSession(req);
+
+  req.session = req.session || {};
 
   if (operadorSession?.userId) {
-    req.session = {
-      ...(req.session || {}),
-      operador: {
-        ...((req.session && req.session.operador) || {}),
-        id: operadorSession.userId,
-      },
+    req.session.operador = {
+      ...((req.session.operador) || {}),
+      id: operadorSession.userId,
     };
+  }
+
+  if (adminSession?.cpf) {
+    req.session.adminCpf = adminSession.cpf;
+    req.session.adminIsAdmin = adminSession.isAdmin ?? false;
   }
 
   next();

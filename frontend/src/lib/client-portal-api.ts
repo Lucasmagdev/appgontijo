@@ -70,6 +70,15 @@ export type ClientPortalTimelineItem = {
   pdfUrl: string
 }
 
+export type PortalClienteDocumento = {
+  id: number
+  tipo: string
+  nome_original: string
+  tamanho: number | null
+  mime_type: string | null
+  criado_em: string
+}
+
 export type ClientPortalDashboard = {
   obra: {
     id: number
@@ -244,5 +253,12 @@ export const clientPortalService = {
   async getDashboard() {
     const { data } = await clientPortalApi.get<{ ok: boolean; data: Record<string, unknown> }>('/client-portal/dashboard')
     return adaptDashboard(data.data || {})
+  },
+  async getDocumentos(): Promise<PortalClienteDocumento[]> {
+    const { data } = await clientPortalApi.get<{ ok: boolean; data: PortalClienteDocumento[] }>('/client-portal/documentos')
+    return data.data ?? []
+  },
+  getDocumentoDownloadUrl(docId: number): string {
+    return `${API_BASE_URL}/client-portal/documentos/${docId}/download`
   },
 }

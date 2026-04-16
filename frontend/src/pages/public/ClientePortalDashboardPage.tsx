@@ -5,11 +5,13 @@ import {
   Camera,
   CheckCircle2,
   AlertTriangle,
+  Download,
   ExternalLink,
   FileText,
   Gauge,
   LogOut,
   MapPin,
+  Paperclip,
   TrendingUp,
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -17,6 +19,12 @@ import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 import { clientPortalService, type ClientPortalDiarySummary } from '@/lib/client-portal-api'
 import { cn, formatDate } from '@/lib/utils'
 import { extractApiErrorMessage } from '@/lib/gontijo-api'
+
+const TIPO_DOC_LABELS: Record<string, string> = {
+  projeto: 'Projeto',
+  sondagem: 'Sondagem',
+  outro: 'Outro',
+}
 
 const statusClasses: Record<string, string> = {
   assinado: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
@@ -51,6 +59,12 @@ export default function ClientePortalDashboardPage() {
   const dashboardQuery = useQuery({
     queryKey: ['client-portal-dashboard'],
     queryFn: clientPortalService.getDashboard,
+    staleTime: 60_000,
+  })
+
+  const documentosQuery = useQuery({
+    queryKey: ['client-portal-documentos'],
+    queryFn: clientPortalService.getDocumentos,
     staleTime: 60_000,
   })
 
@@ -307,6 +321,39 @@ export default function ClientePortalDashboardPage() {
                     </div>
                   </div>
                 </section>
+
+                {documentosQuery.data && documentosQuery.data.length > 0 && (
+                  <section className="overflow-hidden rounded-xl border border-blue-100 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
+                    <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl">
+                      <Paperclip size={20} className="text-blue-600" />
+                      Documentos da Obra
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">Projetos, sondagens e arquivos disponibilizados pela equipe Gontijo.</p>
+
+                    <div className="mt-4 grid gap-2">
+                      {documentosQuery.data.map((doc) => (
+                        <a
+                          key={doc.id}
+                          href={clientPortalService.getDocumentoDownloadUrl(doc.id)}
+                          download={doc.nome_original}
+                          className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50"
+                        >
+                          <div className="flex min-w-0 items-center gap-3">
+                            <FileText size={18} className="shrink-0 text-blue-500" />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-slate-800">{doc.nome_original}</div>
+                              <div className="text-xs text-slate-400">
+                                {TIPO_DOC_LABELS[doc.tipo] ?? doc.tipo}
+                                {doc.tamanho ? ` · ${Math.round(doc.tamanho / 1024)} KB` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <Download size={16} className="shrink-0 text-blue-400 group-hover:text-blue-600" />
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
 
                 <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">

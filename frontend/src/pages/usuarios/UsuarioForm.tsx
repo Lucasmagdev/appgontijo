@@ -4,6 +4,7 @@ import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { extractApiErrorMessage, type UsuarioPayload, usuarioService } from '@/lib/gontijo-api'
+import { useAuth } from '@/hooks/useAuth'
 
 const initialForm: UsuarioPayload = {
   nome: '',
@@ -16,6 +17,8 @@ const initialForm: UsuarioPayload = {
 }
 
 export default function UsuarioFormPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin ?? false
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -138,7 +141,15 @@ export default function UsuarioFormPage() {
         <QueryFeedback type="error" title="Nao foi possivel salvar" description={submitError} />
       ) : null}
 
-      {(!isEditing || usuarioQuery.data) && (
+      {!isAdmin && (
+        <QueryFeedback
+          type="error"
+          title="Acesso restrito"
+          description="Apenas administradores podem criar ou editar usuarios."
+        />
+      )}
+
+      {isAdmin && (!isEditing || usuarioQuery.data) && (
         <form onSubmit={handleSubmit} className="space-y-4">
           <section className="app-panel section-panel">
             <h2 className="section-heading">Dados do usuario</h2>

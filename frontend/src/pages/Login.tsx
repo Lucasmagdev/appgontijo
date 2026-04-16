@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 export default function LoginPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
-  const [form, setForm] = useState({ login: '', password: '', remember: false })
+  const [form, setForm] = useState({ cpf: '', password: '', remember: false })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -15,7 +15,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(form.login, form.password, form.remember)
+      await login(form.cpf, form.password, form.remember)
       navigate('/')
     } catch {
       setError('Login ou senha invalidos.')
@@ -58,13 +58,14 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="field-label">Login ou telefone</label>
+              <label className="field-label">CPF</label>
               <input
                 type="text"
-                value={form.login}
-                onChange={(e) => setForm({ ...form, login: e.target.value })}
+                value={form.cpf}
+                onChange={(e) => setForm({ ...form, cpf: e.target.value.replace(/\D/g, '') })}
                 className="field-input"
-                placeholder="admin"
+                placeholder="00000000000"
+                maxLength={11}
                 required
               />
             </div>
@@ -102,7 +103,7 @@ export default function LoginPage() {
             </button>
 
             <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-              Acesso local atual: login livre e senha <strong>admin</strong>.
+              Entre com seu CPF e senha de operador cadastrados no sistema.
             </div>
           </form>
         </section>

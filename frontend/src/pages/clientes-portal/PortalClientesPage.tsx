@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, Camera, Check, Clock, Copy, Eye, EyeOff, ImagePlus, KeyRound, Link2, MapPin, Pencil, Search, ShieldOff, Trash2, X } from 'lucide-react'
+import { Building2, Camera, Check, Clock, Copy, Eye, EyeOff, FileText, ImagePlus, KeyRound, Link2, MapPin, Paperclip, Pencil, Search, ShieldOff, Trash2, Upload, X } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   clientPortalAdminService,
   extractApiErrorMessage,
   obraService,
+  portalDocumentosAdminApi,
+  TIPO_DOCUMENTO_LABELS,
   type ClientPortalAccessRecord,
   type ObraFoto,
 } from '@/lib/gontijo-api'
@@ -114,6 +116,10 @@ export default function PortalClientesPage() {
   const [pendingPhotos, setPendingPhotos] = useState<ObraFoto[]>([])
   const selectedPhotoAccessRef = useRef<ClientPortalAccessRecord | null>(null)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const [docAccessId, setDocAccessId] = useState<number | null>(null)
+  const [docTipo, setDocTipo] = useState('projeto')
+  const [docError, setDocError] = useState('')
+  const docInputRef = useRef<HTMLInputElement | null>(null)
   const { copy, copiedKey } = useClipboard()
 
   const obrasQuery = useQuery({
@@ -144,6 +150,32 @@ export default function PortalClientesPage() {
     queryKey: ['portal-cliente-obra-fotos', selectedPhotoAccess?.constructionId],
     queryFn: () => obraService.getById(selectedPhotoAccess!.constructionId),
     enabled: Boolean(selectedPhotoAccess?.constructionId),
+  })
+
+  const docsQuery = useQuery({
+    queryKey: ['portal-docs', docAccessId],
+    queryFn: () => portalDocumentosAdminApi.list(docAccessId!),
+    enabled: Boolean(docAccessId),
+    staleTime: 1000 * 60 * 2,
+  })
+
+  const uploadDocMutation = useMutation({
+    mutationFn: ({ file, tipo }: { file: File; tipo: string }) =>
+      portalDocumentosAdminApi.upload(docAccessId!, file, tipo),
+    onSuccess: async () => {
+      setDocError('')
+      await queryClient.invalidateQueries({ queryKey: ['portal-docs', docAccessId] })
+    },
+    onError: (error) => setDocError(extractApiErrorMessage(error)),
+  })
+
+  const deleteDocMutation = useMutation({
+    mutationFn: (docId: number) => portalDocumentosAdminApi.remove(docId),
+    onSuccess: async () => {
+      setDocError('')
+      await queryClient.invalidateQueries({ queryKey: ['portal-docs', docAccessId] })
+    },
+    onError: (error) => setDocError(extractApiErrorMessage(error)),
   })
 
   const updatePhotosMutation = useMutation({
@@ -320,6 +352,18 @@ export default function PortalClientesPage() {
         className="sr-only"
         tabIndex={-1}
         onChange={(event) => void pushPortalPhotos(event.target.files)}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (!file || !docAccessId) return
+          uploadDocMutation.mutate({ file, tipo: docTipo })
+          if (docInputRef.current) docInputRef.current.value = ''
+        }}
       />
 
       {/* Header */}
@@ -585,9 +629,11 @@ export default function PortalClientesPage() {
                   access={access}
                   isSelected={form.id === access.id}
                   isManagingPhotos={photoAccessId === access.id}
+                  isManagingDocs={docAccessId === access.id}
                   onEdit={() => startEdit(access)}
                   onManagePhotos={() => openPhotoManager(access, false)}
                   onAddPhoto={() => openPhotoManager(access, true)}
+                  onManageDocs={() => { setDocAccessId(docAccessId === access.id ? null : access.id); setDocError('') }}
                   onCopy={copy}
                   copiedKey={copiedKey}
                   confirmingDelete={deleteConfirmId === access.id}
@@ -595,6 +641,18 @@ export default function PortalClientesPage() {
                   onDeleteCancel={() => setDeleteConfirmId(null)}
                   onDeleteConfirm={() => deleteMutation.mutate(access.id)}
                   isDeleting={deleteMutation.isPending && deleteConfirmId === access.id}
+                  docManager={docAccessId === access.id ? {
+                    docs: docsQuery.data ?? [],
+                    isLoading: docsQuery.isLoading,
+                    isSaving: uploadDocMutation.isPending,
+                    isDeleting: deleteDocMutation.isPending,
+                    error: docError,
+                    tipo: docTipo,
+                    onTipoChange: setDocTipo,
+                    onUpload: () => docInputRef.current?.click(),
+                    onDelete: (id) => deleteDocMutation.mutate(id),
+                    onClose: () => { setDocAccessId(null); setDocError('') },
+                  } : undefined}
                   photoManager={photoAccessId === access.id ? {
                     fotosObra,
                     pendingPhotos,
@@ -620,6 +678,19 @@ export default function PortalClientesPage() {
   )
 }
 
+type DocManager = {
+  docs: { id: number; tipo: string; nome_original: string; tamanho: number | null; criado_em: string }[]
+  isLoading: boolean
+  isSaving: boolean
+  isDeleting: boolean
+  error: string
+  tipo: string
+  onTipoChange: (v: string) => void
+  onUpload: () => void
+  onDelete: (id: number) => void
+  onClose: () => void
+}
+
 type PhotoManager = {
   fotosObra: ObraFoto[]
   pendingPhotos: ObraFoto[]
@@ -639,9 +710,11 @@ function AccessCard({
   access,
   isSelected,
   isManagingPhotos,
+  isManagingDocs,
   onEdit,
   onManagePhotos,
   onAddPhoto,
+  onManageDocs,
   onCopy,
   copiedKey,
   confirmingDelete,
@@ -650,13 +723,16 @@ function AccessCard({
   onDeleteConfirm,
   isDeleting,
   photoManager,
+  docManager,
 }: {
   access: ClientPortalAccessRecord
   isSelected: boolean
   isManagingPhotos: boolean
+  isManagingDocs: boolean
   onEdit: () => void
   onManagePhotos: () => void
   onAddPhoto: () => void
+  onManageDocs: () => void
   onCopy: (text: string, key: string) => void
   copiedKey: string | null
   confirmingDelete: boolean
@@ -665,6 +741,7 @@ function AccessCard({
   onDeleteConfirm: () => void
   isDeleting: boolean
   photoManager?: PhotoManager
+  docManager?: DocManager
 }) {
   const isActive = access.status === 'ativo'
   const loginKey = `login-${access.id}`
@@ -750,6 +827,20 @@ function AccessCard({
           >
             <ImagePlus size={12} />
             Anexar nova foto
+          </button>
+
+          <button
+            type="button"
+            onClick={onManageDocs}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              isManagingDocs
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700'
+            )}
+          >
+            <Paperclip size={12} />
+            Documentos
           </button>
 
           {confirmingDelete ? (
@@ -849,6 +940,83 @@ function AccessCard({
           </span>
         </span>
       </div>
+
+      {/* Inline document panel */}
+      {docManager && (
+        <div className="mt-4 rounded-2xl border border-blue-100 bg-[linear-gradient(180deg,#f0f7ff_0%,#ffffff_100%)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                <Paperclip size={16} className="text-blue-600" />
+                Documentos do portal — obra {access.obraNumero}
+              </div>
+              <p className="mt-1 text-sm text-slate-500">Projetos, sondagens e outros arquivos visíveis ao cliente.</p>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={docManager.onClose}>Fechar</button>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="field-label">Tipo</label>
+              <select value={docManager.tipo} onChange={(e) => docManager.onTipoChange(e.target.value)} className="field-select w-36">
+                <option value="projeto">Projeto</option>
+                <option value="sondagem">Sondagem</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={docManager.onUpload}
+              disabled={docManager.isSaving}
+            >
+              <Upload size={14} />
+              {docManager.isSaving ? 'Enviando...' : 'Enviar arquivo'}
+            </button>
+          </div>
+
+          {docManager.error ? (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{docManager.error}</div>
+          ) : null}
+
+          {docManager.isLoading ? (
+            <div className="mt-4 text-sm text-slate-500">Carregando documentos...</div>
+          ) : docManager.docs.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white/80 px-5 py-8 text-center">
+              <FileText size={28} className="mx-auto text-blue-400" />
+              <div className="mt-2 text-sm font-bold text-slate-800">Nenhum documento cadastrado</div>
+              <p className="mt-1 text-sm text-slate-500">Envie projetos ou sondagens para aparecerem no portal.</p>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-2">
+              {docManager.docs.map((doc) => (
+                <div key={doc.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <FileText size={18} className="shrink-0 text-blue-500" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-slate-800">{doc.nome_original}</div>
+                      <div className="text-xs text-slate-400">
+                        {TIPO_DOCUMENTO_LABELS[doc.tipo] ?? doc.tipo}
+                        {doc.tamanho ? ` · ${Math.round(doc.tamanho / 1024)} KB` : ''}
+                        {' · '}{formatDate(doc.criado_em.slice(0, 10))}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-icon text-red-600"
+                    disabled={docManager.isDeleting}
+                    onClick={() => docManager.onDelete(doc.id)}
+                    title="Remover documento"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Inline photo panel */}
       {photoManager && (

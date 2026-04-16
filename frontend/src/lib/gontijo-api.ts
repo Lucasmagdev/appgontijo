@@ -2573,6 +2573,7 @@ export type ConferenciaEstacaItem = {
   estacas: EstacaExecutada[]
   producaoPlanejada: ProducaoPlanejada[]
   autoComparacao: AutoComparacao
+  toleranciaConferencia: number
 }
 
 export const conferenciaEstacasApi = {
@@ -2596,6 +2597,49 @@ export const conferenciaEstacasApi = {
 
   async definirStatusEstaca(id: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string): Promise<void> {
     await api.post(`/gontijo/conferencia-estacas/${id}/estacas/${stakeIndex}/status`, { status, obs })
+  },
+}
+
+export type PortalDocumento = {
+  id: number
+  tipo: 'projeto' | 'sondagem' | 'outro'
+  nome_original: string
+  tamanho: number | null
+  mime_type: string | null
+  criado_em: string
+}
+
+export const TIPO_DOCUMENTO_LABELS: Record<string, string> = {
+  projeto: 'Projeto',
+  sondagem: 'Sondagem',
+  outro: 'Outro',
+}
+
+export const portalDocumentosAdminApi = {
+  async list(accessId: number): Promise<PortalDocumento[]> {
+    const res = await api.get<{ ok: boolean; data: PortalDocumento[] }>(`/admin/client-portals/${accessId}/documentos`)
+    return res.data.data ?? []
+  },
+  async upload(accessId: number, file: File, tipo: string): Promise<void> {
+    const form = new FormData()
+    form.append('arquivo', file)
+    form.append('tipo', tipo)
+    await api.post(`/admin/client-portals/${accessId}/documentos`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  async remove(docId: number): Promise<void> {
+    await api.delete(`/admin/portal-documentos/${docId}`)
+  },
+}
+
+export const toleranciaConferenciaApi = {
+  async get(obraNumero: string): Promise<number | null> {
+    const res = await api.get<{ ok: boolean; tolerancia: number | null }>(`/gontijo/obras/${obraNumero}/tolerancia-conferencia`)
+    return res.data.tolerancia
+  },
+  async set(obraNumero: string, tolerancia: number): Promise<void> {
+    await api.put(`/gontijo/obras/${obraNumero}/tolerancia-conferencia`, { tolerancia })
   },
 }
 
