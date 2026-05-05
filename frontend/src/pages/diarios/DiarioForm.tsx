@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
+import { ArrowLeft, PencilLine, Plus, Save, Trash2, Wand2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { diarioService, equipamentoService, extractApiErrorMessage, type DiarioPayload } from '@/lib/gontijo-api'
+import { diarioService, equipamentoService, extractApiErrorMessage, textCorrectionService, type DiarioPayload } from '@/lib/gontijo-api'
+import { useAuth } from '@/hooks/useAuth'
 
 type JsonMap = Record<string, unknown>
 type StakeKey = 'stakes' | 'stakesBE'
@@ -299,6 +300,8 @@ function prettyStakeLabel(key: string) {
 }
 
 export default function DiarioFormPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.isAdmin ?? false
   const { id } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -312,6 +315,7 @@ export default function DiarioFormPage() {
   const [editor, setEditor] = useState<DiaryEditorState>(EMPTY_EDITOR)
   const [selectedStakeIndex, setSelectedStakeIndex] = useState(0)
   const [submitError, setSubmitError] = useState('')
+  const [correctionFeedback, setCorrectionFeedback] = useState('')
 
   const diarioQuery = useQuery({
     queryKey: ['diario', id],
@@ -376,8 +380,60 @@ export default function DiarioFormPage() {
     onError: (error) => setSubmitError(extractApiErrorMessage(error)),
   })
 
+  const correctionMutation = useMutation({
+    mutationFn: async (currentEditor: DiaryEditorState) => {
+      const corrections = new Map<string, string>()
+      const correctOnce = async (text: string) => {
+        const normalized = text.trim()
+        if (normalized.length < 7) return text
+        if (corrections.has(normalized)) return corrections.get(normalized) || text
+        const result = await textCorrectionService.correct(normalized)
+        const corrected = result.textoCorrigido || normalized
+        corrections.set(normalized, corrected)
+        return corrected
+      }
+
+      let changed = 0
+      const occurrences = []
+      for (const occurrence of currentEditor.occurrences) {
+        const nextDesc = await correctOnce(occurrence.desc)
+        if (nextDesc !== occurrence.desc.trim() && nextDesc !== occurrence.desc) changed += 1
+        occurrences.push({ ...occurrence, desc: nextDesc })
+      }
+
+      const stakes = []
+      for (const stake of currentEditor.stakes) {
+        const nextStake = { ...stake }
+        if (typeof stake.justify === 'string' && stake.justify.trim().length >= 7) {
+          const nextJustify = await correctOnce(stake.justify)
+          if (nextJustify !== stake.justify.trim() && nextJustify !== stake.justify) changed += 1
+          nextStake.justify = nextJustify
+        }
+        stakes.push(nextStake)
+      }
+
+      return { editor: { ...currentEditor, occurrences, stakes }, changed, checked: corrections.size }
+    },
+    onSuccess: (result) => {
+      setEditor(result.editor)
+      setSubmitError('')
+      setCorrectionFeedback(
+        result.checked === 0
+          ? 'Nenhum texto livre com 7 ou mais caracteres para corrigir.'
+          : result.changed > 0
+            ? `Diario corrigido: ${result.changed} campo(s) ajustado(s).`
+            : 'Corretor executado. Nenhum ajuste encontrado.'
+      )
+    },
+    onError: (error) => {
+      setCorrectionFeedback('')
+      setSubmitError(extractApiErrorMessage(error))
+    },
+  })
+
   function setEditorField<Key extends keyof DiaryEditorState>(key: Key, value: DiaryEditorState[Key]) {
     setEditor((prev) => ({ ...prev, [key]: value }))
+    setCorrectionFeedback('')
   }
 
   function updateAddressField(key: keyof DiaryEditorState['address'], value: string) {
@@ -528,11 +584,27 @@ export default function DiarioFormPage() {
           <h1 className="page-heading">Editar Diario</h1>
           <p className="page-subtitle">Distribuicao dos campos do JSON em secoes editaveis do formulario.</p>
         </div>
+        {isAdmin ? (
+          <button
+            type="button"
+            className="btn btn-secondary ml-auto"
+            disabled={correctionMutation.isPending || !diarioQuery.data}
+            onClick={() => correctionMutation.mutate(editor)}
+          >
+            <Wand2 size={15} />
+            {correctionMutation.isPending ? 'Corrigindo...' : 'Corrigir diario'}
+          </button>
+        ) : null}
       </div>
 
       {diarioQuery.isLoading ? <QueryFeedback type="loading" title="Carregando diario" description="Buscando o registro atual no MySQL." /> : null}
       {diarioQuery.isError ? <QueryFeedback type="error" title="Nao foi possivel carregar o diario" description={extractApiErrorMessage(diarioQuery.error)} /> : null}
       {submitError ? <QueryFeedback type="error" title="Nao foi possivel salvar" description={submitError} /> : null}
+      {correctionFeedback ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          {correctionFeedback}
+        </div>
+      ) : null}
 
       {diarioQuery.data ? (
         <form onSubmit={handleSubmit} className="space-y-4">

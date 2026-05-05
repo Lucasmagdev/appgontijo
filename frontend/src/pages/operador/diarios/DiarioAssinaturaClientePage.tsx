@@ -62,6 +62,7 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
       setFeedback('Link de assinatura gerado com sucesso.')
       await queryClient.invalidateQueries({ queryKey: ['operador-diario-signature-link', diarioId] })
       await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
+      queryClient.removeQueries({ queryKey: ['operador-diario-draft'] })
       copyToClipboard(result.publicUrl, 'Link copiado para a area de transferencia.')
     },
     onError: (error) => setErrorMessage(extractApiErrorMessage(error)),

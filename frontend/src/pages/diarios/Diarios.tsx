@@ -324,6 +324,11 @@ export default function DiariosPage() {
                                 Criado em {formatDateTime(item.criadoEm)}
                               </span>
                             ) : null}
+                            {item.linkGeradoEm ? (
+                              <span className="text-xs text-slate-500">
+                                Link gerado em {formatDateTime(item.linkGeradoEm)}
+                              </span>
+                            ) : null}
                             {item.status !== 'assinado' && (
                               <button
                                 type="button"

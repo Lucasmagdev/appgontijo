@@ -427,10 +427,12 @@ export type DiarioRecord = {
   id: number
   obraId: number
   equipamentoId: number | null
+  operadorId: number | null
   dataDiario: string
   status: 'rascunho' | 'pendente' | 'assinado'
   criadoEm: string
   enviadoEm: string
+  linkGeradoEm: string
   assinadoEm: string
   obraNumero: string
   cliente: string
@@ -439,7 +441,6 @@ export type DiarioRecord = {
 }
 
 export type DiarioDetail = DiarioRecord & {
-  operadorId: number | null
   operadorNome: string
   clienteNome: string
   dadosJson: Record<string, unknown> | null
@@ -978,10 +979,12 @@ function adaptDiario(row: Record<string, unknown>): DiarioRecord {
     id: Number(row.id),
     obraId: Number(row.obra_id),
     equipamentoId: toNumberValue(row.equipamento_id),
+    operadorId: toNumberValue(row.operador_id),
     dataDiario: toDateOnly(row.data_diario),
     status: (toStringValue(row.status) || 'pendente') as DiarioRecord['status'],
     criadoEm: toStringValue(row.criado_em),
     enviadoEm: toStringValue(row.enviado_em),
+    linkGeradoEm: toStringValue(row.link_gerado_em),
     assinadoEm: toStringValue(row.assinado_em),
     obraNumero: toStringValue(row.obra_numero),
     cliente: toStringValue(row.cliente),
@@ -994,7 +997,6 @@ function adaptDiarioDetail(row: Record<string, unknown>): DiarioDetail {
   const base = adaptDiario(row)
   return {
     ...base,
-    operadorId: toNumberValue(row.operador_id),
     operadorNome: toStringValue(row.operador_nome),
     clienteNome: toStringValue(row.cliente),
     dadosJson:

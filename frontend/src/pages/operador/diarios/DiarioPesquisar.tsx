@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
 type DiarioResultado = Awaited<ReturnType<typeof diarioService.list>>
 
 export default function DiarioPesquisar() {
   const navigate = useNavigate()
+  const { user } = useOperadorAuth()
   const [busca, setBusca] = useState('')
   const [resultado, setResultado] = useState<DiarioResultado | null>(null)
   const [naoEncontrado, setNaoEncontrado] = useState(false)
@@ -35,6 +37,17 @@ export default function DiarioPesquisar() {
 
   function openPdf(id: number) {
     window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
+  }
+
+  function getSignatureLabel(item: DiarioResultado['items'][number]) {
+    if (item.status === 'assinado') return 'Ver assinatura'
+    if (item.linkGeradoEm || item.enviadoEm || item.status === 'pendente') return 'Ver / enviar link'
+    return 'Gerar link'
+  }
+
+  function openSignature(item: DiarioResultado['items'][number]) {
+    if (!item.equipamentoId) return
+    navigate(`/operador/diario-de-obras/novo/${item.equipamentoId}/assinatura?diario=${item.id}`)
   }
 
   return (
@@ -249,23 +262,55 @@ export default function DiarioPesquisar() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => openPdf(item.id)}
-                  style={{
-                    border: 'none',
-                    borderRadius: '10px',
-                    background: '#c0392b',
-                    color: '#fff',
-                    padding: '13px 14px',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    letterSpacing: '0.06em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Abrir PDF
-                </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button
+                    onClick={() => openPdf(item.id)}
+                    style={{
+                      border: 'none',
+                      borderRadius: '10px',
+                      background: '#c0392b',
+                      color: '#fff',
+                      padding: '13px 10px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Abrir PDF
+                  </button>
+
+                  <button
+                    onClick={() => openSignature(item)}
+                    disabled={!item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)}
+                    title={
+                      item.operadorId && user?.id && item.operadorId !== user.id
+                        ? 'Somente o operador responsavel pelo diario pode gerar ou reenviar assinatura.'
+                        : undefined
+                    }
+                    style={{
+                      border: 'none',
+                      borderRadius: '10px',
+                      background:
+                        !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
+                          ? '#d1d5db'
+                          : '#2f855a',
+                      color: '#fff',
+                      padding: '13px 10px',
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      cursor:
+                        !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
+                          ? 'not-allowed'
+                          : 'pointer',
+                    }}
+                  >
+                    {getSignatureLabel(item)}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

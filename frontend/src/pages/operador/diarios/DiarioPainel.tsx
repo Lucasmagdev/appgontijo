@@ -844,6 +844,7 @@ export default function DiarioPainel() {
         operadorId: user!.id,
         obraNumero: equipamento!.obraNumero,
       }),
+    gcTime: 0,
   })
 
   const obraDetailQuery = useQuery({
