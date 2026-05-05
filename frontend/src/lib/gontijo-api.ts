@@ -536,8 +536,17 @@ export type PublicDiarySignatureDetail = {
   clientName: string
   clientDocument: string
   clientSignature: string
+  clientObservationText: string
+  clientAttachments: PublicDiaryAttachment[]
   signedAt: string
   expiresAt: string
+}
+
+export type PublicDiaryAttachment = {
+  name: string
+  type: string
+  size: number
+  dataUrl: string
 }
 
 export type ClientPortalAccessRecord = {
@@ -1669,6 +1678,7 @@ function adaptDiarySignatureLinkStatus(row: Record<string, unknown>): DiarySigna
 }
 
 function adaptPublicDiarySignatureDetail(row: Record<string, unknown>): PublicDiarySignatureDetail {
+  const rawAttachments = Array.isArray(row.clientAttachments) ? row.clientAttachments : []
   return {
     tokenStatus: toStringValue(row.tokenStatus) || 'expired',
     diaryId: Number(row.diaryId || 0),
@@ -1683,6 +1693,16 @@ function adaptPublicDiarySignatureDetail(row: Record<string, unknown>): PublicDi
     clientName: toStringValue(row.clientName),
     clientDocument: toStringValue(row.clientDocument),
     clientSignature: toStringValue(row.clientSignature),
+    clientObservationText: toStringValue(row.clientObservationText),
+    clientAttachments: rawAttachments.map((item) => {
+      const attachment = item as Record<string, unknown>
+      return {
+        name: toStringValue(attachment.name),
+        type: toStringValue(attachment.type),
+        size: Number(attachment.size || 0),
+        dataUrl: toStringValue(attachment.dataUrl),
+      }
+    }).filter((item) => item.name),
     signedAt: toStringValue(row.signedAt),
     expiresAt: toStringValue(row.expiresAt),
   }
@@ -1720,12 +1740,14 @@ export const diarioSignatureService = {
   },
   async submitPublic(
     token: string,
-    payload: { nome: string; documento: string; assinatura: string }
+    payload: { nome: string; documento: string; assinatura: string; observacao?: string; anexos?: PublicDiaryAttachment[] }
   ): Promise<{ diaryId: number; signedAt: string }> {
     const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/public/diarios/signature/${token}`, {
       nome: payload.nome,
       documento: payload.documento,
       assinatura: payload.assinatura,
+      observacao: payload.observacao || '',
+      anexos: payload.anexos || [],
     })
     return {
       diaryId: Number(data.data.diaryId || 0),
@@ -2293,6 +2315,103 @@ export type TrainingPointsOverview = {
   }>
 }
 
+export type OperationalIndicators = {
+  filters: {
+    dateFrom: string
+    dateTo: string
+    operator: string
+    obra: string
+  }
+  delays: {
+    tableAvailable: boolean
+    summary: {
+      totalLogs: number
+      sent: number
+      failed: number
+      skipped: number
+      operators: number
+      constructions: number
+    }
+    operators: Array<{
+      operatorName: string
+      phone: string
+      totalNotifications: number
+      sentNotifications: number
+      failedNotifications: number
+      constructions: number
+      lastNotificationAt: string
+    }>
+    recent: Array<{
+      id: number
+      status: string
+      operatorName: string
+      phone: string
+      obraNumero: string
+      referenceDate: string
+      createdAt: string
+      errorText: string
+    }>
+  }
+  signatures: {
+    tableAvailable: boolean
+    summary: {
+      total: number
+      signed: number
+      active: number
+      expired: number
+      revoked: number
+      rate: number
+      averageMinutesToSign: number | null
+    }
+    recent: Array<{
+      id: number
+      diaryId: number
+      status: string
+      sentAt: string
+      signedAt: string
+      expiresAt: string
+      clientName: string
+      operatorName: string
+      obraNumero: string
+      equipamento: string
+      dataDiario: string
+    }>
+  }
+}
+
+export type PredefinedOccurrence = {
+  id: number
+  title: string
+  category: string
+  templateText: string
+  active: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type PredefinedOccurrencePayload = {
+  title: string
+  category?: string
+  templateText: string
+  active?: boolean
+  sortOrder?: number
+}
+
+export type TextCorrectionResult = {
+  textoOriginal: string
+  textoCorrigido: string
+  alterado: boolean
+  sugestoes: Array<{
+    offset: number
+    length: number
+    trecho: string
+    message: string
+    ruleId: string
+    replacements: string[]
+  }>
+}
+
 export type ResultadoMatrizColumn = {
   curso_id: number
   curso_titulo: string
@@ -2656,5 +2775,50 @@ export const operadorFatoObservadoApi = {
 export const operadorIndicacoesApi = {
   async indicar(payload: { contato_nome: string; contato_telefone?: string; endereco: string; tipo_servico?: string; observacoes?: string }): Promise<void> {
     await api.post('/gontijo/operador/indicacoes-obra', payload)
+  },
+}
+
+export const operationalIndicatorsService = {
+  async get(params: { dateFrom?: string; dateTo?: string; operator?: string; obra?: string }): Promise<OperationalIndicators> {
+    const q = new URLSearchParams()
+    if (params.dateFrom) q.set('date_from', params.dateFrom)
+    if (params.dateTo) q.set('date_to', params.dateTo)
+    if (params.operator) q.set('operator', params.operator)
+    if (params.obra) q.set('obra', params.obra)
+
+    const res = await api.get<ApiEnvelope<OperationalIndicators>>(`/admin/operational-indicators?${q}`)
+    return res.data.data
+  },
+}
+
+export const predefinedOccurrencesAdminService = {
+  async list(): Promise<PredefinedOccurrence[]> {
+    const res = await api.get<ApiEnvelope<PredefinedOccurrence[]>>('/admin/predefined-occurrences')
+    return res.data.data ?? []
+  },
+  async create(payload: PredefinedOccurrencePayload): Promise<PredefinedOccurrence> {
+    const res = await api.post<ApiEnvelope<PredefinedOccurrence>>('/admin/predefined-occurrences', payload)
+    return res.data.data
+  },
+  async update(id: number, payload: PredefinedOccurrencePayload): Promise<PredefinedOccurrence> {
+    const res = await api.put<ApiEnvelope<PredefinedOccurrence>>(`/admin/predefined-occurrences/${id}`, payload)
+    return res.data.data
+  },
+  async remove(id: number): Promise<void> {
+    await api.delete(`/admin/predefined-occurrences/${id}`)
+  },
+}
+
+export const predefinedOccurrencesService = {
+  async list(): Promise<PredefinedOccurrence[]> {
+    const res = await api.get<ApiEnvelope<PredefinedOccurrence[]>>('/gontijo/predefined-occurrences')
+    return res.data.data ?? []
+  },
+}
+
+export const textCorrectionService = {
+  async correct(text: string): Promise<TextCorrectionResult> {
+    const res = await api.post<ApiEnvelope<TextCorrectionResult>>('/gontijo/texto/corrigir', { text })
+    return res.data.data
   },
 }

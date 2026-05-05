@@ -5,12 +5,14 @@ import {
   Fingerprint,
   ClipboardCheck,
   MessageCircle,
+  Gauge,
+  ListChecks,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   clienteService, dashboardService, diarioService,
-  equipamentoService, modalidadeService, obraService, usuarioService, solidesPointService, whatsappAdminService,
+  equipamentoService, modalidadeService, obraService, operationalIndicatorsService, predefinedOccurrencesAdminService, usuarioService, solidesPointService, whatsappAdminService,
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +25,8 @@ const navItems = [
   { label: 'Equipamentos', to: '/equipamentos', icon: Wrench },
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
+  { label: 'Indicadores Operacionais', to: '/indicadores-operacionais', icon: Gauge },
+  { label: 'Pre-ocorrencias', to: '/pre-ocorrencias', icon: ListChecks },
   { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
   { label: 'WhatsApp', to: '/whatsapp', icon: MessageCircle },
   { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
@@ -61,6 +65,17 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
       void queryClient.prefetchQuery({ queryKey: ['solides-status'], queryFn: solidesPointService.getStatus })
     } else if (to === '/whatsapp') {
       void queryClient.prefetchQuery({ queryKey: ['whatsapp-status'], queryFn: whatsappAdminService.getStatus })
+    } else if (to === '/indicadores-operacionais') {
+      const now = new Date()
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+      const dateFrom = firstDay.toISOString().slice(0, 10)
+      const dateTo = now.toISOString().slice(0, 10)
+      void queryClient.prefetchQuery({
+        queryKey: ['operational-indicators', { dateFrom, dateTo, operator: '', obra: '' }],
+        queryFn: () => operationalIndicatorsService.get({ dateFrom, dateTo }),
+      })
+    } else if (to === '/pre-ocorrencias') {
+      void queryClient.prefetchQuery({ queryKey: ['predefined-occurrences-admin'], queryFn: predefinedOccurrencesAdminService.list })
     }
   }
 

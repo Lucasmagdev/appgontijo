@@ -80,6 +80,55 @@ async function ensurePortalDocumentsTable() {
   `)
   _portalDocsTableEnsured = true
 }
+
+const DEFAULT_PREDEFINED_OCCURRENCES = [
+  "Chuva forte - paralisacao da atividade",
+  "Falta de material / insumo",
+  "Falha no equipamento",
+  "Manutencao nao programada",
+  "Acidente de trabalho",
+  "Atraso ou falta da equipe",
+  "Paralisacao a pedido do cliente",
+  "Falta de agua / concreto",
+  "Problema eletrico",
+  "Dificuldade no solo / terreno",
+  "Interferencia de terceiros na area",
+  "Aguardando projeto / liberacao tecnica",
+  "Vento forte / condicoes climaticas adversas",
+  "Dificuldade de acesso ao local",
+];
+
+let _predefinedOccurrencesTableEnsured = false;
+async function ensurePredefinedOccurrencesTable() {
+  if (_predefinedOccurrencesTableEnsured) return;
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS predefined_occurrences (
+      id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      title         VARCHAR(160) NOT NULL,
+      category      VARCHAR(80) NULL,
+      template_text TEXT NOT NULL,
+      active        ENUM('S','N') NOT NULL DEFAULT 'S',
+      sort_order    INT NOT NULL DEFAULT 0,
+      created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_predefined_occurrences_active_order (active, sort_order, title)
+    )
+  `);
+
+  const [[row]] = await db.query("SELECT COUNT(*) AS total FROM predefined_occurrences");
+  if (Number(row?.total || 0) === 0) {
+    for (let index = 0; index < DEFAULT_PREDEFINED_OCCURRENCES.length; index += 1) {
+      const title = DEFAULT_PREDEFINED_OCCURRENCES[index];
+      await db.query(
+        `INSERT INTO predefined_occurrences (title, category, template_text, active, sort_order)
+         VALUES (?, ?, ?, 'S', ?)`,
+        [title, "Geral", title, (index + 1) * 10]
+      );
+    }
+  }
+
+  _predefinedOccurrencesTableEnsured = true;
+}
 let goalTargetSanitizePromise = null;
 
 function ensureGoalTargetsSanitized() {
@@ -3185,6 +3234,267 @@ app.get("/api/admin/whatsapp/logs", requireAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/operational-indicators", requireAdmin, async (req, res) => {
+  try {
+    const dateFrom = normalizeDateOnly(req.query.date_from);
+    const dateTo = normalizeDateOnly(req.query.date_to);
+    const operatorSearch = String(req.query.operator || "").trim();
+    const obraSearch = String(req.query.obra || "").trim();
+
+    const [hasWhatsappLogs, hasSignatureLinks] = await Promise.all([
+      tableExists("whatsapp_notification_logs"),
+      tableExists("diary_signature_links"),
+    ]);
+
+    const delayWhere = ["l.event_type = 'diary_overdue_reminder'"];
+    const delayParams = [];
+    if (dateFrom) {
+      delayWhere.push("DATE(l.created_at) >= ?");
+      delayParams.push(dateFrom);
+    }
+    if (dateTo) {
+      delayWhere.push("DATE(l.created_at) <= ?");
+      delayParams.push(dateTo);
+    }
+    if (operatorSearch) {
+      delayWhere.push("(l.target_name LIKE ? OR u.name LIKE ?)");
+      delayParams.push(`%${operatorSearch}%`, `%${operatorSearch}%`);
+    }
+    if (obraSearch) {
+      delayWhere.push("(c.construction_number LIKE ? OR l.target_name LIKE ?)");
+      delayParams.push(`%${obraSearch}%`, `%${obraSearch}%`);
+    }
+    const delayWhereSql = `WHERE ${delayWhere.join(" AND ")}`;
+
+    let delaySummary = {
+      totalLogs: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      operators: 0,
+      constructions: 0,
+    };
+    let delayOperators = [];
+    let delayRows = [];
+
+    if (hasWhatsappLogs) {
+      const [[summaryRow]] = await db.query(
+        `SELECT COUNT(*) AS total_logs,
+                SUM(CASE WHEN l.status = 'sent' THEN 1 ELSE 0 END) AS sent_count,
+                SUM(CASE WHEN l.status = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                SUM(CASE WHEN l.status = 'skipped' THEN 1 ELSE 0 END) AS skipped_count,
+                COUNT(DISTINCT CASE WHEN l.status = 'sent' THEN COALESCE(l.user_id, l.target_name) END) AS operators_count,
+                COUNT(DISTINCT CASE WHEN l.status = 'sent' THEN l.construction_id END) AS constructions_count
+         FROM whatsapp_notification_logs l
+         LEFT JOIN users u ON u.id = l.user_id
+         LEFT JOIN constructions c ON c.id = l.construction_id
+         ${delayWhereSql}`,
+        delayParams
+      );
+
+      delaySummary = {
+        totalLogs: Number(summaryRow?.total_logs || 0),
+        sent: Number(summaryRow?.sent_count || 0),
+        failed: Number(summaryRow?.failed_count || 0),
+        skipped: Number(summaryRow?.skipped_count || 0),
+        operators: Number(summaryRow?.operators_count || 0),
+        constructions: Number(summaryRow?.constructions_count || 0),
+      };
+
+      const [operatorRows] = await db.query(
+        `SELECT COALESCE(NULLIF(l.target_name, ''), u.name, 'Sem operador') AS operator_name,
+                MAX(l.phone) AS phone,
+                COUNT(*) AS total_notifications,
+                SUM(CASE WHEN l.status = 'sent' THEN 1 ELSE 0 END) AS sent_notifications,
+                SUM(CASE WHEN l.status = 'failed' THEN 1 ELSE 0 END) AS failed_notifications,
+                COUNT(DISTINCT l.construction_id) AS constructions_count,
+                MAX(l.created_at) AS last_notification_at
+         FROM whatsapp_notification_logs l
+         LEFT JOIN users u ON u.id = l.user_id
+         LEFT JOIN constructions c ON c.id = l.construction_id
+         ${delayWhereSql}
+         GROUP BY operator_name
+         ORDER BY sent_notifications DESC, total_notifications DESC, operator_name ASC
+         LIMIT 12`,
+        delayParams
+      );
+
+      delayOperators = operatorRows.map((row) => ({
+        operatorName: String(row.operator_name || "Sem operador"),
+        phone: String(row.phone || ""),
+        totalNotifications: Number(row.total_notifications || 0),
+        sentNotifications: Number(row.sent_notifications || 0),
+        failedNotifications: Number(row.failed_notifications || 0),
+        constructions: Number(row.constructions_count || 0),
+        lastNotificationAt: row.last_notification_at,
+      }));
+
+      const [recentDelayRows] = await db.query(
+        `SELECT l.id,
+                l.status,
+                l.phone,
+                l.reference_date,
+                l.target_name,
+                l.created_at,
+                l.error_text,
+                u.name AS user_name,
+                c.construction_number
+         FROM whatsapp_notification_logs l
+         LEFT JOIN users u ON u.id = l.user_id
+         LEFT JOIN constructions c ON c.id = l.construction_id
+         ${delayWhereSql}
+         ORDER BY l.created_at DESC, l.id DESC
+         LIMIT 30`,
+        delayParams
+      );
+
+      delayRows = recentDelayRows.map((row) => ({
+        id: Number(row.id),
+        status: String(row.status || ""),
+        operatorName: String(row.target_name || row.user_name || "Sem operador"),
+        phone: String(row.phone || ""),
+        obraNumero: String(row.construction_number || ""),
+        referenceDate: normalizeDateOnly(row.reference_date),
+        createdAt: row.created_at,
+        errorText: String(row.error_text || ""),
+      }));
+    }
+
+    const signatureWhere = ["1 = 1"];
+    const signatureParams = [];
+    if (dateFrom) {
+      signatureWhere.push("DATE(COALESCE(l.sent_at, l.created_at)) >= ?");
+      signatureParams.push(dateFrom);
+    }
+    if (dateTo) {
+      signatureWhere.push("DATE(COALESCE(l.sent_at, l.created_at)) <= ?");
+      signatureParams.push(dateTo);
+    }
+    if (operatorSearch) {
+      signatureWhere.push("u.name LIKE ?");
+      signatureParams.push(`%${operatorSearch}%`);
+    }
+    if (obraSearch) {
+      signatureWhere.push("(c.construction_number LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')) LIKE ?)");
+      signatureParams.push(`%${obraSearch}%`, `%${obraSearch}%`);
+    }
+    const signatureWhereSql = `WHERE ${signatureWhere.join(" AND ")}`;
+
+    let signatureSummary = {
+      total: 0,
+      signed: 0,
+      active: 0,
+      expired: 0,
+      revoked: 0,
+      rate: 0,
+      averageMinutesToSign: null,
+    };
+    let signatureRows = [];
+
+    if (hasSignatureLinks) {
+      const [[signatureSummaryRow]] = await db.query(
+        `SELECT COUNT(*) AS total_links,
+                SUM(CASE WHEN l.status = 'signed' THEN 1 ELSE 0 END) AS signed_links,
+                SUM(CASE WHEN l.status = 'active' THEN 1 ELSE 0 END) AS active_links,
+                SUM(CASE WHEN l.status = 'expired' THEN 1 ELSE 0 END) AS expired_links,
+                SUM(CASE WHEN l.status = 'revoked' THEN 1 ELSE 0 END) AS revoked_links,
+                AVG(CASE WHEN l.status = 'signed' AND l.signed_at IS NOT NULL
+                  THEN TIMESTAMPDIFF(MINUTE, COALESCE(l.sent_at, l.created_at), l.signed_at)
+                  ELSE NULL
+                END) AS avg_minutes_to_sign
+         FROM diary_signature_links l
+         INNER JOIN diaries d ON d.id = l.diary_id
+         LEFT JOIN users u ON u.id = d.user_id
+         LEFT JOIN constructions c ON c.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED)
+         ${signatureWhereSql}`,
+        signatureParams
+      );
+
+      const total = Number(signatureSummaryRow?.total_links || 0);
+      const signed = Number(signatureSummaryRow?.signed_links || 0);
+      signatureSummary = {
+        total,
+        signed,
+        active: Number(signatureSummaryRow?.active_links || 0),
+        expired: Number(signatureSummaryRow?.expired_links || 0),
+        revoked: Number(signatureSummaryRow?.revoked_links || 0),
+        rate: total > 0 ? Number(((signed / total) * 100).toFixed(1)) : 0,
+        averageMinutesToSign:
+          signatureSummaryRow?.avg_minutes_to_sign == null
+            ? null
+            : Math.round(Number(signatureSummaryRow.avg_minutes_to_sign || 0)),
+      };
+
+      const [recentSignatureRows] = await db.query(
+        `SELECT l.id,
+                l.diary_id,
+                l.status,
+                l.sent_at,
+                l.signed_at,
+                l.expires_at,
+                l.client_name,
+                u.name AS operator_name,
+                COALESCE(c.construction_number, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number'))) AS obra_numero,
+                COALESCE(cl.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.client'))) AS cliente,
+                COALESCE(e.name, JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')), JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))) AS equipamento,
+                COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d')) AS data_diario
+         FROM diary_signature_links l
+         INNER JOIN diaries d ON d.id = l.diary_id
+         LEFT JOIN users u ON u.id = d.user_id
+         LEFT JOIN constructions c ON c.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED)
+         LEFT JOIN clients cl ON cl.id = c.client_id
+         LEFT JOIN equipments e ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+         ${signatureWhereSql}
+         ORDER BY COALESCE(l.sent_at, l.created_at) DESC, l.id DESC
+         LIMIT 30`,
+        signatureParams
+      );
+
+      signatureRows = recentSignatureRows.map((row) => ({
+        id: Number(row.id),
+        diaryId: Number(row.diary_id),
+        status: String(row.status || ""),
+        sentAt: row.sent_at,
+        signedAt: row.signed_at,
+        expiresAt: row.expires_at,
+        clientName: String(row.client_name || row.cliente || ""),
+        operatorName: String(row.operator_name || ""),
+        obraNumero: String(row.obra_numero || ""),
+        equipamento: String(row.equipamento || ""),
+        dataDiario: normalizeDateOnly(row.data_diario),
+      }));
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        filters: {
+          dateFrom: dateFrom || "",
+          dateTo: dateTo || "",
+          operator: operatorSearch,
+          obra: obraSearch,
+        },
+        delays: {
+          tableAvailable: hasWhatsappLogs,
+          summary: delaySummary,
+          operators: delayOperators,
+          recent: delayRows,
+        },
+        signatures: {
+          tableAvailable: hasSignatureLinks,
+          summary: signatureSummary,
+          recent: signatureRows,
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error.message || "Falha ao carregar indicadores operacionais.",
+    });
+  }
+});
+
 app.get("/api/admin/whatsapp/diary-overdue-preview", requireAdmin, async (_req, res) => {
   try {
     const schema = await fetchWhatsAppSchemaStatus();
@@ -3991,6 +4301,217 @@ app.get("/api/gontijo/operador/cursos/:id/certificado", async (req, res) => {
   }
 });
 
+function normalizePredefinedOccurrence(row) {
+  return {
+    id: Number(row.id),
+    title: String(row.title || ""),
+    category: String(row.category || ""),
+    templateText: String(row.template_text || row.title || ""),
+    active: String(row.active || "S") === "S",
+    sortOrder: Number(row.sort_order || 0),
+    createdAt: row.created_at ? String(row.created_at) : "",
+    updatedAt: row.updated_at ? String(row.updated_at) : "",
+  };
+}
+
+function validatePredefinedOccurrencePayload(input, partial = false) {
+  const title = String(input?.title || "").trim();
+  const templateText = String(input?.templateText || input?.template_text || title).trim();
+  const category = String(input?.category || "").trim();
+  const sortOrder = Number(input?.sortOrder ?? input?.sort_order ?? 0);
+  const active = input?.active === undefined ? true : parseBooleanFlag(input.active, true);
+
+  if (!partial || title || templateText) {
+    if (!title) throw new Error("Informe o titulo da pre-ocorrencia.");
+    if (!templateText) throw new Error("Informe o texto padrao da pre-ocorrencia.");
+  }
+
+  return {
+    title,
+    category,
+    templateText,
+    active,
+    sortOrder: Number.isFinite(sortOrder) ? Math.trunc(sortOrder) : 0,
+  };
+}
+
+function applyLanguageToolReplacements(text, matches) {
+  let corrected = String(text || "");
+  const ordered = [...matches].sort((a, b) => Number(b.offset || 0) - Number(a.offset || 0));
+  for (const match of ordered) {
+    const replacement = match?.replacements?.[0]?.value;
+    const offset = Number(match?.offset);
+    const length = Number(match?.length);
+    if (!replacement || !Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) continue;
+    corrected = `${corrected.slice(0, offset)}${replacement}${corrected.slice(offset + length)}`;
+  }
+  return corrected;
+}
+
+function hasGontijoAppAccess(req) {
+  return Boolean(getOperadorSession(req)?.userId || getAdminSession(req)?.cpf);
+}
+
+app.get("/api/admin/predefined-occurrences", requireAdmin, async (_req, res) => {
+  try {
+    await ensurePredefinedOccurrencesTable();
+    const [rows] = await db.query(
+      `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
+       FROM predefined_occurrences
+       ORDER BY sort_order ASC, title ASC`
+    );
+    return res.json({ ok: true, data: rows.map(normalizePredefinedOccurrence) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/admin/predefined-occurrences", requireAdmin, async (req, res) => {
+  try {
+    await ensurePredefinedOccurrencesTable();
+    const payload = validatePredefinedOccurrencePayload(req.body);
+    const [result] = await db.query(
+      `INSERT INTO predefined_occurrences (title, category, template_text, active, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [payload.title, textOrNull(payload.category), payload.templateText, payload.active ? "S" : "N", payload.sortOrder]
+    );
+    const [[row]] = await db.query(
+      `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
+       FROM predefined_occurrences
+       WHERE id = ?`,
+      [result.insertId]
+    );
+    return res.status(201).json({ ok: true, data: normalizePredefinedOccurrence(row) });
+  } catch (error) {
+    const status = /Informe/.test(error.message) ? 400 : 500;
+    return res.status(status).json({ ok: false, message: error.message });
+  }
+});
+
+app.put("/api/admin/predefined-occurrences/:id", requireAdmin, async (req, res) => {
+  try {
+    await ensurePredefinedOccurrencesTable();
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, message: "ID invalido." });
+    const payload = validatePredefinedOccurrencePayload(req.body);
+    await db.query(
+      `UPDATE predefined_occurrences
+       SET title = ?, category = ?, template_text = ?, active = ?, sort_order = ?
+       WHERE id = ?`,
+      [payload.title, textOrNull(payload.category), payload.templateText, payload.active ? "S" : "N", payload.sortOrder, id]
+    );
+    const [[row]] = await db.query(
+      `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
+       FROM predefined_occurrences
+       WHERE id = ?`,
+      [id]
+    );
+    if (!row) return res.status(404).json({ ok: false, message: "Pre-ocorrencia nao encontrada." });
+    return res.json({ ok: true, data: normalizePredefinedOccurrence(row) });
+  } catch (error) {
+    const status = /Informe|invalido/.test(error.message) ? 400 : 500;
+    return res.status(status).json({ ok: false, message: error.message });
+  }
+});
+
+app.delete("/api/admin/predefined-occurrences/:id", requireAdmin, async (req, res) => {
+  try {
+    await ensurePredefinedOccurrencesTable();
+    const id = parsePositiveInteger(req.params.id);
+    if (!id) return res.status(400).json({ ok: false, message: "ID invalido." });
+    await db.query("DELETE FROM predefined_occurrences WHERE id = ?", [id]);
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get("/api/gontijo/predefined-occurrences", async (_req, res) => {
+  try {
+    if (!hasGontijoAppAccess(_req)) {
+      return res.status(401).json({ ok: false, message: "Sessao obrigatoria." });
+    }
+    await ensurePredefinedOccurrencesTable();
+    const [rows] = await db.query(
+      `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
+       FROM predefined_occurrences
+       WHERE active = 'S'
+       ORDER BY sort_order ASC, title ASC`
+    );
+    return res.json({ ok: true, data: rows.map(normalizePredefinedOccurrence) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.post("/api/gontijo/texto/corrigir", async (req, res) => {
+  if (!hasGontijoAppAccess(req)) {
+    return res.status(401).json({ ok: false, message: "Sessao obrigatoria." });
+  }
+
+  const text = String(req.body?.text || req.body?.texto || "").trim();
+  if (!text) return res.status(400).json({ ok: false, message: "Informe o texto para corrigir." });
+  if (text.length > 3000) return res.status(400).json({ ok: false, message: "Texto limitado a 3000 caracteres." });
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const endpoint = process.env.LANGUAGETOOL_API_URL || "https://api.languagetool.org/v2/check";
+    const body = new URLSearchParams({
+      text,
+      language: "pt-BR",
+      enabledOnly: "false",
+    });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: controller.signal,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return res.status(502).json({
+        ok: false,
+        message: payload?.message || "Nao foi possivel consultar o corretor de texto.",
+      });
+    }
+
+    const matches = Array.isArray(payload.matches) ? payload.matches : [];
+    const suggestions = matches.map((match) => ({
+      offset: Number(match.offset || 0),
+      length: Number(match.length || 0),
+      trecho: text.slice(Number(match.offset || 0), Number(match.offset || 0) + Number(match.length || 0)),
+      message: String(match.message || ""),
+      ruleId: String(match.rule?.id || ""),
+      replacements: Array.isArray(match.replacements)
+        ? match.replacements.slice(0, 5).map((item) => String(item.value || "")).filter(Boolean)
+        : [],
+    }));
+    const correctedText = applyLanguageToolReplacements(text, matches);
+
+    return res.json({
+      ok: true,
+      data: {
+        textoOriginal: text,
+        textoCorrigido: correctedText,
+        alterado: correctedText !== text,
+        sugestoes: suggestions,
+      },
+    });
+  } catch (error) {
+    const aborted = error?.name === "AbortError";
+    return res.status(502).json({
+      ok: false,
+      message: aborted ? "O corretor demorou para responder. Tente novamente." : "Nao foi possivel corrigir o texto agora.",
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
 app.use("/api/gontijo", (req, _res, next) => {
   const operadorSession = getOperadorSession(req);
   const adminSession = getAdminSession(req);
@@ -4616,6 +5137,27 @@ function isSignatureLinkExpired(link) {
   return new Date(link.expires_at).getTime() <= Date.now();
 }
 
+function normalizeClientDiaryAttachments(value) {
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
+  const items = Array.isArray(value) ? value : [];
+  return items.slice(0, 5).map((item) => {
+    const name = String(item?.name || "anexo").trim().slice(0, 180) || "anexo";
+    const type = String(item?.type || "").trim().toLowerCase();
+    const size = Math.max(0, Number(item?.size || 0) || 0);
+    const dataUrl = String(item?.dataUrl || "").trim();
+
+    if (!allowedTypes.has(type)) return null;
+    if (size > 5 * 1024 * 1024) return null;
+    if (!dataUrl.startsWith(`data:${type};base64,`)) return null;
+
+    return { name, type, size, dataUrl };
+  }).filter(Boolean);
+}
+
+function normalizeClientDiaryObservation(value) {
+  return String(value || "").trim().slice(0, 5000);
+}
+
 async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null } = {}) {
   const params = [diaryId];
   let where = "WHERE d.id = ?";
@@ -5162,6 +5704,15 @@ app.get("/api/public/diarios/signature/:token", async (req, res) => {
         clientName: firstFilledText(diary.data.signatureName, link.client_name, requestMeta.clientName),
         clientDocument: firstFilledText(diary.data.signatureDoc, link.client_document, requestMeta.clientDocument),
         clientSignature: firstFilledText(diary.data.signature),
+        clientObservationText: firstFilledText(diary.data.clientObservation?.text),
+        clientAttachments: Array.isArray(diary.data.clientObservation?.attachments)
+          ? diary.data.clientObservation.attachments.map((item) => ({
+              name: firstFilledText(item?.name),
+              type: firstFilledText(item?.type),
+              size: Number(item?.size || 0) || 0,
+              dataUrl: firstFilledText(item?.dataUrl),
+            })).filter((item) => item.name)
+          : [],
         signedAt: firstFilledText(link.signed_at, diary.data.assinado_em, requestMeta.signedAt),
         expiresAt: firstFilledText(link.expires_at, requestMeta.expiresAt),
       },
@@ -5175,6 +5726,8 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
   const nome = String(req.body?.nome || "").trim();
   const documento = String(req.body?.documento || "").trim();
   const assinatura = String(req.body?.assinatura || "").trim();
+  const observacao = normalizeClientDiaryObservation(req.body?.observacao);
+  const anexos = normalizeClientDiaryAttachments(req.body?.anexos);
 
   if (!nome || !documento || !assinatura) {
     return res.status(400).json({
@@ -5241,6 +5794,11 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
         document: documento,
         signature: assinatura,
         signedAt,
+      },
+      clientObservation: {
+        text: observacao,
+        attachments: anexos,
+        createdAt: signedAt,
       },
       signature_request: {
         ...(diaryData.signature_request && typeof diaryData.signature_request === "object" ? diaryData.signature_request : {}),

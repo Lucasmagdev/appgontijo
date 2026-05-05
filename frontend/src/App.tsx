@@ -19,6 +19,8 @@ const DiariosPage = lazy(() => import('@/pages/diarios/Diarios'))
 const DiarioFormPage = lazy(() => import('@/pages/diarios/DiarioForm'))
 const DiarioConferenciaPage = lazy(() => import('@/pages/diarios/DiarioConferenciaPage'))
 const ProducaoPage = lazy(() => import('@/pages/producao/Producao'))
+const IndicadoresOperacionaisPage = lazy(() => import('@/pages/indicadores/IndicadoresOperacionaisPage'))
+const PreOcorrenciasPage = lazy(() => import('@/pages/ocorrencias/PreOcorrenciasPage'))
 const PortalClientesPage = lazy(() => import('@/pages/clientes-portal/PortalClientesPage'))
 const CursosPage = lazy(() => import('@/pages/cursos/Cursos'))
 const CursoFormPage = lazy(() => import('@/pages/cursos/CursoForm'))
@@ -209,6 +211,8 @@ export default function App() {
           <Route path="obras/:id/editar" element={<ObraFormPage />} />
           <Route path="equipamentos" element={<EquipamentosPage />} />
           <Route path="producao" element={<ProducaoPage />} />
+          <Route path="indicadores-operacionais" element={<IndicadoresOperacionaisPage />} />
+          <Route path="pre-ocorrencias" element={<PreOcorrenciasPage />} />
           <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
           <Route path="whatsapp" element={<WhatsAppLogsPage />} />
           <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />

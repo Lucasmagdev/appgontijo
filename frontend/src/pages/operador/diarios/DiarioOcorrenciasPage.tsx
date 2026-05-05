@@ -1,27 +1,18 @@
 import { type CSSProperties, type ReactNode, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, SpellCheck, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { diarioService, extractApiErrorMessage, predefinedOccurrencesService, textCorrectionService, type PredefinedOccurrence } from '@/lib/gontijo-api'
 
-const PREDEFINIDAS = [
-  { id: 'chuva-forte', label: 'Chuva forte - paralisacao da atividade' },
-  { id: 'falta-material', label: 'Falta de material / insumo' },
-  { id: 'falha-equipamento', label: 'Falha no equipamento' },
-  { id: 'manutencao-nao-programada', label: 'Manutencao nao programada' },
-  { id: 'acidente-trabalho', label: 'Acidente de trabalho' },
-  { id: 'atraso-equipe', label: 'Atraso ou falta da equipe' },
-  { id: 'paralisacao-cliente', label: 'Paralisacao a pedido do cliente' },
-  { id: 'falta-agua-concreto', label: 'Falta de agua / concreto' },
-  { id: 'problema-eletrico', label: 'Problema eletrico' },
-  { id: 'problema-solo', label: 'Dificuldade no solo / terreno' },
-  { id: 'interferencia-terceiros', label: 'Interferencia de terceiros na area' },
-  { id: 'aguardando-projeto', label: 'Aguardando projeto / liberacao tecnica' },
-  { id: 'vento-forte', label: 'Vento forte / condicoes climaticas adversas' },
-  { id: 'acesso-dificil', label: 'Dificuldade de acesso ao local' },
+const FALLBACK_PREDEFINIDAS = [
+  { id: 'fallback-chuva-forte', title: 'Chuva forte - paralisacao da atividade', templateText: 'Chuva forte - paralisacao da atividade' },
+  { id: 'fallback-falta-material', title: 'Falta de material / insumo', templateText: 'Falta de material / insumo' },
+  { id: 'fallback-falha-equipamento', title: 'Falha no equipamento', templateText: 'Falha no equipamento' },
+  { id: 'fallback-manutencao-nao-programada', title: 'Manutencao nao programada', templateText: 'Manutencao nao programada' },
 ] as const
 
-type PredefinidaId = (typeof PREDEFINIDAS)[number]['id']
+type PredefinidaId = string
+type PredefinidaOption = Pick<PredefinedOccurrence, 'title' | 'templateText'> & { id: string | number }
 
 type DiarioOcorrencia = {
   id: string
@@ -85,7 +76,7 @@ function normalizeOcorrencia(raw: unknown): DiarioOcorrencia | null {
   return {
     id: String(row.id || genId()),
     tipo,
-    categoriaId: typeof row.categoriaId === 'string' ? (row.categoriaId as PredefinidaId) : undefined,
+    categoriaId: typeof row.categoriaId === 'string' ? row.categoriaId : undefined,
     descricao,
     horaInicial: normalizeTime(row.horaInicial || row.hora_ini),
     horaFinal: normalizeTime(row.horaFinal || row.hora_fim),
@@ -142,6 +133,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   const [selectedPredefinida, setSelectedPredefinida] = useState<PredefinidaId | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitErr, setSubmitErr] = useState('')
+  const [correctionMsg, setCorrectionMsg] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeTimeField, setActiveTimeField] = useState<ActiveTimeField>(null)
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
@@ -151,6 +143,18 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     enabled: diarioId > 0,
     queryFn: () => diarioService.getById(diarioId),
   })
+
+  const predefinedQuery = useQuery({
+    queryKey: ['predefined-occurrences'],
+    queryFn: predefinedOccurrencesService.list,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const predefinidas = useMemo<PredefinidaOption[]>(() => {
+    const items = predefinedQuery.data || []
+    if (items.length) return items.map((item) => ({ id: item.id, title: item.title, templateText: item.templateText }))
+    return [...FALLBACK_PREDEFINIDAS]
+  }, [predefinedQuery.data])
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
@@ -190,6 +194,23 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     onError: (err) => setSubmitErr(extractApiErrorMessage(err)),
   })
 
+  const correctionMutation = useMutation({
+    mutationFn: () => textCorrectionService.correct(descricao.trim()),
+    onSuccess: (result) => {
+      if (result.alterado && result.textoCorrigido) {
+        setDescricao(result.textoCorrigido)
+        setCorrectionMsg(`Texto corrigido (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`)
+      } else {
+        setCorrectionMsg('Nenhuma correcao encontrada.')
+      }
+      setSubmitErr('')
+    },
+    onError: (err) => {
+      setCorrectionMsg('')
+      setSubmitErr(extractApiErrorMessage(err))
+    },
+  })
+
   function resetForm() {
     setDescricao('')
     setHoraInicial('')
@@ -197,6 +218,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setSelectedPredefinida(null)
     setEditingId(null)
     setSubmitErr('')
+    setCorrectionMsg('')
     setPickerOpen(false)
     setActiveTimeField(null)
     setTimeStep('hour')
@@ -253,6 +275,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setSelectedPredefinida(item.tipo === 'predefinida' ? item.categoriaId || null : null)
     setEditingId(item.id)
     setSubmitErr('')
+    setCorrectionMsg('')
     try {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch {
@@ -261,11 +284,12 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   }
 
   function choosePredefinida(id: PredefinidaId) {
-    const item = PREDEFINIDAS.find((entry) => entry.id === id)
+    const item = predefinidas.find((entry) => String(entry.id) === id)
     if (!item) return
     setSelectedPredefinida(id)
-    setDescricao(item.label)
+    setDescricao(item.templateText || item.title)
     setSubmitErr('')
+    setCorrectionMsg('')
     setPickerOpen(false)
   }
 
@@ -298,7 +322,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   const isBusy = saveMutation.isPending
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
   const selectedLabel = selectedPredefinida
-    ? PREDEFINIDAS.find((item) => item.id === selectedPredefinida)?.label || ''
+    ? predefinidas.find((item) => String(item.id) === selectedPredefinida)?.title || ''
     : ''
   const activeTimeValue = getActiveTimeValue()
 
@@ -395,6 +419,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                 onChange={(event) => {
                   setDescricao(event.target.value)
                   setSubmitErr('')
+                  setCorrectionMsg('')
                 }}
                 placeholder="Descreva a ocorrencia do diario"
                 rows={4}
@@ -406,6 +431,40 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                   lineHeight: '1.5',
                 }}
               />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!descricao.trim()) {
+                      setSubmitErr('Digite a ocorrencia antes de corrigir.')
+                      return
+                    }
+                    setCorrectionMsg('')
+                    correctionMutation.mutate()
+                  }}
+                  disabled={correctionMutation.isPending || !descricao.trim()}
+                  style={{
+                    border: '1.5px solid #dbeafe',
+                    borderRadius: '14px',
+                    background: correctionMutation.isPending || !descricao.trim() ? '#f8fafc' : '#eff6ff',
+                    color: correctionMutation.isPending || !descricao.trim() ? '#94a3b8' : '#1d4ed8',
+                    minHeight: '42px',
+                    padding: '0 12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    cursor: correctionMutation.isPending || !descricao.trim() ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <SpellCheck size={16} />
+                  {correctionMutation.isPending ? 'Corrigindo...' : 'Corrigir portugues'}
+                </button>
+                {correctionMsg ? (
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb' }}>{correctionMsg}</span>
+                ) : null}
+              </div>
             </div>
 
             <button
@@ -663,6 +722,9 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                 <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280', lineHeight: '1.45' }}>
                   Escolha uma opcao para preencher rapidamente o campo de ocorrencia.
                 </div>
+                {predefinedQuery.isFetching ? (
+                  <div style={{ marginTop: '6px', fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Atualizando lista...</div>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -684,15 +746,15 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
             </div>
 
             <div style={{ display: 'grid', gap: '10px', maxHeight: '58vh', overflowY: 'auto', paddingRight: '2px' }}>
-              {PREDEFINIDAS.map((item) => (
+              {predefinidas.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => choosePredefinida(item.id)}
+                  onClick={() => choosePredefinida(String(item.id))}
                   style={{
                     border: '1px solid #e5e7eb',
                     borderRadius: '16px',
-                    background: selectedPredefinida === item.id ? '#fff7ed' : '#fff',
+                    background: selectedPredefinida === String(item.id) ? '#fff7ed' : '#fff',
                     color: '#111827',
                     padding: '14px 14px',
                     textAlign: 'left',
@@ -702,7 +764,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                     cursor: 'pointer',
                   }}
                 >
-                  {item.label}
+                  {item.title}
                 </button>
               ))}
             </div>
