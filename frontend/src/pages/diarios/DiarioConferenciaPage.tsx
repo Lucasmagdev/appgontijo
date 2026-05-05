@@ -152,6 +152,113 @@ function ExpandedRow({
 const thStyle: React.CSSProperties = { textAlign: 'left', padding: '6px 10px', fontWeight: 600, color: '#4a5568', fontSize: 12, borderBottom: '2px solid #e2e8f0' }
 const tdStyle: React.CSSProperties = { padding: '6px 10px', color: '#2d3748' }
 
+function ParametrosModal({
+  obraInicial,
+  isAdmin,
+  onClose,
+}: {
+  obraInicial: string
+  isAdmin: boolean
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [obraNumero, setObraNumero] = useState(obraInicial)
+  const [toleranciaEdit, setToleranciaEdit] = useState<string>('')
+  const [saved, setSaved] = useState(false)
+
+  const toleranciaQuery = useQuery({
+    queryKey: ['tolerancia-conferencia', obraNumero],
+    queryFn: () => toleranciaConferenciaApi.get(obraNumero),
+    enabled: Boolean(obraNumero),
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const toleranciaMutation = useMutation({
+    mutationFn: (valor: number) => toleranciaConferenciaApi.set(obraNumero, valor),
+    onSuccess: async () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      await queryClient.invalidateQueries({ queryKey: ['tolerancia-conferencia', obraNumero] })
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    },
+  })
+
+  const valorAtual = toleranciaQuery.data ?? 10
+  const valorExibido = toleranciaEdit !== '' ? toleranciaEdit : valorAtual
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 28, width: 440, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 700 }}>Parâmetros de Conferência</h3>
+        <p style={{ fontSize: 13, color: '#718096', marginBottom: 20 }}>
+          Define a tolerância de aprovação automática por obra.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>N° da Obra</label>
+            <input
+              type="text"
+              value={obraNumero}
+              onChange={(e) => { setObraNumero(e.target.value); setToleranciaEdit('') }}
+              placeholder="Ex: 2024-001"
+              style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 4, padding: '6px 10px', fontSize: 13, boxSizing: 'border-box' }}
+            />
+          </div>
+
+          {obraNumero && (
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>
+                Tolerância de profundidade (%)
+              </label>
+              <p style={{ fontSize: 12, color: '#718096', marginBottom: 8 }}>
+                Diferença máxima aceita entre profundidade executada e planejada para aprovação automática.
+                {toleranciaQuery.isSuccess && <> <strong>Atual: {valorAtual}%</strong></>}
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={valorExibido}
+                  onChange={(e) => setToleranciaEdit(e.target.value)}
+                  disabled={!isAdmin}
+                  style={{ width: 80, border: '1px solid #e2e8f0', borderRadius: 4, padding: '6px 10px', fontSize: 13 }}
+                />
+                <span style={{ fontSize: 13, color: '#718096' }}>%</span>
+                {!isAdmin && (
+                  <span style={{ fontSize: 12, color: '#a0aec0' }}>Apenas administradores podem alterar.</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 24, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn" style={{ background: '#e2e8f0', color: '#2d3748' }} onClick={onClose}>
+            Fechar
+          </button>
+          {isAdmin && obraNumero && (
+            <button
+              type="button"
+              className="btn"
+              style={{ background: '#3182ce', color: '#fff' }}
+              disabled={toleranciaMutation.isPending}
+              onClick={() => {
+                const val = parseFloat(String(valorExibido))
+                if (!isNaN(val)) toleranciaMutation.mutate(val)
+              }}
+            >
+              {saved ? 'Salvo!' : toleranciaMutation.isPending ? 'Salvando...' : 'Salvar'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => void; onCancel: () => void }) {
   const [obs, setObs] = useState('')
 
@@ -192,25 +299,7 @@ export default function DiarioConferenciaPage() {
 
   const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '' })
   const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', page: 1 })
-  const [toleranciaEdit, setToleranciaEdit] = useState<string>('')
-  const [toleranciaSaved, setToleranciasSaved] = useState(false)
-
-  const toleranciaQuery = useQuery({
-    queryKey: ['tolerancia-conferencia', applied.obra_numero],
-    queryFn: () => toleranciaConferenciaApi.get(applied.obra_numero),
-    enabled: Boolean(applied.obra_numero),
-    staleTime: 1000 * 60 * 5,
-  })
-
-  const toleranciaMutation = useMutation({
-    mutationFn: (valor: number) => toleranciaConferenciaApi.set(applied.obra_numero, valor),
-    onSuccess: async () => {
-      setToleranciasSaved(true)
-      setTimeout(() => setToleranciasSaved(false), 2000)
-      await queryClient.invalidateQueries({ queryKey: ['tolerancia-conferencia', applied.obra_numero] })
-      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
-    },
-  })
+  const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
@@ -274,51 +363,25 @@ export default function DiarioConferenciaPage() {
 
   return (
     <div className="page-shell">
-      <h1 className="page-heading">Conferência de Estacas</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h1 className="page-heading" style={{ margin: 0 }}>Conferência de Estacas</h1>
+        <button
+          type="button"
+          className="btn"
+          style={{ background: '#edf2f7', color: '#2d3748', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}
+          onClick={() => setShowParams(true)}
+        >
+          ⚙ Parâmetros
+        </button>
+      </div>
 
-      {applied.obra_numero ? (
-        <section className="app-panel" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#718096', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Tolerância de conferência — Obra {applied.obra_numero}
-            </span>
-            <span style={{ fontSize: 12, color: '#4a5568' }}>
-              Diferença máxima aceita entre profundidade executada e planejada.
-              {' '}<strong>Atual: {toleranciaQuery.data ?? 10}%</strong>
-              {' '}— diários já aprovados/rejeitados não são afetados.
-            </span>
-          </div>
-          {isAdmin ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                value={toleranciaEdit !== '' ? toleranciaEdit : (toleranciaQuery.data ?? 10)}
-                onChange={(e) => setToleranciaEdit(e.target.value)}
-                style={{ width: 72, border: '1px solid #e2e8f0', borderRadius: 4, padding: '4px 8px', fontSize: 13 }}
-                placeholder="10"
-              />
-              <span style={{ fontSize: 13, color: '#718096' }}>%</span>
-              <button
-                type="button"
-                className="btn"
-                style={{ background: '#3182ce', color: '#fff', padding: '4px 14px', fontSize: 13 }}
-                disabled={toleranciaMutation.isPending}
-                onClick={() => {
-                  const val = parseFloat(toleranciaEdit !== '' ? toleranciaEdit : String(toleranciaQuery.data ?? 10))
-                  if (!isNaN(val)) toleranciaMutation.mutate(val)
-                }}
-              >
-                {toleranciaSaved ? 'Salvo!' : toleranciaMutation.isPending ? 'Salvando...' : 'Salvar'}
-              </button>
-            </div>
-          ) : (
-            <span style={{ fontSize: 12, color: '#a0aec0', marginLeft: 'auto' }}>Apenas administradores podem alterar.</span>
-          )}
-        </section>
-      ) : null}
+      {showParams && (
+        <ParametrosModal
+          obraInicial={filters.obra_numero || applied.obra_numero}
+          isAdmin={isAdmin}
+          onClose={() => setShowParams(false)}
+        />
+      )}
 
       <section className="app-panel toolbar-panel">
         <div className="flex flex-wrap items-end gap-3">

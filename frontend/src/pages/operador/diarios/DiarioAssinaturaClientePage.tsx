@@ -323,7 +323,7 @@ const panelStyle: CSSProperties = {
 const signaturePreviewWrap: CSSProperties = {
   borderRadius: '18px',
   border: '1.5px solid #e5e7eb',
-  background: '#f3f4f6',
+  background: 'transparent',
   minHeight: '130px',
   display: 'grid',
   placeItems: 'center',

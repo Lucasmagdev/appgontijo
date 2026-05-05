@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useMemo, useState } from 'react'
+import { type CSSProperties, type ReactNode, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, SpellCheck, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -137,6 +137,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeTimeField, setActiveTimeField] = useState<ActiveTimeField>(null)
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
+  const lastAutoCorrectionTextRef = useRef('')
 
   const diarioQuery = useQuery({
     queryKey: ['operador-diario', diarioId],
@@ -195,13 +196,18 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   })
 
   const correctionMutation = useMutation({
-    mutationFn: () => textCorrectionService.correct(descricao.trim()),
-    onSuccess: (result) => {
+    mutationFn: ({ text }: { text: string; source: 'auto' | 'manual' }) => textCorrectionService.correct(text),
+    onSuccess: (result, variables) => {
+      lastAutoCorrectionTextRef.current = variables.text
       if (result.alterado && result.textoCorrigido) {
         setDescricao(result.textoCorrigido)
-        setCorrectionMsg(`Texto corrigido (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`)
+        setCorrectionMsg(
+          variables.source === 'auto'
+            ? `Texto corrigido automaticamente (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`
+            : `Texto corrigido (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`
+        )
       } else {
-        setCorrectionMsg('Nenhuma correcao encontrada.')
+        setCorrectionMsg(variables.source === 'auto' ? '' : 'Nenhuma correcao encontrada.')
       }
       setSubmitErr('')
     },
@@ -222,6 +228,24 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setPickerOpen(false)
     setActiveTimeField(null)
     setTimeStep('hour')
+    lastAutoCorrectionTextRef.current = ''
+  }
+
+  function shouldCorrectText(text: string) {
+    if (text.length < 7) return false
+    if (text === lastAutoCorrectionTextRef.current) return false
+    return true
+  }
+
+  function correctText(source: 'auto' | 'manual') {
+    const text = descricao.trim()
+    if (!text) {
+      if (source === 'manual') setSubmitErr('Digite a ocorrencia antes de corrigir.')
+      return
+    }
+    if (source === 'auto' && !shouldCorrectText(text)) return
+    setCorrectionMsg('')
+    correctionMutation.mutate({ text, source })
   }
 
   function validateForm() {
@@ -276,6 +300,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setEditingId(item.id)
     setSubmitErr('')
     setCorrectionMsg('')
+    lastAutoCorrectionTextRef.current = item.descricao
     try {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch {
@@ -290,6 +315,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setDescricao(item.templateText || item.title)
     setSubmitErr('')
     setCorrectionMsg('')
+    lastAutoCorrectionTextRef.current = item.templateText || item.title
     setPickerOpen(false)
   }
 
@@ -421,6 +447,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                   setSubmitErr('')
                   setCorrectionMsg('')
                 }}
+                onBlur={() => correctText('auto')}
                 placeholder="Descreva a ocorrencia do diario"
                 rows={4}
                 style={{
@@ -434,14 +461,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!descricao.trim()) {
-                      setSubmitErr('Digite a ocorrencia antes de corrigir.')
-                      return
-                    }
-                    setCorrectionMsg('')
-                    correctionMutation.mutate()
-                  }}
+                  onClick={() => correctText('manual')}
                   disabled={correctionMutation.isPending || !descricao.trim()}
                   style={{
                     border: '1.5px solid #dbeafe',

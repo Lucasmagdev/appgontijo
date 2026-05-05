@@ -79,8 +79,6 @@ export default function AssinaturaClientePage() {
     if (!ctx) return
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#f8fafc'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.lineWidth = 2
@@ -91,8 +89,6 @@ export default function AssinaturaClientePage() {
     const image = new Image()
     image.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.fillStyle = '#f8fafc'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
     }
     image.src = form.assinatura
@@ -165,8 +161,6 @@ export default function AssinaturaClientePage() {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#f8fafc'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
     setField('assinatura', '')
   }
 
@@ -545,7 +539,7 @@ const iconButtonStyle: CSSProperties = {
 const signaturePreviewWrap: CSSProperties = {
   borderRadius: '18px',
   border: '1.5px solid #e5e7eb',
-  background: '#f8fafc',
+  background: 'transparent',
   minHeight: '130px',
   display: 'grid',
   placeItems: 'center',

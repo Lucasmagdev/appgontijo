@@ -11,6 +11,7 @@ const initialForm: UsuarioPayload = {
   apelido: '',
   login: '',
   telefone: '',
+  cargo: '',
   perfil: 'operador',
   status: 'ativo',
   senha: '',
@@ -40,6 +41,7 @@ export default function UsuarioFormPage() {
         apelido: usuarioQuery.data.apelido,
         login: usuarioQuery.data.login,
         telefone: usuarioQuery.data.telefone,
+        cargo: usuarioQuery.data.cargo,
         perfil: usuarioQuery.data.perfil,
         status: usuarioQuery.data.status,
         senha: '',
@@ -95,6 +97,7 @@ export default function UsuarioFormPage() {
       apelido: form.apelido.trim(),
       login: form.login.trim(),
       telefone: form.telefone.trim(),
+      cargo: form.cargo.trim(),
       perfil: form.perfil,
       status: form.status,
       senha: form.senha?.trim(),
@@ -183,6 +186,17 @@ export default function UsuarioFormPage() {
                   value={form.telefone}
                   onChange={(event) => setField('telefone', event.target.value)}
                   className="field-input"
+                />
+              </div>
+
+              <div className="span-6">
+                <label className="field-label">Cargo</label>
+                <input
+                  type="text"
+                  value={form.cargo}
+                  onChange={(event) => setField('cargo', event.target.value)}
+                  className="field-input"
+                  placeholder="Ex: Operador, Caldeiraria, Geoteste..."
                 />
               </div>
 

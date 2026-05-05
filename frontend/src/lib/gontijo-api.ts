@@ -216,6 +216,7 @@ export type UsuarioRecord = {
   apelido: string
   login: string
   telefone: string
+  cargo: string
   perfil: 'admin' | 'operador'
   status: 'ativo' | 'inativo'
   criadoEm?: string
@@ -226,6 +227,7 @@ export type UsuarioPayload = {
   apelido: string
   login: string
   telefone: string
+  cargo: string
   perfil: 'admin' | 'operador'
   status?: 'ativo' | 'inativo'
   senha?: string
@@ -780,6 +782,7 @@ function adaptUsuario(row: Record<string, unknown>): UsuarioRecord {
     apelido: toStringValue(row.apelido),
     login: toStringValue(row.login),
     telefone: toStringValue(row.telefone),
+    cargo: toStringValue(row.cargo),
     perfil: row.perfil === 'admin' ? 'admin' : 'operador',
     status: row.status === 'inativo' ? 'inativo' : 'ativo',
     criadoEm: toStringValue(row.criado_em),
@@ -1341,6 +1344,7 @@ export const usuarioService = {
       apelido: payload.apelido,
       login: payload.login,
       telefone: payload.telefone,
+      cargo: payload.cargo,
       senha: payload.senha,
       perfil: payload.perfil,
     })
@@ -1352,6 +1356,7 @@ export const usuarioService = {
       apelido: payload.apelido,
       login: payload.login,
       telefone: payload.telefone,
+      cargo: payload.cargo,
       perfil: payload.perfil,
       status: payload.status,
     })

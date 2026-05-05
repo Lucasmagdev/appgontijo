@@ -45,8 +45,6 @@ export default function OperadorConfiguracoesPage() {
     if (!ctx) return
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#f3f4f6'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
     ctx.lineWidth = 2
@@ -57,8 +55,6 @@ export default function OperadorConfiguracoesPage() {
     const image = new Image()
     image.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      ctx.fillStyle = '#f3f4f6'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
     }
     image.src = form.assinatura
@@ -132,8 +128,6 @@ export default function OperadorConfiguracoesPage() {
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#f3f4f6'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
     setField('assinatura', '')
   }
 
@@ -237,7 +231,7 @@ export default function OperadorConfiguracoesPage() {
                     borderRadius: '18px',
                     overflow: 'hidden',
                     border: '1.5px solid #e5e7eb',
-                    background: '#f3f4f6',
+                    background: 'transparent',
                   }}
                 >
                   <canvas

@@ -142,6 +142,7 @@ export default function UsuariosPage() {
                     <th>ID</th>
                     <th>Nome</th>
                     <th>Apelido</th>
+                    <th>Cargo</th>
                     <th>Login</th>
                     <th>Perfil</th>
                     <th>Status</th>
@@ -156,6 +157,7 @@ export default function UsuariosPage() {
                         <td className="font-semibold text-slate-700">#{user.id}</td>
                         <td className="font-semibold text-slate-800">{user.nome}</td>
                         <td>{user.apelido || '-'}</td>
+                        <td>{user.cargo || '-'}</td>
                         <td>{user.login}</td>
                         <td className="capitalize">{user.perfil}</td>
                         <td>
