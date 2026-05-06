@@ -8,6 +8,7 @@ type DiarioResultado = Awaited<ReturnType<typeof diarioService.list>>
 export default function DiarioPesquisar() {
   const navigate = useNavigate()
   const { user } = useOperadorAuth()
+  const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const [busca, setBusca] = useState('')
   const [resultado, setResultado] = useState<DiarioResultado | null>(null)
   const [naoEncontrado, setNaoEncontrado] = useState(false)
@@ -262,7 +263,7 @@ export default function DiarioPesquisar() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: canGenerateSignatureLink ? '1fr 1fr' : '1fr', gap: '10px' }}>
                   <button
                     onClick={() => openPdf(item.id)}
                     style={{
@@ -281,35 +282,37 @@ export default function DiarioPesquisar() {
                     Abrir PDF
                   </button>
 
-                  <button
-                    onClick={() => openSignature(item)}
-                    disabled={!item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)}
-                    title={
-                      item.operadorId && user?.id && item.operadorId !== user.id
-                        ? 'Somente o operador responsavel pelo diario pode gerar ou reenviar assinatura.'
-                        : undefined
-                    }
-                    style={{
-                      border: 'none',
-                      borderRadius: '10px',
-                      background:
-                        !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
-                          ? '#d1d5db'
-                          : '#2f855a',
-                      color: '#fff',
-                      padding: '13px 10px',
-                      fontSize: '12px',
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      textTransform: 'uppercase',
-                      cursor:
-                        !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
-                          ? 'not-allowed'
-                          : 'pointer',
-                    }}
-                  >
-                    {getSignatureLabel(item)}
-                  </button>
+                  {canGenerateSignatureLink ? (
+                    <button
+                      onClick={() => openSignature(item)}
+                      disabled={!item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)}
+                      title={
+                        item.operadorId && user?.id && item.operadorId !== user.id
+                          ? 'Somente o operador responsavel pelo diario pode gerar ou reenviar assinatura.'
+                          : undefined
+                      }
+                      style={{
+                        border: 'none',
+                        borderRadius: '10px',
+                        background:
+                          !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
+                            ? '#d1d5db'
+                            : '#2f855a',
+                        color: '#fff',
+                        padding: '13px 10px',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        cursor:
+                          !item.equipamentoId || Boolean(item.operadorId && user?.id && item.operadorId !== user.id)
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                    >
+                      {getSignatureLabel(item)}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ))}

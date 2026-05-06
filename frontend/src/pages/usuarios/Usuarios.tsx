@@ -145,6 +145,7 @@ export default function UsuariosPage() {
                     <th>Cargo</th>
                     <th>Login</th>
                     <th>Perfil</th>
+                    <th>Assinatura</th>
                     <th>Status</th>
                     <th>Criado em</th>
                     <th>Acoes</th>
@@ -160,6 +161,11 @@ export default function UsuariosPage() {
                         <td>{user.cargo || '-'}</td>
                         <td>{user.login}</td>
                         <td className="capitalize">{user.perfil}</td>
+                        <td>
+                          <span className={cn('status-badge', user.podeGerarLinkAssinatura ? 'status-success' : 'status-neutral')}>
+                            {user.podeGerarLinkAssinatura ? 'Liberado' : 'Bloqueado'}
+                          </span>
+                        </td>
                         <td>
                           <span
                             className={cn(
@@ -200,7 +206,7 @@ export default function UsuariosPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         <QueryFeedback
                           type="empty"
                           title="Nenhum usuario encontrado"

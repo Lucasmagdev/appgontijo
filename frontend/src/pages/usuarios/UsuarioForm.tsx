@@ -14,6 +14,7 @@ const initialForm: UsuarioPayload = {
   cargo: '',
   perfil: 'operador',
   status: 'ativo',
+  podeGerarLinkAssinatura: false,
   senha: '',
 }
 
@@ -44,6 +45,7 @@ export default function UsuarioFormPage() {
         cargo: usuarioQuery.data.cargo,
         perfil: usuarioQuery.data.perfil,
         status: usuarioQuery.data.status,
+        podeGerarLinkAssinatura: usuarioQuery.data.podeGerarLinkAssinatura,
         senha: '',
       })
     }
@@ -100,6 +102,7 @@ export default function UsuarioFormPage() {
       cargo: form.cargo.trim(),
       perfil: form.perfil,
       status: form.status,
+      podeGerarLinkAssinatura: Boolean(form.podeGerarLinkAssinatura),
       senha: form.senha?.trim(),
     }
 
@@ -234,6 +237,19 @@ export default function UsuarioFormPage() {
                   <option value="inativo">Inativo</option>
                 </select>
               </div>
+
+              <label className="span-6 inline-flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.podeGerarLinkAssinatura)}
+                  onChange={(event) => setField('podeGerarLinkAssinatura', event.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <strong className="block text-slate-900">Pode gerar link de assinatura</strong>
+                  Libera a opcao no mobile para engenheiros ou usuarios autorizados.
+                </span>
+              </label>
 
               {!isEditing ? (
                 <div className="span-4">

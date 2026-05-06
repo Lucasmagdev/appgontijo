@@ -820,6 +820,7 @@ export default function DiarioPainel() {
   const queryClient = useQueryClient()
   const { equipamentoId } = useParams()
   const { user } = useOperadorAuth()
+  const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const selectedId = Number(equipamentoId)
   const [activeTopModal, setActiveTopModal] = useState<TopFieldKey | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -977,6 +978,7 @@ export default function DiarioPainel() {
     revisao: draftJson.revisao_confirmed === true || draftJson.review_confirmed === true,
     finalizacao: String(draftQuery.data?.status || '') === 'assinado',
   }
+  const visibleModuleButtons = MODULE_BUTTONS.filter((item) => item.key !== 'assinatura' || canGenerateSignatureLink)
 
   function openTopModal(key: TopFieldKey) {
     if (!draftQuery.data) return
@@ -1009,6 +1011,7 @@ export default function DiarioPainel() {
 
   function openModulo(modulo: string) {
     if (!draftQuery.data?.id) return
+    if (modulo === 'assinatura' && !canGenerateSignatureLink) return
     navigate(`/operador/diario-de-obras/novo/${selectedId}/${modulo}?diario=${draftQuery.data.id}`)
   }
 
@@ -1347,7 +1350,7 @@ export default function DiarioPainel() {
           <SectionLabel text="Preenchimento" />
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px 10px' }}>
-            {MODULE_BUTTONS.map((item) => (
+            {visibleModuleButtons.map((item) => (
               <ActionCard
                 key={item.key}
                 label={item.label}

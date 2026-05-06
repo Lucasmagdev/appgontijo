@@ -219,6 +219,7 @@ export type UsuarioRecord = {
   cargo: string
   perfil: 'admin' | 'operador'
   status: 'ativo' | 'inativo'
+  podeGerarLinkAssinatura: boolean
   criadoEm?: string
 }
 
@@ -230,6 +231,7 @@ export type UsuarioPayload = {
   cargo: string
   perfil: 'admin' | 'operador'
   status?: 'ativo' | 'inativo'
+  podeGerarLinkAssinatura?: boolean
   senha?: string
 }
 
@@ -786,6 +788,7 @@ function adaptUsuario(row: Record<string, unknown>): UsuarioRecord {
     cargo: toStringValue(row.cargo),
     perfil: row.perfil === 'admin' ? 'admin' : 'operador',
     status: row.status === 'inativo' ? 'inativo' : 'ativo',
+    podeGerarLinkAssinatura: row.pode_gerar_link_assinatura === true || row.pode_gerar_link_assinatura === 1 || row.pode_gerar_link_assinatura === '1' || row.pode_gerar_link_assinatura === 'S',
     criadoEm: toStringValue(row.criado_em),
   }
 }
@@ -1349,6 +1352,7 @@ export const usuarioService = {
       cargo: payload.cargo,
       senha: payload.senha,
       perfil: payload.perfil,
+      podeGerarLinkAssinatura: Boolean(payload.podeGerarLinkAssinatura),
     })
     return data.id
   },
@@ -1361,6 +1365,7 @@ export const usuarioService = {
       cargo: payload.cargo,
       perfil: payload.perfil,
       status: payload.status,
+      podeGerarLinkAssinatura: Boolean(payload.podeGerarLinkAssinatura),
     })
   },
   async remove(id: number) {
@@ -1760,6 +1765,17 @@ export const diarioSignatureService = {
       diaryId: Number(data.data.diaryId || 0),
       signedAt: toStringValue(data.data.signedAt),
     }
+  },
+}
+
+export const diarioAdminSignatureService = {
+  async getStatus(diarioId: number): Promise<DiarySignatureLinkStatus> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/admin/diarios/${diarioId}/signature-link`)
+    return adaptDiarySignatureLinkStatus(data.data)
+  },
+  async generate(diarioId: number): Promise<DiarySignatureLinkStatus> {
+    const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/admin/diarios/${diarioId}/signature-link`)
+    return adaptDiarySignatureLinkStatus(data.data)
   },
 }
 
@@ -2696,6 +2712,8 @@ export type ConferenciaEstacaItem = {
   conferenciaEm: string | null
   conferenciaObs: string | null
   conferenciaPorNome: string | null
+  assinaturaStatus: string
+  linkGeradoEm: string | null
   estacas: EstacaExecutada[]
   producaoPlanejada: ProducaoPlanejada[]
   autoComparacao: AutoComparacao

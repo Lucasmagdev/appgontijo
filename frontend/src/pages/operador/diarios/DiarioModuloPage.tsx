@@ -14,6 +14,7 @@ import DiarioAssinaturaClientePage from '@/pages/operador/diarios/DiarioAssinatu
 import DiarioFinalizacaoPage from '@/pages/operador/diarios/DiarioFinalizacaoPage'
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 
 const FIELD_CONFIG = {
   data: {
@@ -46,6 +47,7 @@ export default function DiarioModuloPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { equipamentoId, modulo } = useParams()
+  const { user } = useOperadorAuth()
   const [searchParams] = useSearchParams()
   const diarioId = Number(searchParams.get('diario') || '')
   const moduloParam = String(modulo || '')
@@ -106,6 +108,14 @@ export default function DiarioModuloPage() {
   }
 
   if (isAssinaturaModule) {
+    if (!user?.podeGerarLinkAssinatura) {
+      return (
+        <OperadorPlaceholder
+          titulo="Assinatura bloqueada"
+          mensagem="A geracao do link de assinatura deve ser feita pelo administrativo ou por um usuario autorizado."
+        />
+      )
+    }
     return <DiarioAssinaturaClientePage diarioId={diarioId} equipamentoId={equipamentoId} />
   }
 

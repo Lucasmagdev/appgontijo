@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
+  diarioAdminSignatureService,
   diarioService,
   equipamentoService,
   extractApiErrorMessage,
@@ -46,6 +47,8 @@ export default function DiariosPage() {
   })
 
   const [deleteError, setDeleteError] = useState('')
+  const [signatureError, setSignatureError] = useState('')
+  const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
 
   const modalidadesQuery = useQuery({
     queryKey: ['modalidades'],
@@ -128,6 +131,43 @@ export default function DiariosPage() {
 
   function handleOpenPdf(id: number) {
     window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
+  }
+
+  function getSignatureActionLabel(item: NonNullable<typeof diariosQuery.data>['items'][number]) {
+    if (item.status === 'assinado') return 'Ver assinatura'
+    if (item.linkGeradoEm || item.enviadoEm || item.status === 'pendente') return 'Copiar/Enviar link'
+    return 'Gerar link'
+  }
+
+  async function copyText(text: string) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    }
+  }
+
+  async function handleSignatureLink(item: NonNullable<typeof diariosQuery.data>['items'][number]) {
+    setSignatureError('')
+    setSignatureLoadingId(item.id)
+
+    try {
+      let status = await diarioAdminSignatureService.getStatus(item.id)
+      if (status.status === 'nao_gerado' || status.status === 'expirado') {
+        status = await diarioAdminSignatureService.generate(item.id)
+      }
+
+      if (!status.publicUrl) {
+        throw new Error('Este diario nao tem link publico disponivel.')
+      }
+
+      await copyText(status.publicUrl)
+      const message = status.whatsappText || `Segue o link para assinatura do diario: ${status.publicUrl}`
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+      await queryClient.invalidateQueries({ queryKey: ['diarios'] })
+    } catch (error) {
+      setSignatureError(extractApiErrorMessage(error))
+    } finally {
+      setSignatureLoadingId(null)
+    }
   }
 
   function updatePending(field: keyof typeof pendingFilters, value: string) {
@@ -259,6 +299,10 @@ export default function DiariosPage() {
         <QueryFeedback type="error" title="Nao foi possivel excluir" description={deleteError} />
       ) : null}
 
+      {signatureError ? (
+        <QueryFeedback type="error" title="Nao foi possivel gerar o link" description={signatureError} />
+      ) : null}
+
       {diariosQuery.isLoading ? (
         <QueryFeedback type="loading" title="Carregando diarios" description="" />
       ) : null}
@@ -329,15 +373,15 @@ export default function DiariosPage() {
                                 Link gerado em {formatDateTime(item.linkGeradoEm)}
                               </span>
                             ) : null}
-                            {item.status !== 'assinado' && (
-                              <button
-                                type="button"
-                                className="text-xs font-semibold px-3 py-1 rounded"
-                                style={{ backgroundColor: '#38a169', color: '#fff' }}
-                              >
-                                Enviar
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => void handleSignatureLink(item)}
+                              disabled={signatureLoadingId === item.id}
+                              className="text-xs font-semibold px-3 py-1 rounded"
+                              style={{ backgroundColor: signatureLoadingId === item.id ? '#a0aec0' : '#38a169', color: '#fff' }}
+                            >
+                              {signatureLoadingId === item.id ? 'Gerando...' : getSignatureActionLabel(item)}
+                            </button>
                             {item.status === 'assinado' && item.assinadoEm ? (
                               <span className="text-xs text-slate-400">
                                 Assinado em {formatDateTime(item.assinadoEm)}
@@ -394,7 +438,7 @@ export default function DiariosPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6}>
+                      <td colSpan={7}>
                         <QueryFeedback
                           type="empty"
                           title="Nenhum diario encontrado"

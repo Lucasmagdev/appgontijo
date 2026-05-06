@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { CheckCircle2, FileText, PenTool, Send } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, diarioSignatureService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 
 type Props = {
   diarioId: number
@@ -32,6 +33,8 @@ function formatDateTimeBr(value: string) {
 
 export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props) {
   const navigate = useNavigate()
+  const { user } = useOperadorAuth()
+  const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}`
 
   const diaryQuery = useQuery({
@@ -82,13 +85,17 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
             </div>
 
             <div style={panelStyle}>
-              <button
-                onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
-                style={actionButtonStyle(isSigned ? '#166534' : '#a72727')}
-              >
-                {isSigned ? <CheckCircle2 size={18} /> : <Send size={18} />}
-                {isSigned ? 'Ver assinatura do cliente' : 'Ir para envio de assinatura'}
-              </button>
+              {canGenerateSignatureLink ? (
+                <button
+                  onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
+                  style={actionButtonStyle(isSigned ? '#166534' : '#a72727')}
+                >
+                  {isSigned ? <CheckCircle2 size={18} /> : <Send size={18} />}
+                  {isSigned ? 'Ver assinatura do cliente' : 'Ir para envio de assinatura'}
+                </button>
+              ) : (
+                <InfoBox>O link de assinatura sera gerado pelo administrativo ou pela conferencia autorizada.</InfoBox>
+              )}
 
               <button
                 onClick={() => window.open(diarioService.getPdfUrl(diarioId), '_blank', 'noopener,noreferrer')}
@@ -98,7 +105,7 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
                 Abrir PDF do diario
               </button>
 
-              {!isSigned ? (
+              {!isSigned && canGenerateSignatureLink ? (
                 <button
                   onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
                   style={secondaryButtonStyle}

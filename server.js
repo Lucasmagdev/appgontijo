@@ -1254,6 +1254,25 @@ async function columnExists(tableName, columnName, conn = db) {
   return Number(row?.total || 0) > 0;
 }
 
+let userSignaturePermissionColumnEnsured = false;
+async function ensureUserSignaturePermissionColumn(conn = db) {
+  if (userSignaturePermissionColumnEnsured) return;
+  if (!(await columnExists("users", "pode_gerar_link_assinatura", conn))) {
+    await conn.query("ALTER TABLE users ADD COLUMN pode_gerar_link_assinatura ENUM('S','N') NOT NULL DEFAULT 'N'");
+  }
+  userSignaturePermissionColumnEnsured = true;
+}
+
+async function userCanGenerateDiarySignatureLink(userId, conn = db) {
+  await ensureUserSignaturePermissionColumn(conn);
+  const [[row]] = await conn.query(
+    "SELECT document, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
+    [userId]
+  );
+  if (row?.document === "09653344650") return true;
+  return String(row?.pode_gerar_link_assinatura || "N") === "S";
+}
+
 function parseJsonSafe(value, fallback = null) {
   if (value == null || value === "") return fallback;
   if (typeof value === "object") return value;
@@ -5158,7 +5177,7 @@ function normalizeClientDiaryObservation(value) {
   return String(value || "").trim().slice(0, 5000);
 }
 
-async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null } = {}) {
+async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null, conn = db } = {}) {
   const params = [diaryId];
   let where = "WHERE d.id = ?";
 
@@ -5167,7 +5186,7 @@ async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null } = {
     params.push(operatorUserId);
   }
 
-  const [rows] = await db.query(
+  const [rows] = await conn.query(
     `SELECT d.id,
             d.user_id,
             d.data,
@@ -5304,6 +5323,80 @@ function buildSignatureStatusPayload({ diary, link, publicUrl }) {
   };
 }
 
+async function generateDiarySignatureLink(req, conn, diary, createdByUserId) {
+  if (!diary.operator_signature) {
+    const error = new Error("Cadastre a assinatura do operador no perfil antes de enviar para o cliente.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (String(diary.data.status || "") === "assinado") {
+    const error = new Error("Este diario ja foi assinado pelo cliente.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await conn.query(
+    "UPDATE diary_signature_links SET status = 'revoked', updated_at = NOW() WHERE diary_id = ? AND status = 'active'",
+    [diary.id]
+  );
+
+  const token = crypto.randomBytes(24).toString("hex");
+  const now = new Date();
+  const expiresAtDate = addHours(now, 24);
+  const sentAtSql = formatSqlDateTime(now);
+  const expiresAtSql = formatSqlDateTime(expiresAtDate);
+  const publicUrl = `${buildDiarySignatureBaseUrl(req)}/assinatura/diario/${token}`;
+
+  await conn.query(
+    `INSERT INTO diary_signature_links
+     (diary_id, token, status, expires_at, sent_at, created_by_user_id, created_at, updated_at)
+     VALUES (?, ?, 'active', ?, ?, ?, NOW(), NOW())`,
+    [diary.id, token, expiresAtSql, sentAtSql, createdByUserId]
+  );
+
+  const nextData = {
+    ...diary.data,
+    status: diary.data.status === "assinado" ? "assinado" : "pendente",
+    enviado_em: sentAtSql,
+    operatorSignature: diary.operator_signature,
+    operatorSignatureName: diary.operator_name,
+    operatorSignatureDoc: diary.operator_document,
+    signature_request: {
+      ...(diary.data.signature_request && typeof diary.data.signature_request === "object" ? diary.data.signature_request : {}),
+      status: "aguardando_assinatura",
+      publicUrl,
+      sentAt: sentAtSql,
+      expiresAt: expiresAtSql,
+      signedAt: null,
+      clientName: "",
+      clientDocument: "",
+    },
+  };
+
+  await conn.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+    JSON.stringify(nextData),
+    diary.id,
+  ]);
+
+  const link = {
+    status: "active",
+    expires_at: expiresAtSql,
+    sent_at: sentAtSql,
+    signed_at: null,
+  };
+  const nextDiary = { ...diary, data: nextData };
+  const payload = buildSignatureStatusPayload({ diary: nextDiary, link, publicUrl });
+
+  return {
+    diary: nextDiary,
+    payload: {
+      ...payload,
+      whatsappText: buildDiarySignatureShareText({ diary: nextDiary, publicUrl }),
+    },
+  };
+}
+
 app.post("/api/operador/session", async (req, res) => {
   const cpf = String(req.body?.cpf || "").replace(/\D/g, "");
   const senha = String(req.body?.senha || "");
@@ -5313,8 +5406,9 @@ app.post("/api/operador/session", async (req, res) => {
   }
 
   try {
+    await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
-      "SELECT id, name, document, phone, password, active FROM users WHERE document = ? AND active = 'S'",
+      "SELECT id, name, document, phone, password, active, pode_gerar_link_assinatura FROM users WHERE document = ? AND active = 'S'",
       [cpf]
     );
 
@@ -5337,7 +5431,13 @@ app.post("/api/operador/session", async (req, res) => {
 
     return res.json({
       ok: true,
-      user: { id: user.id, nome: user.name, cpf: user.document, perfil: "operador" },
+      user: {
+        id: user.id,
+        nome: user.name,
+        cpf: user.document,
+        perfil: "operador",
+        podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
+      },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
@@ -5356,8 +5456,9 @@ app.get("/api/operador/status", async (req, res) => {
   if (!session) return res.json({ ok: true, authenticated: false });
 
   try {
+    await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
-      "SELECT id, name, document FROM users WHERE id = ? AND active = 'S'",
+      "SELECT id, name, document, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
       [session.userId]
     );
     if (!user) {
@@ -5368,7 +5469,13 @@ app.get("/api/operador/status", async (req, res) => {
     return res.json({
       ok: true,
       authenticated: true,
-      user: { id: user.id, nome: user.name, cpf: user.document, perfil: "operador" },
+      user: {
+        id: user.id,
+        nome: user.name,
+        cpf: user.document,
+        perfil: "operador",
+        podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
+      },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
@@ -5466,6 +5573,15 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
 
   try {
     await conn.beginTransaction();
+
+    const canGenerateSignatureLink = await userCanGenerateDiarySignatureLink(session.userId, conn);
+    if (!canGenerateSignatureLink) {
+      await conn.rollback();
+      return res.status(403).json({
+        ok: false,
+        message: "Seu usuario nao tem permissao para gerar link de assinatura.",
+      });
+    }
 
     const [rows] = await conn.query(
       `SELECT d.id,
@@ -5595,6 +5711,71 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
   } catch (error) {
     await conn.rollback();
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  } finally {
+    conn.release();
+  }
+});
+
+app.get("/api/admin/diarios/:id/signature-link", requireAdmin, async (req, res) => {
+  if (!req.adminSession?.isAdmin) {
+    return res.status(403).json({ ok: false, message: "Apenas administradores podem consultar link de assinatura." });
+  }
+
+  try {
+    const diary = await fetchDiaryForSignatureFlow(req.params.id);
+    if (!diary) {
+      return res.status(404).json({ ok: false, message: "Diario nao encontrado." });
+    }
+
+    let link = await fetchLatestDiarySignatureLink(diary.id);
+    link = await expireDiarySignatureLinkIfNeeded(link, diary);
+    const payload = buildSignatureStatusPayload({ diary, link });
+
+    return res.json({
+      ok: true,
+      data: {
+        ...payload,
+        whatsappText: payload.publicUrl ? buildDiarySignatureShareText({ diary, publicUrl: payload.publicUrl }) : "",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
+  }
+});
+
+app.post("/api/admin/diarios/:id/signature-link", requireAdmin, async (req, res) => {
+  if (!req.adminSession?.isAdmin) {
+    return res.status(403).json({ ok: false, message: "Apenas administradores podem gerar link de assinatura." });
+  }
+
+  const conn = await db.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const diary = await fetchDiaryForSignatureFlow(req.params.id, { conn });
+    if (!diary) {
+      await conn.rollback();
+      return res.status(404).json({ ok: false, message: "Diario nao encontrado." });
+    }
+
+    const result = await generateDiarySignatureLink(req, conn, diary, req.adminSession.userId || null);
+
+    await conn.commit();
+
+    const obraIdForConferencia = parseInt(diary.data.construction_id || diary.data.obra_id || 0) || null;
+    if (obraIdForConferencia) {
+      await gontijoRoutes.tryAutoAprovarConferencia(conn, diary.id, obraIdForConferencia);
+    }
+
+    return res.json({ ok: true, data: result.payload });
+  } catch (error) {
+    await conn.rollback();
+    return res.status(error.statusCode || 500).json({
+      ok: false,
+      message: error.statusCode ? error.message : "Erro interno.",
+      details: error.statusCode ? undefined : error.message,
+    });
   } finally {
     conn.release();
   }

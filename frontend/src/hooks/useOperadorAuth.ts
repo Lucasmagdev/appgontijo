@@ -10,6 +10,7 @@ interface OperadorUser {
   nome: string
   cpf: string
   perfil: string
+  podeGerarLinkAssinatura?: boolean
 }
 
 interface OperadorAuthState {

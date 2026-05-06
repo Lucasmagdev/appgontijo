@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { conferenciaEstacasApi, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { conferenciaEstacasApi, diarioAdminSignatureService, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -304,6 +304,7 @@ export default function DiarioConferenciaPage() {
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
+  const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
 
   const query = useQuery({
     queryKey: ['conferencia-estacas', applied],
@@ -356,6 +357,32 @@ export default function DiarioConferenciaPage() {
 
   function toggleExpanded(id: number) {
     setExpanded((previous) => (previous === id ? null : id))
+  }
+
+  async function handleSignatureLink(item: ConferenciaEstacaItem) {
+    if (item.conferenciaStatus !== 'aprovado') return
+    setActionError('')
+    setSignatureLoadingId(item.id)
+
+    try {
+      let status = await diarioAdminSignatureService.getStatus(item.id)
+      if (status.status === 'nao_gerado' || status.status === 'expirado') {
+        status = await diarioAdminSignatureService.generate(item.id)
+      }
+      if (!status.publicUrl) {
+        throw new Error('Este diario nao tem link publico disponivel.')
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(status.publicUrl)
+      }
+      const message = status.whatsappText || `Segue o link para assinatura do diario: ${status.publicUrl}`
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    } catch (error) {
+      setActionError(extractApiErrorMessage(error))
+    } finally {
+      setSignatureLoadingId(null)
+    }
   }
 
   const items = query.data?.items ?? []
@@ -525,6 +552,22 @@ export default function DiarioConferenciaPage() {
                           {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
                         </button>
                       ) : null}
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0',
+                          color: '#fff',
+                          padding: '4px 10px',
+                          fontSize: 12,
+                          marginTop: item.conferenciaStatus === 'pendente' ? 6 : 0,
+                        }}
+                        disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
+                        title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
+                        onClick={() => void handleSignatureLink(item)}
+                      >
+                        {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
+                      </button>
                     </td>
                   </tr>
                   {expanded === item.id ? (
