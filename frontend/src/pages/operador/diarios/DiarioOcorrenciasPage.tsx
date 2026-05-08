@@ -1,6 +1,6 @@
-import { type CSSProperties, type ReactNode, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type ReactNode, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, SpellCheck, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage, predefinedOccurrencesService, textCorrectionService, type PredefinedOccurrence } from '@/lib/gontijo-api'
 
@@ -133,11 +133,9 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   const [selectedPredefinida, setSelectedPredefinida] = useState<PredefinidaId | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitErr, setSubmitErr] = useState('')
-  const [correctionMsg, setCorrectionMsg] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeTimeField, setActiveTimeField] = useState<ActiveTimeField>(null)
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
-  const lastAutoCorrectionTextRef = useRef('')
 
   const diarioQuery = useQuery({
     queryKey: ['operador-diario', diarioId],
@@ -196,25 +194,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   })
 
   const correctionMutation = useMutation({
-    mutationFn: ({ text }: { text: string; source: 'auto' | 'manual' }) => textCorrectionService.correct(text),
-    onSuccess: (result, variables) => {
-      lastAutoCorrectionTextRef.current = variables.text
-      if (result.alterado && result.textoCorrigido) {
-        setDescricao(result.textoCorrigido)
-        setCorrectionMsg(
-          variables.source === 'auto'
-            ? `Texto corrigido automaticamente (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`
-            : `Texto corrigido (${result.sugestoes.length} ajuste${result.sugestoes.length !== 1 ? 's' : ''}).`
-        )
-      } else {
-        setCorrectionMsg(variables.source === 'auto' ? '' : 'Nenhuma correcao encontrada.')
-      }
-      setSubmitErr('')
-    },
-    onError: (err) => {
-      setCorrectionMsg('')
-      setSubmitErr(extractApiErrorMessage(err))
-    },
+    mutationFn: (text: string) => textCorrectionService.correct(text),
   })
 
   function resetForm() {
@@ -224,28 +204,9 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setSelectedPredefinida(null)
     setEditingId(null)
     setSubmitErr('')
-    setCorrectionMsg('')
     setPickerOpen(false)
     setActiveTimeField(null)
     setTimeStep('hour')
-    lastAutoCorrectionTextRef.current = ''
-  }
-
-  function shouldCorrectText(text: string) {
-    if (text.length < 7) return false
-    if (text === lastAutoCorrectionTextRef.current) return false
-    return true
-  }
-
-  function correctText(source: 'auto' | 'manual') {
-    const text = descricao.trim()
-    if (!text) {
-      if (source === 'manual') setSubmitErr('Digite a ocorrencia antes de corrigir.')
-      return
-    }
-    if (source === 'auto' && !shouldCorrectText(text)) return
-    setCorrectionMsg('')
-    correctionMutation.mutate({ text, source })
   }
 
   function validateForm() {
@@ -257,12 +218,12 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     return ''
   }
 
-  function buildFormItem(): DiarioOcorrencia {
+  function buildFormItem(correctedDescricao: string): DiarioOcorrencia {
     return {
       id: editingId || genId(),
       tipo: selectedPredefinida ? 'predefinida' : 'manual',
       categoriaId: selectedPredefinida || undefined,
-      descricao: descricao.trim(),
+      descricao: correctedDescricao,
       horaInicial: horaInicial || '',
       horaFinal: horaFinal || '',
       createdAt:
@@ -271,19 +232,30 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     }
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const error = validateForm()
     if (error) {
       setSubmitErr(error)
       return
     }
 
-    const item = buildFormItem()
+    setSubmitErr('')
+
+    let correctedDescricao = descricao.trim()
+    try {
+      const result = await correctionMutation.mutateAsync(correctedDescricao)
+      correctedDescricao = result.textoCorrigido?.trim() || correctedDescricao
+      setDescricao(correctedDescricao)
+    } catch (err) {
+      setSubmitErr(extractApiErrorMessage(err))
+      return
+    }
+
+    const item = buildFormItem(correctedDescricao)
     const next = editingId
       ? ocorrencias.map((row) => (row.id === editingId ? item : row))
       : [...ocorrencias, item]
 
-    setSubmitErr('')
     saveMutation.mutate(next)
   }
 
@@ -299,8 +271,6 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setSelectedPredefinida(item.tipo === 'predefinida' ? item.categoriaId || null : null)
     setEditingId(item.id)
     setSubmitErr('')
-    setCorrectionMsg('')
-    lastAutoCorrectionTextRef.current = item.descricao
     try {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch {
@@ -314,8 +284,6 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setSelectedPredefinida(id)
     setDescricao(item.templateText || item.title)
     setSubmitErr('')
-    setCorrectionMsg('')
-    lastAutoCorrectionTextRef.current = item.templateText || item.title
     setPickerOpen(false)
   }
 
@@ -345,7 +313,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     }
   }
 
-  const isBusy = saveMutation.isPending
+  const isBusy = saveMutation.isPending || correctionMutation.isPending
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
   const selectedLabel = selectedPredefinida
     ? predefinidas.find((item) => String(item.id) === selectedPredefinida)?.title || ''
@@ -445,9 +413,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                 onChange={(event) => {
                   setDescricao(event.target.value)
                   setSubmitErr('')
-                  setCorrectionMsg('')
                 }}
-                onBlur={() => correctText('auto')}
                 placeholder="Descreva a ocorrencia do diario"
                 rows={4}
                 style={{
@@ -458,33 +424,6 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                   lineHeight: '1.5',
                 }}
               />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  onClick={() => correctText('manual')}
-                  disabled={correctionMutation.isPending || !descricao.trim()}
-                  style={{
-                    border: '1.5px solid #dbeafe',
-                    borderRadius: '14px',
-                    background: correctionMutation.isPending || !descricao.trim() ? '#f8fafc' : '#eff6ff',
-                    color: correctionMutation.isPending || !descricao.trim() ? '#94a3b8' : '#1d4ed8',
-                    minHeight: '42px',
-                    padding: '0 12px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    cursor: correctionMutation.isPending || !descricao.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  <SpellCheck size={16} />
-                  {correctionMutation.isPending ? 'Corrigindo...' : 'Corrigir portugues'}
-                </button>
-                {correctionMsg ? (
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb' }}>{correctionMsg}</span>
-                ) : null}
-              </div>
             </div>
 
             <button
@@ -587,7 +526,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                 style={primaryButtonStyle(isBusy)}
               >
                 <Plus size={16} />
-                {isBusy ? 'Salvando...' : editingId ? 'Salvar ocorrencia' : 'Adicionar ocorrencia'}
+                {correctionMutation.isPending ? 'Corrigindo...' : saveMutation.isPending ? 'Salvando...' : editingId ? 'Salvar ocorrencia' : 'Adicionar ocorrencia'}
               </button>
 
               {editingId ? (

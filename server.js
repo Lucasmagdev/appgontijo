@@ -4354,17 +4354,216 @@ function validatePredefinedOccurrencePayload(input, partial = false) {
   };
 }
 
+const COMMON_TEXT_CORRECTIONS = new Map([
+  ["faso", "fa\u00e7o"],
+  ["fasso", "fa\u00e7o"],
+  ["faco", "fa\u00e7o"],
+  ["irma", "irm\u00e3"],
+  ["maquina", "m\u00e1quina"],
+  ["nao", "n\u00e3o"],
+  ["nois", "n\u00f3s"],
+  ["oleo", "\u00f3leo"],
+  ["caminhao", "caminh\u00e3o"],
+  ["possivel", "poss\u00edvel"],
+  ["quebro", "quebrou"],
+]);
+
+function preserveReplacementCase(original, replacement) {
+  const source = String(original || "");
+  const target = String(replacement || "");
+  if (!source || !target) return target;
+  if (source === source.toUpperCase()) return target.toUpperCase();
+  if (source[0] === source[0].toUpperCase()) return `${target[0].toUpperCase()}${target.slice(1)}`;
+  return target;
+}
+
+function pickLanguageToolReplacement(text, match) {
+  const offset = Number(match?.offset);
+  const length = Number(match?.length);
+  if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) return "";
+
+  const original = String(text || "").slice(offset, offset + length);
+  const knownCorrection = COMMON_TEXT_CORRECTIONS.get(original.toLowerCase());
+  if (knownCorrection) return preserveReplacementCase(original, knownCorrection);
+
+  const replacements = Array.isArray(match?.replacements)
+    ? match.replacements.map((item) => String(item?.value || "")).filter(Boolean)
+    : [];
+  if (!replacements.length) return "";
+
+  const originalLower = original.toLowerCase();
+  return replacements.find((replacement) => replacement.toLowerCase() !== originalLower) || replacements[0];
+}
+
 function applyLanguageToolReplacements(text, matches) {
   let corrected = String(text || "");
   const ordered = [...matches].sort((a, b) => Number(b.offset || 0) - Number(a.offset || 0));
   for (const match of ordered) {
-    const replacement = match?.replacements?.[0]?.value;
+    const replacement = pickLanguageToolReplacement(text, match);
     const offset = Number(match?.offset);
     const length = Number(match?.length);
     if (!replacement || !Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length <= 0) continue;
     corrected = `${corrected.slice(0, offset)}${replacement}${corrected.slice(offset + length)}`;
   }
   return corrected;
+}
+
+function applyCommonTextCorrections(text) {
+  return String(text || "")
+    .replace(/\bda\s+quela\b/gi, (value) => preserveReplacementCase(value, "daquela"))
+    .replace(/\bpq\b/gi, "porque")
+    .replace(/\bpra\b/gi, "para")
+    .replace(/\b[\p{L}]+\b/gu, (word) => {
+      const correction = COMMON_TEXT_CORRECTIONS.get(word.toLowerCase());
+      return correction ? preserveReplacementCase(word, correction) : word;
+    });
+}
+
+function cleanAiCorrectionOutput(value) {
+  let text = String(value || "").trim();
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  text = text.replace(/^```(?:text)?/i, "").replace(/```$/i, "").trim();
+  text = text.replace(/^(texto\s+corrigido|correcao|corre[cç][aã]o)\s*:\s*/i, "").trim();
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+
+function buildAiCorrectionPrompt(text) {
+  return [
+    "Voce e um corretor de portugues para diarios de obra.",
+    "Tarefa: corrigir o texto do operador sem reescrever livremente.",
+    "",
+    "Regras obrigatorias:",
+    "- Corrija somente ortografia, acentuacao, pontuacao e concordancia.",
+    "- Nao troque palavras corretas por sinonimos.",
+    "- Nao adicione conectivos como entao, pois, portanto, devido a.",
+    "- Nao mude tempo verbal.",
+    "- Nao mude termos tecnicos de obra, como maquina, estaca, bloco, bomba, concreto, caminhao.",
+    "- Nao adicione informacoes.",
+    "- Preserve o maximo possivel as palavras originais.",
+    "- Responda somente com o texto corrigido, sem explicacao.",
+    "",
+    "Exemplos:",
+    "Texto: o ajudante não veio hoje e nós ficou parado",
+    "Correcao: O ajudante não veio hoje e nós ficamos parados.",
+    "Texto: foi feito limpeza no local e retirado os entulho",
+    "Correcao: Foi feita limpeza no local e retirados os entulhos.",
+    "Texto: maquina parou pq choveu muito",
+    "Correcao: Máquina parou porque choveu muito.",
+    "Texto: Hoje executamos 12 estacas no bloco A.",
+    "Correcao: Hoje executamos 12 estacas no bloco A.",
+    "",
+    `Texto: ${text}`,
+    "Correcao:",
+  ].join("\n");
+}
+
+async function correctTextWithOllama(text) {
+  const enabled = String(process.env.OLLAMA_TEXT_CORRECTION_ENABLED || "true").toLowerCase() !== "false";
+  if (!enabled) return null;
+
+  const endpoint = process.env.OLLAMA_API_URL || "http://127.0.0.1:11434/api/generate";
+  const model = process.env.OLLAMA_TEXT_CORRECTION_MODEL || "qwen2.5:1.5b";
+  const timeoutMs = Number(process.env.OLLAMA_TEXT_CORRECTION_TIMEOUT_MS || 5000);
+  const preparedText = applyCommonTextCorrections(text);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 5000);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        prompt: buildAiCorrectionPrompt(preparedText),
+        stream: false,
+        keep_alive: process.env.OLLAMA_TEXT_CORRECTION_KEEP_ALIVE || "10m",
+        options: {
+          temperature: 0,
+          num_predict: Number(process.env.OLLAMA_TEXT_CORRECTION_NUM_PREDICT || 180),
+          repeat_penalty: 1.05,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || "Ollama indisponivel.");
+
+    const correctedText = cleanAiCorrectionOutput(payload?.response);
+    if (!correctedText) return null;
+    if (correctedText.length > Math.max(text.length * 3, text.length + 180)) return null;
+
+    return {
+      textoOriginal: text,
+      textoCorrigido: correctedText,
+      alterado: correctedText !== text,
+      provider: "ollama",
+      sugestoes: [],
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function correctTextWithLanguageTool(text) {
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.LANGUAGETOOL_TIMEOUT_MS || 8000);
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
+
+  try {
+    const endpoint = process.env.LANGUAGETOOL_API_URL || "https://api.languagetool.org/v2/check";
+    const body = new URLSearchParams({
+      text,
+      language: "pt-BR",
+      enabledOnly: "false",
+    });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: controller.signal,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || "LanguageTool indisponivel.");
+
+    const matches = Array.isArray(payload.matches) ? payload.matches : [];
+    const suggestions = matches.map((match) => ({
+      offset: Number(match.offset || 0),
+      length: Number(match.length || 0),
+      trecho: text.slice(Number(match.offset || 0), Number(match.offset || 0) + Number(match.length || 0)),
+      message: String(match.message || ""),
+      ruleId: String(match.rule?.id || ""),
+      replacements: Array.isArray(match.replacements)
+        ? match.replacements.slice(0, 5).map((item) => String(item.value || "")).filter(Boolean)
+        : [],
+    }));
+    const correctedText = applyLanguageToolReplacements(text, matches);
+
+    return {
+      textoOriginal: text,
+      textoCorrigido: correctedText,
+      alterado: correctedText !== text,
+      provider: "languagetool",
+      sugestoes: suggestions,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function buildTextCorrectionFallback(text) {
+  return {
+    textoOriginal: text,
+    textoCorrigido: text,
+    alterado: false,
+    provider: "none",
+    sugestoes: [],
+  };
 }
 
 function hasGontijoAppAccess(req) {
@@ -4472,63 +4671,29 @@ app.post("/api/gontijo/texto/corrigir", async (req, res) => {
   if (!text) return res.status(400).json({ ok: false, message: "Informe o texto para corrigir." });
   if (text.length > 3000) return res.status(400).json({ ok: false, message: "Texto limitado a 3000 caracteres." });
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const errors = [];
 
   try {
-    const endpoint = process.env.LANGUAGETOOL_API_URL || "https://api.languagetool.org/v2/check";
-    const body = new URLSearchParams({
-      text,
-      language: "pt-BR",
-      enabledOnly: "false",
-    });
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      signal: controller.signal,
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      return res.status(502).json({
-        ok: false,
-        message: payload?.message || "Nao foi possivel consultar o corretor de texto.",
-      });
-    }
-
-    const matches = Array.isArray(payload.matches) ? payload.matches : [];
-    const suggestions = matches.map((match) => ({
-      offset: Number(match.offset || 0),
-      length: Number(match.length || 0),
-      trecho: text.slice(Number(match.offset || 0), Number(match.offset || 0) + Number(match.length || 0)),
-      message: String(match.message || ""),
-      ruleId: String(match.rule?.id || ""),
-      replacements: Array.isArray(match.replacements)
-        ? match.replacements.slice(0, 5).map((item) => String(item.value || "")).filter(Boolean)
-        : [],
-    }));
-    const correctedText = applyLanguageToolReplacements(text, matches);
-
-    return res.json({
-      ok: true,
-      data: {
-        textoOriginal: text,
-        textoCorrigido: correctedText,
-        alterado: correctedText !== text,
-        sugestoes: suggestions,
-      },
-    });
+    const aiResult = await correctTextWithOllama(text);
+    if (aiResult) return res.json({ ok: true, data: aiResult });
   } catch (error) {
-    const aborted = error?.name === "AbortError";
-    return res.status(502).json({
-      ok: false,
-      message: aborted ? "O corretor demorou para responder. Tente novamente." : "Nao foi possivel corrigir o texto agora.",
-    });
-  } finally {
-    clearTimeout(timeout);
+    errors.push(`ollama: ${error?.message || "erro desconhecido"}`);
   }
+
+  try {
+    const languageToolResult = await correctTextWithLanguageTool(text);
+    return res.json({ ok: true, data: languageToolResult });
+  } catch (error) {
+    errors.push(`languagetool: ${error?.message || "erro desconhecido"}`);
+  }
+
+  return res.json({
+    ok: true,
+    data: {
+      ...buildTextCorrectionFallback(text),
+      warnings: errors,
+    },
+  });
 });
 
 app.use("/api/gontijo", (req, _res, next) => {
