@@ -36,8 +36,9 @@ CREATE TABLE IF NOT EXISTS training_points_ledger (
   user_id INT UNSIGNED NOT NULL,
   curso_id INT UNSIGNED NULL,
   prova_id INT UNSIGNED NULL,
+  diary_id BIGINT UNSIGNED NULL,
   raffle_id INT UNSIGNED NULL,
-  event_type ENUM('curso_concluido', 'prova_aprovada', 'prova_reprovada') NOT NULL,
+  event_type ENUM('curso_concluido', 'prova_aprovada', 'prova_reprovada', 'diario_no_prazo') NOT NULL,
   points INT NOT NULL DEFAULT 0,
   reference_key VARCHAR(191) NOT NULL,
   metadata_json JSON NULL,
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS training_points_ledger (
   KEY idx_training_points_ledger_created_at (created_at),
   KEY idx_training_points_ledger_curso_id (curso_id),
   KEY idx_training_points_ledger_prova_id (prova_id),
+  KEY idx_training_points_ledger_diary_id (diary_id),
   CONSTRAINT fk_training_points_ledger_curso FOREIGN KEY (curso_id) REFERENCES cursos(id) ON DELETE SET NULL,
   CONSTRAINT fk_training_points_ledger_prova FOREIGN KEY (prova_id) REFERENCES provas(id) ON DELETE SET NULL
 );

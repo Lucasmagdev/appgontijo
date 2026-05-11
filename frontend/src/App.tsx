@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 import AppLayout from '@/components/layout/AppLayout'
+import IntroScreen from '@/components/IntroScreen'
 
 // Admin pages — carregadas sob demanda
 const LoginPage = lazy(() => import('@/pages/Login'))
@@ -183,79 +184,120 @@ function LoginRoute() {
   return isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
 }
 
+function isOperadorPath() {
+  return window.location.pathname.startsWith('/operador')
+}
+
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function shouldShowIntro() {
+  const forceIntro = new URLSearchParams(window.location.search).get('introPreview') === '1'
+  if (forceIntro) return true
+
+  try {
+    if (isOperadorPath()) {
+      return localStorage.getItem('gontijo-intro-operador-last-seen') !== getTodayKey()
+    }
+
+    return sessionStorage.getItem('gontijo-intro-seen') !== '1'
+  } catch {
+    return true
+  }
+}
+
 export default function App() {
+  const [showIntro, setShowIntro] = useState(shouldShowIntro)
+
+  function handleIntroDone() {
+    try {
+      if (isOperadorPath()) {
+        localStorage.setItem('gontijo-intro-operador-last-seen', getTodayKey())
+      } else {
+        sessionStorage.setItem('gontijo-intro-seen', '1')
+      }
+    } catch {
+      // Storage can be unavailable in restricted browsing modes.
+    }
+    setShowIntro(false)
+  }
+
   return (
-    <BrowserRouter>
-      <AppBootstrap />
+    <>
+      {showIntro && <IntroScreen onDone={handleIntroDone} />}
+      <BrowserRouter>
+        <AppBootstrap />
 
-      <Suspense fallback={<AppLoading />}>
-      <Routes>
-        <Route path="/login" element={<LoginRoute />} />
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <AppLayout />
-            </PrivateRoute>
-          }
-        >
-          <Route index element={<HomePage />} />
-          <Route path="usuarios" element={<UsuariosPage />} />
-          <Route path="usuarios/novo" element={<UsuarioFormPage />} />
-          <Route path="usuarios/:id/editar" element={<UsuarioFormPage />} />
-          <Route path="clientes" element={<ClientesPage />} />
-          <Route path="clientes/novo" element={<ClienteFormPage />} />
-          <Route path="clientes/:id/editar" element={<ClienteFormPage />} />
-          <Route path="obras" element={<ObrasPage />} />
-          <Route path="obras/nova" element={<ObraFormPage />} />
-          <Route path="obras/:id/editar" element={<ObraFormPage />} />
-          <Route path="equipamentos" element={<EquipamentosPage />} />
-          <Route path="producao" element={<ProducaoPage />} />
-          <Route path="indicadores-operacionais" element={<IndicadoresOperacionaisPage />} />
-          <Route path="pre-ocorrencias" element={<PreOcorrenciasPage />} />
-          <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
-          <Route path="whatsapp" element={<WhatsAppLogsPage />} />
-          <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
-          <Route path="diarios" element={<DiariosPage />} />
-          <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />
-          <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
-          <Route path="portal-clientes" element={<PortalClientesPage />} />
-          <Route path="cursos" element={<CursosPage />} />
-          <Route path="cursos/novo" element={<CursoFormPage />} />
-          <Route path="cursos/resultados" element={<CursosResultadosPage />} />
-          <Route path="cursos/pontos" element={<CursosPontosPage />} />
-          <Route path="cursos/:id/editar" element={<CursoFormPage />} />
-          <Route path="cursos/:id/prova" element={<CursoProvaPage />} />
-          <Route path="cursos/:id/atribuicoes" element={<CursoAtribuicoesPage />} />
-        </Route>
+        <Suspense fallback={<AppLoading />}>
+        <Routes>
+          <Route path="/login" element={<LoginRoute />} />
+          <Route
+            path="/"
+            element={
+              <PrivateRoute>
+                <AppLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<HomePage />} />
+            <Route path="usuarios" element={<UsuariosPage />} />
+            <Route path="usuarios/novo" element={<UsuarioFormPage />} />
+            <Route path="usuarios/:id/editar" element={<UsuarioFormPage />} />
+            <Route path="clientes" element={<ClientesPage />} />
+            <Route path="clientes/novo" element={<ClienteFormPage />} />
+            <Route path="clientes/:id/editar" element={<ClienteFormPage />} />
+            <Route path="obras" element={<ObrasPage />} />
+            <Route path="obras/nova" element={<ObraFormPage />} />
+            <Route path="obras/:id/editar" element={<ObraFormPage />} />
+            <Route path="equipamentos" element={<EquipamentosPage />} />
+            <Route path="producao" element={<ProducaoPage />} />
+            <Route path="indicadores-operacionais" element={<IndicadoresOperacionaisPage />} />
+            <Route path="pre-ocorrencias" element={<PreOcorrenciasPage />} />
+            <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
+            <Route path="whatsapp" element={<WhatsAppLogsPage />} />
+            <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
+            <Route path="diarios" element={<DiariosPage />} />
+            <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />
+            <Route path="diarios/:id/editar" element={<DiarioFormPage />} />
+            <Route path="portal-clientes" element={<PortalClientesPage />} />
+            <Route path="cursos" element={<CursosPage />} />
+            <Route path="cursos/novo" element={<CursoFormPage />} />
+            <Route path="cursos/resultados" element={<CursosResultadosPage />} />
+            <Route path="cursos/pontos" element={<CursosPontosPage />} />
+            <Route path="cursos/:id/editar" element={<CursoFormPage />} />
+            <Route path="cursos/:id/prova" element={<CursoProvaPage />} />
+            <Route path="cursos/:id/atribuicoes" element={<CursoAtribuicoesPage />} />
+          </Route>
 
-        <Route path="/operador/login" element={<OperadorLoginRoute />} />
-        <Route path="/operador/carregando" element={<OperadorSplashPage />} />
-        <Route path="/assinatura/diario/:token" element={<AssinaturaClientePage />} />
-        <Route path="/portal-cliente/login" element={<ClientePortalLoginRoute />} />
-        <Route path="/portal-cliente" element={<ClientePortalPrivateRoute><ClientePortalDashboardPage /></ClientePortalPrivateRoute>} />
-        <Route
-          path="/operador"
-          element={
-            <OperadorPrivateRoute>
-              <OperadorHomePage />
-            </OperadorPrivateRoute>
-          }
-        />
-        <Route path="/operador/diario-de-obras" element={<OperadorPrivateRoute><DiarioMenu /></OperadorPrivateRoute>} />
-        <Route path="/operador/diario-de-obras/pesquisar" element={<OperadorPrivateRoute><DiarioPesquisar /></OperadorPrivateRoute>} />
-        <Route path="/operador/diario-de-obras/novo" element={<OperadorPrivateRoute><DiarioNovoObra /></OperadorPrivateRoute>} />
-        <Route path="/operador/diario-de-obras/novo/:equipamentoId" element={<OperadorPrivateRoute><DiarioPainel /></OperadorPrivateRoute>} />
-        <Route path="/operador/diario-de-obras/novo/:equipamentoId/:modulo" element={<OperadorPrivateRoute><DiarioModuloPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><IndiqueUmaObraPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><FatoObservadoPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorConfiguracoesPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/cursos" element={<OperadorPrivateRoute><OperadorCursosPage /></OperadorPrivateRoute>} />
-        <Route path="/operador/cursos/:id" element={<OperadorPrivateRoute><OperadorCursoDetalhePage /></OperadorPrivateRoute>} />
-        <Route path="/operador/cursos/:id/prova" element={<OperadorPrivateRoute><OperadorProvaPage /></OperadorPrivateRoute>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      </Suspense>
-    </BrowserRouter>
+          <Route path="/operador/login" element={<OperadorLoginRoute />} />
+          <Route path="/operador/carregando" element={<OperadorSplashPage />} />
+          <Route path="/assinatura/diario/:token" element={<AssinaturaClientePage />} />
+          <Route path="/portal-cliente/login" element={<ClientePortalLoginRoute />} />
+          <Route path="/portal-cliente" element={<ClientePortalPrivateRoute><ClientePortalDashboardPage /></ClientePortalPrivateRoute>} />
+          <Route
+            path="/operador"
+            element={
+              <OperadorPrivateRoute>
+                <OperadorHomePage />
+              </OperadorPrivateRoute>
+            }
+          />
+          <Route path="/operador/diario-de-obras" element={<OperadorPrivateRoute><DiarioMenu /></OperadorPrivateRoute>} />
+          <Route path="/operador/diario-de-obras/pesquisar" element={<OperadorPrivateRoute><DiarioPesquisar /></OperadorPrivateRoute>} />
+          <Route path="/operador/diario-de-obras/novo" element={<OperadorPrivateRoute><DiarioNovoObra /></OperadorPrivateRoute>} />
+          <Route path="/operador/diario-de-obras/novo/:equipamentoId" element={<OperadorPrivateRoute><DiarioPainel /></OperadorPrivateRoute>} />
+          <Route path="/operador/diario-de-obras/novo/:equipamentoId/:modulo" element={<OperadorPrivateRoute><DiarioModuloPage /></OperadorPrivateRoute>} />
+          <Route path="/operador/indique-uma-obra" element={<OperadorPrivateRoute><IndiqueUmaObraPage /></OperadorPrivateRoute>} />
+          <Route path="/operador/fato-observado" element={<OperadorPrivateRoute><FatoObservadoPage /></OperadorPrivateRoute>} />
+          <Route path="/operador/configuracoes" element={<OperadorPrivateRoute><OperadorConfiguracoesPage /></OperadorPrivateRoute>} />
+          <Route path="/operador/cursos" element={<OperadorPrivateRoute><OperadorCursosPage /></OperadorPrivateRoute>} />
+          <Route path="/operador/cursos/:id" element={<OperadorPrivateRoute><OperadorCursoDetalhePage /></OperadorPrivateRoute>} />
+          <Route path="/operador/cursos/:id/prova" element={<OperadorPrivateRoute><OperadorProvaPage /></OperadorPrivateRoute>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </>
   )
 }

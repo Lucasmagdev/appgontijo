@@ -262,13 +262,13 @@ export default function OperadorHomePage() {
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: RED }} />
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, color: RED, fontSize: '10px', fontWeight: 900, letterSpacing: '0.09em', textTransform: 'uppercase' }}>
-                  {raffle?.banner_label || 'Pontos de aprendizado'}
+                  {raffle?.banner_label || 'Pontos Gontijo'}
                 </p>
                 <p style={{ margin: '5px 0 0', color: TEXT, fontSize: '16px', fontWeight: 900, lineHeight: 1.15 }}>
-                  {raffle?.title || 'Ganhe pontos estudando'}
+                  {raffle?.title || 'Ganhe pontos no app'}
                 </p>
                 <p style={{ margin: '6px 0 0', color: MUTED, fontSize: '12px', lineHeight: 1.35 }}>
-                  {points > 0 ? `${points} ponto(s) acumulados neste mes` : 'Conclua cursos e provas para pontuar'}
+                  {points > 0 ? `${points} ponto(s) acumulados neste mes` : 'Conclua diarios, cursos e provas para pontuar'}
                 </p>
               </div>
               <div

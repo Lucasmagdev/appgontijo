@@ -50,6 +50,16 @@ ssh.on('ready', () => {
           return
         }
 
+        socket.on('error', (socketError) => {
+          write(errPath, `socket error: ${socketError.message}`)
+          stream.destroy()
+        })
+
+        stream.on('error', (streamError) => {
+          write(errPath, `stream error: ${streamError.message}`)
+          socket.destroy()
+        })
+
         socket.pipe(stream).pipe(socket)
       }
     )

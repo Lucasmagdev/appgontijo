@@ -13,6 +13,7 @@ const FALLBACK_PREDEFINIDAS = [
 
 type PredefinidaId = string
 type PredefinidaOption = Pick<PredefinedOccurrence, 'title' | 'templateText'> & { id: string | number }
+const OTHER_OCCURRENCE_ID = '__outros__'
 
 type DiarioOcorrencia = {
   id: string
@@ -211,7 +212,10 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
 
   function validateForm() {
     const text = descricao.trim()
-    if (!text) return 'Informe a ocorrencia antes de salvar.'
+    if (!selectedPredefinida) return 'Escolha uma ocorrencia pre-definida ou a opcao Outros.'
+    if (selectedPredefinida === OTHER_OCCURRENCE_ID && !text) return 'Informe a ocorrencia antes de salvar.'
+    if (!horaInicial) return 'Informe o horario inicial da ocorrencia antes de salvar.'
+    if (!text) return 'Escolha uma ocorrencia antes de salvar.'
     if (horaInicial && horaFinal && horaFinal < horaInicial) {
       return 'A hora final nao pode ser antes da hora inicial.'
     }
@@ -221,8 +225,8 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   function buildFormItem(correctedDescricao: string): DiarioOcorrencia {
     return {
       id: editingId || genId(),
-      tipo: selectedPredefinida ? 'predefinida' : 'manual',
-      categoriaId: selectedPredefinida || undefined,
+      tipo: selectedPredefinida === OTHER_OCCURRENCE_ID ? 'manual' : 'predefinida',
+      categoriaId: selectedPredefinida === OTHER_OCCURRENCE_ID ? undefined : selectedPredefinida || undefined,
       descricao: correctedDescricao,
       horaInicial: horaInicial || '',
       horaFinal: horaFinal || '',
@@ -268,7 +272,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setDescricao(item.descricao)
     setHoraInicial(item.horaInicial || '')
     setHoraFinal(item.horaFinal || '')
-    setSelectedPredefinida(item.tipo === 'predefinida' ? item.categoriaId || null : null)
+    setSelectedPredefinida(item.tipo === 'predefinida' ? item.categoriaId || null : OTHER_OCCURRENCE_ID)
     setEditingId(item.id)
     setSubmitErr('')
     try {
@@ -279,6 +283,14 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   }
 
   function choosePredefinida(id: PredefinidaId) {
+    if (id === OTHER_OCCURRENCE_ID) {
+      setSelectedPredefinida(id)
+      setDescricao('')
+      setSubmitErr('')
+      setPickerOpen(false)
+      return
+    }
+
     const item = predefinidas.find((entry) => String(entry.id) === id)
     if (!item) return
     setSelectedPredefinida(id)
@@ -316,8 +328,11 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   const isBusy = saveMutation.isPending || correctionMutation.isPending
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
   const selectedLabel = selectedPredefinida
-    ? predefinidas.find((item) => String(item.id) === selectedPredefinida)?.title || ''
+    ? selectedPredefinida === OTHER_OCCURRENCE_ID
+      ? 'Outros'
+      : predefinidas.find((item) => String(item.id) === selectedPredefinida)?.title || ''
     : ''
+  const isOtherOccurrence = selectedPredefinida === OTHER_OCCURRENCE_ID
   const activeTimeValue = getActiveTimeValue()
 
   return (
@@ -401,29 +416,9 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '24px', fontWeight: 900, color: '#a72727', lineHeight: 1.05 }}>Ocorrencias</div>
                 <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280', lineHeight: '1.45' }}>
-                  Registre uma ocorrencia livremente ou escolha uma opcao pre-definida.
+                  Escolha uma ocorrencia pre-definida. Para escrever livremente, selecione Outros.
                 </div>
               </div>
-            </div>
-
-            <div style={{ display: 'grid', gap: '8px' }}>
-              <label style={fieldLabelStyle}>Ocorrencia</label>
-              <textarea
-                value={descricao}
-                onChange={(event) => {
-                  setDescricao(event.target.value)
-                  setSubmitErr('')
-                }}
-                placeholder="Descreva a ocorrencia do diario"
-                rows={4}
-                style={{
-                  ...inputStyle,
-                  minHeight: '114px',
-                  resize: 'vertical',
-                  fontFamily: 'inherit',
-                  lineHeight: '1.5',
-                }}
-              />
             </div>
 
             <button
@@ -474,6 +469,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                   type="button"
                   onClick={() => {
                     setSelectedPredefinida(null)
+                    setDescricao('')
                     setSubmitErr('')
                   }}
                   style={{
@@ -488,6 +484,28 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                 >
                   Limpar selecao
                 </button>
+              </div>
+            ) : null}
+
+            {isOtherOccurrence ? (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <label style={fieldLabelStyle}>Ocorrencia</label>
+                <textarea
+                  value={descricao}
+                  onChange={(event) => {
+                    setDescricao(event.target.value)
+                    setSubmitErr('')
+                  }}
+                  placeholder="Descreva a ocorrencia do diario"
+                  rows={4}
+                  style={{
+                    ...inputStyle,
+                    minHeight: '114px',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    lineHeight: '1.5',
+                  }}
+                />
               </div>
             ) : null}
 
@@ -679,7 +697,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
               <div>
                 <div style={{ fontSize: '18px', fontWeight: 900, color: '#111827' }}>Ocorrencias pre-definidas</div>
                 <div style={{ marginTop: '4px', fontSize: '13px', color: '#6b7280', lineHeight: '1.45' }}>
-                  Escolha uma opcao para preencher rapidamente o campo de ocorrencia.
+                  Escolha uma opcao. Use Outros apenas quando precisar escrever uma ocorrencia livre.
                 </div>
                 {predefinedQuery.isFetching ? (
                   <div style={{ marginTop: '6px', fontSize: '12px', color: '#94a3b8', fontWeight: 700 }}>Atualizando lista...</div>
@@ -726,6 +744,24 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
                   {item.title}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => choosePredefinida(OTHER_OCCURRENCE_ID)}
+                style={{
+                  border: '1px solid #f0d2d2',
+                  borderRadius: '16px',
+                  background: selectedPredefinida === OTHER_OCCURRENCE_ID ? '#fff7ed' : '#fff7f7',
+                  color: '#a72727',
+                  padding: '14px 14px',
+                  textAlign: 'left',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  lineHeight: '1.4',
+                  cursor: 'pointer',
+                }}
+              >
+                Outros
+              </button>
             </div>
           </div>
         </PickerSheet>

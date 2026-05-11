@@ -1595,6 +1595,10 @@ export const diarioService = {
       dados_json: payload.dadosJson,
     })
   },
+  async conclude(id: number) {
+    const { data } = await api.post<ApiEnvelope<DiaryCompletionResult>>(`/gontijo/operador/diarios/${id}/concluir`)
+    return data.data
+  },
   getPdfUrl(id: number) {
     return `/api/gontijo/diarios/${id}/pdf`
   },
@@ -2330,12 +2334,26 @@ export type TrainingPointsOverview = {
   raffle: TrainingMonthlyRaffle | null
   recent_events: Array<{
     id: number
-    event_type: 'curso_concluido' | 'prova_aprovada' | 'prova_reprovada'
+    event_type: 'curso_concluido' | 'prova_aprovada' | 'prova_reprovada' | 'diario_no_prazo'
     points: number
     created_at: string
     curso_titulo: string | null
     prova_titulo: string | null
   }>
+}
+
+export type DiaryCompletionResult = {
+  completed: boolean
+  alreadyCompleted: boolean
+  late: boolean
+  awarded: boolean
+  points: number
+  deadlineAt: string
+  totals: {
+    month_points: number
+    lifetime_points: number
+    chances: number
+  }
 }
 
 export type OperationalIndicators = {

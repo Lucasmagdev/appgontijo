@@ -4171,7 +4171,10 @@ app.get("/api/client-portal/diarios/:id/pdf", requireClientPortal, async (req, r
       return res.status(404).json({ ok: false, message: "Diario nao encontrado para esta obra." });
     }
 
-    return res.redirect(302, `/api/gontijo/diarios/${diaryId}/pdf`);
+    const expiresAt = Date.now() + 60 * 1000;
+    const secret = process.env.GONTIJO_PDF_ACCESS_SECRET || process.env.SESSION_SECRET || "gontijo-pdf-access-dev";
+    const signature = crypto.createHmac("sha256", secret).update(`${diaryId}:${expiresAt}`).digest("hex");
+    return res.redirect(302, `/api/gontijo/diarios/${diaryId}/pdf?portalPdfExpires=${expiresAt}&portalPdfSignature=${signature}`);
   } catch (error) {
     return res.status(500).json({
       ok: false,
@@ -4711,6 +4714,7 @@ app.use("/api/gontijo", (req, _res, next) => {
 
   if (adminSession?.cpf) {
     req.session.adminCpf = adminSession.cpf;
+    req.session.adminUserId = adminSession.userId;
     req.session.adminIsAdmin = adminSession.isAdmin ?? false;
   }
 
@@ -6043,7 +6047,7 @@ app.get("/api/public/diarios/signature/:token", async (req, res) => {
         equipamento: diary.equipamento,
         dataDiario: diary.data_diario,
         sentAt: firstFilledText(link.sent_at, diary.data.enviado_em, requestMeta.sentAt),
-        pdfUrl: `/api/gontijo/diarios/${diary.id}/pdf`,
+        pdfUrl: `/api/gontijo/diarios/${diary.id}/pdf?signatureToken=${encodeURIComponent(req.params.token)}`,
         operatorName: firstFilledText(diary.data.operatorSignatureName, diary.operator_name),
         operatorDocument: firstFilledText(diary.data.operatorSignatureDoc, diary.operator_document),
         operatorSignature: firstFilledText(diary.data.operatorSignature, diary.operator_signature),

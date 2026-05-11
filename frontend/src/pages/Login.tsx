@@ -27,8 +27,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#3f4751_0,#2f353d_45%,#23272d_100%)] p-4">
       <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.28)] lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="hidden bg-[linear-gradient(160deg,#3a4048_0%,#31363e_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
-          <div>
+        <section className="hidden bg-[linear-gradient(160deg,#3a4048_0%,#31363e_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-center">
+          <div className="flex justify-center">
             <div className="inline-flex rounded-2xl px-5 py-4">
               <img
                 src="/gontijo-logo-diarios.png"
@@ -36,15 +36,6 @@ export default function LoginPage() {
                 className="h-20 w-auto object-contain"
               />
             </div>
-          </div>
-
-          <div>
-            <div className="max-w-sm text-3xl font-semibold leading-tight">
-              Controle administrativo com linguagem visual industrial e direta.
-            </div>
-            <p className="mt-4 max-w-md text-sm leading-6 text-slate-300">
-              Acesso rapido ao operacional, cadastros, diarios e monitoramento da producao.
-            </p>
           </div>
         </section>
 
