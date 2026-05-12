@@ -326,7 +326,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   }
 
   const isBusy = saveMutation.isPending || correctionMutation.isPending
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
   const selectedLabel = selectedPredefinida
     ? selectedPredefinida === OTHER_OCCURRENCE_ID
       ? 'Outros'

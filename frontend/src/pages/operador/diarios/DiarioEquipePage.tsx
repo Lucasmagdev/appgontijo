@@ -52,6 +52,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   const deferredSearch = useDeferredValue(search.trim())
   const [members, setMembers] = useState<TeamMember[]>([])
   const [submitError, setSubmitError] = useState('')
+  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}?diario=${diarioId}`
 
   const diarioQuery = useQuery({
     queryKey: ['operador-diario', diarioId],
@@ -150,7 +151,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
       setSubmitError('')
       await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
       await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
-      navigate(`/operador/diario-de-obras/novo/${equipamentoId}`)
+      navigate(backUrl)
     },
     onError: (error) => {
       setSubmitError(extractApiErrorMessage(error))
@@ -180,7 +181,7 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
         }}
       >
         <button
-          onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId}`)}
+          onClick={() => navigate(backUrl)}
           style={{
             background: 'rgba(0,0,0,0.28)',
             border: '1px solid rgba(255,255,255,0.12)',

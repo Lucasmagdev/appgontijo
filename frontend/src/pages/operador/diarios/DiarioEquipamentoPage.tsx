@@ -126,6 +126,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
   const diaryObraNumero = String(diarioQuery.data?.obraNumero || '').trim()
   const isEquipmentConfirmed = ((diarioQuery.data?.dadosJson as Record<string, unknown> | null)?.equipment_confirmed) === true
 
@@ -182,7 +183,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
       setPendingEquipmentId(null)
       await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
       await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
-      navigate(`/operador/diario-de-obras/novo/${nextEquipmentId}`)
+      navigate(`/operador/diario-de-obras/novo/${nextEquipmentId}?diario=${diarioId}`)
     },
     onError: (error) => {
       setSubmitError(extractApiErrorMessage(error))
@@ -220,7 +221,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
           }}
         >
           <button
-            onClick={() => navigate(`/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`)}
+            onClick={() => navigate(backUrl)}
             style={{
               background: 'rgba(0,0,0,0.28)',
               border: '1px solid rgba(255,255,255,0.12)',

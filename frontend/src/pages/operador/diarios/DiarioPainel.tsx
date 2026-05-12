@@ -19,7 +19,7 @@ import {
   Tractor,
   Users,
 } from 'lucide-react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { diarioService, equipamentoService, extractApiErrorMessage, obraService } from '@/lib/gontijo-api'
 
@@ -845,9 +845,12 @@ export default function DiarioPainel() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { equipamentoId } = useParams()
+  const [searchParams] = useSearchParams()
   const { user } = useOperadorAuth()
   const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const selectedId = Number(equipamentoId)
+  const routeDiaryId = Number(searchParams.get('diario') || '')
+  const hasRouteDiaryId = Number.isFinite(routeDiaryId) && routeDiaryId > 0
   const [activeTopModal, setActiveTopModal] = useState<TopFieldKey | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
   const [topModalValue, setTopModalValue] = useState('')
@@ -864,10 +867,17 @@ export default function DiarioPainel() {
 
   const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
 
+  const routeDiaryQuery = useQuery({
+    queryKey: ['operador-diario', routeDiaryId],
+    enabled: hasRouteDiaryId,
+    queryFn: () => diarioService.getById(routeDiaryId),
+    retry: false,
+  })
+
   const draftQueryKey = ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, retroDate] as const
   const draftQuery = useQuery({
     queryKey: draftQueryKey,
-    enabled: Boolean(selectedId && equipamento?.obraNumero && user?.id),
+    enabled: !hasRouteDiaryId && Boolean(selectedId && equipamento?.obraNumero && user?.id),
     queryFn: () =>
       diarioService.resolveDraft({
         equipamentoId: selectedId,
@@ -879,17 +889,23 @@ export default function DiarioPainel() {
     retry: false,
   })
 
+  const activeDiary = hasRouteDiaryId ? routeDiaryQuery.data : draftQuery.data
+  const activeDiaryQueryKey = hasRouteDiaryId ? (['operador-diario', routeDiaryId] as const) : draftQueryKey
+  const panelEquipmentId = activeDiary?.equipamentoId || (Number.isFinite(selectedId) ? selectedId : '')
+  const panelEquipmentName = equipamento?.nome || activeDiary?.equipamento || 'Maquina selecionada'
+  const panelEquipmentImei = equipamento?.imei || 'Nao informado'
+
   const obraDetailQuery = useQuery({
-    queryKey: ['obra-detail-operador', draftQuery.data?.obraId],
-    enabled: Boolean(draftQuery.data?.obraId),
-    queryFn: () => obraService.getById(draftQuery.data!.obraId),
+    queryKey: ['obra-detail-operador', activeDiary?.obraId],
+    enabled: Boolean(activeDiary?.obraId),
+    queryFn: () => obraService.getById(activeDiary!.obraId),
   })
 
   const topSaveMutation = useMutation({
     mutationFn: async ({ key, value }: { key: TopFieldKey; value: string }) => {
-      if (!draftQuery.data) return
+      if (!activeDiary) return
 
-      const currentJson = (draftQuery.data.dadosJson as Record<string, unknown> | null) || {}
+      const currentJson = (activeDiary.dadosJson as Record<string, unknown> | null) || {}
       const nextJson = {
         ...currentJson,
         [key === 'data' ? 'date' : key === 'entrada' ? 'start' : 'end']: value,
@@ -913,18 +929,18 @@ export default function DiarioPainel() {
         }
       }
 
-      await diarioService.update(draftQuery.data.id, {
-        dataDiario: key === 'data' ? value : draftQuery.data.dataDiario,
-        status: draftQuery.data.status,
-        equipamentoId: draftQuery.data.equipamentoId,
-        assinadoEm: draftQuery.data.assinadoEm,
+      await diarioService.update(activeDiary.id, {
+        dataDiario: key === 'data' ? value : activeDiary.dataDiario,
+        status: activeDiary.status,
+        equipamentoId: activeDiary.equipamentoId,
+        assinadoEm: activeDiary.assinadoEm,
         dadosJson: nextJson,
       })
     },
     onSuccess: async (_data, variables) => {
       setTopModalError('')
       setActiveTopModal(null)
-      queryClient.setQueryData(draftQueryKey, (current: typeof draftQuery.data) => {
+      queryClient.setQueryData(activeDiaryQueryKey, (current: typeof activeDiary) => {
         if (!current) return current
         const currentJson = (current.dadosJson as Record<string, unknown> | null) || {}
         return {
@@ -942,9 +958,15 @@ export default function DiarioPainel() {
         // today (retroDate=null), resolve-draft would find no draft for today and
         // create a fresh diary, losing the date selection. Instead, update
         // retroDate so the query key points to the newly-selected date.
-        setRetroDate(variables.value)
+        if (!hasRouteDiaryId) setRetroDate(variables.value)
+        if (hasRouteDiaryId) {
+          await queryClient.invalidateQueries({ queryKey: ['operador-diario', routeDiaryId] })
+        }
         await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
       } else {
+        if (hasRouteDiaryId) {
+          await queryClient.invalidateQueries({ queryKey: ['operador-diario', routeDiaryId] })
+        }
         await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
       }
     },
@@ -953,15 +975,15 @@ export default function DiarioPainel() {
     },
   })
 
-  const obraTitulo = draftQuery.data
-    ? `${draftQuery.data.obraNumero} - ${draftQuery.data.cliente || 'Obra selecionada'}`
+  const obraTitulo = activeDiary
+    ? `${activeDiary.obraNumero} - ${activeDiary.cliente || 'Obra selecionada'}`
     : equipamento
       ? `${equipamento.obraNumero} - Obra selecionada`
       : 'Diario de obras'
   const endereco = obraDetailQuery.data
     ? buildAddress(obraDetailQuery.data)
     : 'Endereco da obra em carregamento'
-  const draftJson = (draftQuery.data?.dadosJson as Record<string, unknown> | null) || {}
+  const draftJson = (activeDiary?.dadosJson as Record<string, unknown> | null) || {}
   const isDateConfirmed = draftJson.date_confirmed === true
   const topCompletion = {
     data: isDateConfirmed && Boolean(draftJson.date),
@@ -1020,7 +1042,7 @@ export default function DiarioPainel() {
         )
       ),
     assinatura:
-      String(draftQuery.data?.status || '') === 'assinado' ||
+      String(activeDiary?.status || '') === 'assinado' ||
       Boolean(String(draftJson.signature || '').trim()) ||
       Boolean(
         draftJson.signature_request &&
@@ -1029,17 +1051,17 @@ export default function DiarioPainel() {
           (draftJson.signature_request as Record<string, unknown>).status === 'signed')
       ),
     revisao: draftJson.revisao_confirmed === true || draftJson.review_confirmed === true,
-    finalizacao: String(draftQuery.data?.status || '') === 'assinado',
+    finalizacao: String(activeDiary?.status || '') === 'assinado',
   }
   const visibleModuleButtons = MODULE_BUTTONS.filter((item) => item.key !== 'assinatura' || canGenerateSignatureLink)
 
   function openTopModal(key: TopFieldKey) {
-    if (!draftQuery.data) return
+    if (!activeDiary) return
     setTopModalError('')
     setActiveTopModal(key)
 
     if (key === 'data') {
-      const anchorDate = String(draftJson.date || draftQuery.data.dataDiario || new Date().toISOString().slice(0, 10))
+      const anchorDate = String(draftJson.date || activeDiary.dataDiario || new Date().toISOString().slice(0, 10))
       setTopModalValue(isDateConfirmed ? String(draftJson.date || '') : '')
       setCalendarMonth(parseIsoDate(anchorDate) || new Date())
       return
@@ -1063,12 +1085,12 @@ export default function DiarioPainel() {
   }
 
   function openModulo(modulo: string) {
-    if (!draftQuery.data?.id) return
+    if (!activeDiary?.id) return
     if (modulo === 'assinatura' && !canGenerateSignatureLink) return
-    navigate(`/operador/diario-de-obras/novo/${selectedId}/${modulo}?diario=${draftQuery.data.id}`)
+    navigate(`/operador/diario-de-obras/novo/${panelEquipmentId}/${modulo}?diario=${activeDiary.id}`)
   }
 
-  if (equipamentosQuery.isLoading || draftQuery.isLoading) {
+  if (equipamentosQuery.isLoading || routeDiaryQuery.isLoading || draftQuery.isLoading) {
     return <OpeningDiaryLoading />
   }
 
@@ -1102,7 +1124,7 @@ export default function DiarioPainel() {
     )
   }
 
-  if (!equipamento) {
+  if (!equipamento && !activeDiary) {
     return (
       <div
         style={{
@@ -1152,7 +1174,52 @@ export default function DiarioPainel() {
     : null
   const isDuplicateError = draftErrorStatus === 409
 
-  if (draftQuery.isError || !draftQuery.data) {
+  if (routeDiaryQuery.isError) {
+    return (
+      <div
+        style={{
+          minHeight: '100dvh',
+          display: 'grid',
+          placeItems: 'center',
+          background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+          padding: '24px',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '340px',
+            borderRadius: '24px',
+            background: '#fff',
+            padding: '24px',
+            boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Nao foi possivel abrir o diario</div>
+          <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+            {extractApiErrorMessage(routeDiaryQuery.error)}
+          </div>
+          <button
+            onClick={() => navigate('/operador/diario-de-obras/novo')}
+            style={{
+              marginTop: '18px',
+              border: 'none',
+              borderRadius: '14px',
+              background: '#a72727',
+              color: '#fff',
+              padding: '13px 18px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Voltar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (draftQuery.isError || !activeDiary) {
     if (isDuplicateError && !showRetroDatePicker) {
       return (
         <div
@@ -1495,7 +1562,7 @@ export default function DiarioPainel() {
                     fontWeight: 700,
                   }}
                 >
-                  Maquina: {equipamento.nome}
+                  Maquina: {panelEquipmentName}
                 </div>
                 <div
                   style={{
@@ -1508,7 +1575,7 @@ export default function DiarioPainel() {
                     fontWeight: 700,
                   }}
                 >
-                  IMEI: {equipamento.imei}
+                  IMEI: {panelEquipmentImei}
                 </div>
               </div>
             </div>

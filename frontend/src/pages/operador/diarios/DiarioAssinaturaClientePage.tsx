@@ -53,7 +53,7 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
   })
 
   const status = statusQuery.data
-  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}?diario=${diarioId}`
 
   const generateMutation = useMutation({
     mutationFn: () => diarioSignatureService.generate(diarioId),

@@ -60,7 +60,7 @@ export default function DiarioClimaPage({ diarioId, equipamentoId }: Props) {
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
   useEffect(() => {
     const json = (diarioQuery.data?.dadosJson as Record<string, unknown> | null) || {}

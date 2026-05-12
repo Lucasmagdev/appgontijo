@@ -38,7 +38,7 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
   const [completionResult, setCompletionResult] = useState<DiaryCompletionResult | null>(null)
   const [showRewardOverlay, setShowRewardOverlay] = useState(false)
   const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
-  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}?diario=${diarioId}`
 
   const diaryQuery = useQuery({
     queryKey: ['operador-diario', diarioId],

@@ -75,7 +75,7 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
   const title = kind === 'planning' ? 'Planejamento diario' : 'Planejamento final da obra'
   const helper = kind === 'planning' ? 'Nº de estacas planejadas para o dia seguinte' : 'Nº de estacas planejadas para o final da obra'

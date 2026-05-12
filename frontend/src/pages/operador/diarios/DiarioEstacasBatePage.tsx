@@ -145,7 +145,7 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
   const equipment = equipamentosQuery.data?.find((e) => e.id === currentEquipmentId) ?? null
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
   const stakes = useMemo(() => {
     const raw = diarioQuery.data?.dadosJson

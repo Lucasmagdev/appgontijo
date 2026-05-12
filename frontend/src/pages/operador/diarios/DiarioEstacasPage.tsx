@@ -388,7 +388,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   }
 
   const isBusy = saveMutation.isPending || syncMutation.isPending
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
   if (!diarioQuery.isLoading && !equipamentosQuery.isLoading && isBE) {
     return <DiarioEstacasBatePage diarioId={diarioId} equipamentoId={equipamentoId} />

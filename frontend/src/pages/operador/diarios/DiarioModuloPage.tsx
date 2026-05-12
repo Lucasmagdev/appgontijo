@@ -66,6 +66,9 @@ export default function DiarioModuloPage() {
   const supportedModule = isSupportedModule(moduloParam)
   const config = supportedModule ? FIELD_CONFIG[moduloParam] : null
   const isRequiredField = moduloParam === 'data' || moduloParam === 'entrada' || moduloParam === 'saida'
+  const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}${
+    Number.isFinite(diarioId) && diarioId > 0 ? `?diario=${diarioId}` : ''
+  }`
 
   if (isEquipeModule) {
     return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />
@@ -112,6 +115,7 @@ export default function DiarioModuloPage() {
       return (
         <OperadorPlaceholder
           titulo="Assinatura bloqueada"
+          voltarPara={backUrl}
           mensagem="A geracao do link de assinatura deve ser feita pelo administrativo ou por um usuario autorizado."
         />
       )
@@ -230,7 +234,7 @@ export default function DiarioModuloPage() {
       setSubmitError('')
       await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
       await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
-      navigate(`/operador/diario-de-obras/novo/${equipamentoId}`)
+      navigate(backUrl)
     },
     onError: (error) => {
       setSubmitError(extractApiErrorMessage(error))
@@ -241,7 +245,7 @@ export default function DiarioModuloPage() {
     return (
       <OperadorPlaceholder
         titulo="Diario de obras"
-        voltarPara={`/operador/diario-de-obras/novo/${equipamentoId}`}
+        voltarPara={backUrl}
         mensagem="Esta parte do diario sera montada na proxima etapa."
       />
     )
@@ -251,7 +255,7 @@ export default function DiarioModuloPage() {
     return (
       <OperadorPlaceholder
         titulo={config.title}
-        voltarPara={`/operador/diario-de-obras/novo/${equipamentoId}`}
+        voltarPara={backUrl}
         mensagem="Nao foi possivel identificar o diario em edicao."
       />
     )
@@ -280,7 +284,7 @@ export default function DiarioModuloPage() {
         }}
       >
         <button
-          onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId}`)}
+          onClick={() => navigate(backUrl)}
           style={{
             background: 'rgba(0,0,0,0.28)',
             border: '1px solid rgba(255,255,255,0.12)',

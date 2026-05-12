@@ -23,7 +23,7 @@ export default function DiarioRevisaoPage({ diarioId, equipamentoId }: Props) {
 
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
-  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}`
+  const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
   const pdfUrl = `${diarioService.getPdfUrl(diarioId)}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`
 
   const markReviewedMutation = useMutation({
