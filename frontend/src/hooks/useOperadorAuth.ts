@@ -4,6 +4,7 @@ import axios from 'axios'
 import { API_BASE_URL } from '@/lib/api'
 
 const operadorApi = axios.create({ baseURL: API_BASE_URL, withCredentials: true })
+let operadorAuthRevision = 0
 
 interface OperadorUser {
   id: number
@@ -30,8 +31,10 @@ export const useOperadorAuth = create<OperadorAuthState>()(
       isReady: false,
 
       initialize: async () => {
+        const revisionAtStart = operadorAuthRevision
         try {
           const { data } = await operadorApi.get('/operador/status')
+          if (revisionAtStart !== operadorAuthRevision) return
           if (data?.authenticated && data.user) {
             set({ user: data.user, isAuthenticated: true, isReady: true })
             return
@@ -39,15 +42,18 @@ export const useOperadorAuth = create<OperadorAuthState>()(
         } catch {
           // network error — keep unauthenticated
         }
+        if (revisionAtStart !== operadorAuthRevision) return
         set({ user: null, isAuthenticated: false, isReady: true })
       },
 
       login: async (cpf, senha) => {
         const { data } = await operadorApi.post('/operador/session', { cpf, senha })
+        operadorAuthRevision += 1
         set({ user: data.user, isAuthenticated: true, isReady: true })
       },
 
       logout: async () => {
+        operadorAuthRevision += 1
         try {
           await operadorApi.post('/operador/logout')
         } catch {
