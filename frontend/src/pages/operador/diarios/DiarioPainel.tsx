@@ -628,7 +628,7 @@ function ClockFace(_props: {
         : (
             <>
               {minuteMarks.map((item, index) => {
-                const angle = (index * 30 - 60) * (Math.PI / 180)
+                const angle = (index * 30 - 90) * (Math.PI / 180)
                 const radius = 108
                 const x = 140 + Math.cos(angle) * radius
                 const y = 140 + Math.sin(angle) * radius

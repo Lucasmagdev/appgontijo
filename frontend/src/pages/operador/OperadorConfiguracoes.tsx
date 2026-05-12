@@ -105,22 +105,35 @@ export default function OperadorConfiguracoesPage() {
 
     ctx.lineTo(x, y)
     ctx.stroke()
+  }
+
+  function saveSignatureFromCanvas() {
+    const canvas = canvasRef.current
+    if (!canvas) return
     setField('assinatura', canvas.toDataURL('image/png'))
   }
 
-  function startDrawing(clientX: number, clientY: number) {
+  function startDrawing(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!editing) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
     drawingRef.current = true
-    drawAt(clientX, clientY, false)
+    drawAt(event.clientX, event.clientY, false)
   }
 
-  function moveDrawing(clientX: number, clientY: number) {
+  function moveDrawing(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!editing || !drawingRef.current) return
-    drawAt(clientX, clientY, true)
+    event.preventDefault()
+    drawAt(event.clientX, event.clientY, true)
   }
 
-  function stopDrawing() {
+  function stopDrawing(event?: React.PointerEvent<HTMLCanvasElement>) {
+    if (!drawingRef.current) return
     drawingRef.current = false
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    saveSignatureFromCanvas()
   }
 
   function clearSignature() {
@@ -245,10 +258,10 @@ export default function OperadorConfiguracoesPage() {
                       touchAction: 'none',
                       cursor: editing ? 'crosshair' : 'default',
                     }}
-                    onPointerDown={(event) => startDrawing(event.clientX, event.clientY)}
-                    onPointerMove={(event) => moveDrawing(event.clientX, event.clientY)}
+                    onPointerDown={startDrawing}
+                    onPointerMove={moveDrawing}
                     onPointerUp={stopDrawing}
-                    onPointerLeave={stopDrawing}
+                    onPointerCancel={stopDrawing}
                   />
                 </div>
 
