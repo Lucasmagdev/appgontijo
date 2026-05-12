@@ -2791,7 +2791,7 @@ app.post("/api/admin/session", async (req, res) => {
 
   try {
     const [[user]] = await db.query(
-      "SELECT id, name, document, password FROM users WHERE document = ? AND active = 'S'",
+      "SELECT id, name, document, password FROM users WHERE REPLACE(REPLACE(document, '.', ''), '-', '') = ? AND active = 'S'",
       [cpf]
     );
 
@@ -5577,7 +5577,7 @@ app.post("/api/operador/session", async (req, res) => {
   try {
     await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
-      "SELECT id, name, document, phone, password, active, pode_gerar_link_assinatura FROM users WHERE document = ? AND active = 'S'",
+      "SELECT id, name, document, phone, password, active, pode_gerar_link_assinatura FROM users WHERE REPLACE(REPLACE(document, '.', ''), '-', '') = ? AND active = 'S'",
       [cpf]
     );
 

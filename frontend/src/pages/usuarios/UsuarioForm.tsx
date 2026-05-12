@@ -251,18 +251,17 @@ export default function UsuarioFormPage() {
                 </span>
               </label>
 
-              {!isEditing ? (
-                <div className="span-4">
-                  <label className="field-label">Senha inicial</label>
-                  <input
-                    type="password"
-                    value={form.senha || ''}
-                    onChange={(event) => setField('senha', event.target.value)}
-                    className="field-input"
-                    required
-                  />
-                </div>
-              ) : null}
+              <div className="span-4">
+                <label className="field-label">{isEditing ? 'Nova senha (deixe em branco para manter)' : 'Senha inicial'}</label>
+                <input
+                  type="password"
+                  value={form.senha || ''}
+                  onChange={(event) => setField('senha', event.target.value)}
+                  className="field-input"
+                  required={!isEditing}
+                  autoComplete="new-password"
+                />
+              </div>
             </div>
           </section>
 

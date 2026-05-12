@@ -828,6 +828,8 @@ export default function DiarioPainel() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
   const [topModalError, setTopModalError] = useState('')
+  const [retroDate, setRetroDate] = useState<string | null>(null)
+  const [showRetroDatePicker, setShowRetroDatePicker] = useState(false)
 
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
@@ -837,15 +839,17 @@ export default function DiarioPainel() {
   const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
 
   const draftQuery = useQuery({
-    queryKey: ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id],
+    queryKey: ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, retroDate],
     enabled: Boolean(selectedId && equipamento?.obraNumero && user?.id),
     queryFn: () =>
       diarioService.resolveDraft({
         equipamentoId: selectedId,
         operadorId: user!.id,
         obraNumero: equipamento!.obraNumero,
+        dataDiario: retroDate || null,
       }),
     gcTime: 0,
+    retry: false,
   })
 
   const obraDetailQuery = useQuery({
@@ -890,10 +894,18 @@ export default function DiarioPainel() {
         dadosJson: nextJson,
       })
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       setTopModalError('')
       setActiveTopModal(null)
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      if (variables.key === 'data') {
+        // Changing the date updates the diary's stored date. If we refetch for
+        // today (retroDate=null), resolve-draft would find no draft for today and
+        // create a fresh diary, losing the date selection. Instead, update
+        // retroDate so the query key points to the newly-selected date.
+        setRetroDate(variables.value)
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      }
     },
     onError: (error) => {
       setTopModalError(extractApiErrorMessage(error))
@@ -1094,7 +1106,162 @@ export default function DiarioPainel() {
     )
   }
 
+  const draftErrorStatus = draftQuery.isError
+    ? (draftQuery.error as { response?: { status?: number } })?.response?.status
+    : null
+  const isDuplicateError = draftErrorStatus === 409
+
   if (draftQuery.isError || !draftQuery.data) {
+    if (isDuplicateError && !showRetroDatePicker) {
+      return (
+        <div
+          style={{
+            minHeight: '100dvh',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '340px',
+              borderRadius: '24px',
+              background: '#fff',
+              padding: '24px',
+              boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Diario ja existe</div>
+            <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+              {extractApiErrorMessage(draftQuery.error)}
+            </div>
+            <div style={{ marginTop: '16px', fontSize: '13px', color: '#374151', fontWeight: 600 }}>
+              Quer criar um diario retroativo para outra data?
+            </div>
+            <button
+              onClick={() => {
+                const yesterday = new Date()
+                yesterday.setDate(yesterday.getDate() - 1)
+                setRetroDate(yesterday.toISOString().slice(0, 10))
+                setShowRetroDatePicker(true)
+              }}
+              style={{
+                marginTop: '12px',
+                border: 'none',
+                borderRadius: '14px',
+                background: '#a72727',
+                color: '#fff',
+                padding: '13px 18px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              Escolher data retroativa
+            </button>
+            <button
+              onClick={() => navigate('/operador/diario-de-obras/novo')}
+              style={{
+                marginTop: '10px',
+                border: '1px solid #d1d5db',
+                borderRadius: '14px',
+                background: '#fff',
+                color: '#374151',
+                padding: '13px 18px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              Voltar
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    if (isDuplicateError && showRetroDatePicker) {
+      const today = new Date().toISOString().slice(0, 10)
+      return (
+        <div
+          style={{
+            minHeight: '100dvh',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+            padding: '24px',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '340px',
+              borderRadius: '24px',
+              background: '#fff',
+              padding: '24px',
+              boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+            }}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937', marginBottom: '8px' }}>
+              Diario retroativo
+            </div>
+            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.5', marginBottom: '18px' }}>
+              Selecione a data do diario que deseja criar.
+            </div>
+            <input
+              type="date"
+              max={today}
+              value={retroDate || today}
+              onChange={(e) => setRetroDate(e.target.value || today)}
+              style={{
+                width: '100%',
+                border: '1px solid #d1d5db',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                fontSize: '16px',
+                boxSizing: 'border-box',
+                marginBottom: '14px',
+              }}
+            />
+            <button
+              onClick={() => {
+                setShowRetroDatePicker(false)
+              }}
+              style={{
+                border: 'none',
+                borderRadius: '14px',
+                background: '#a72727',
+                color: '#fff',
+                padding: '13px 18px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+                marginBottom: '10px',
+              }}
+            >
+              Confirmar data
+            </button>
+            <button
+              onClick={() => { setShowRetroDatePicker(false); setRetroDate(null) }}
+              style={{
+                border: '1px solid #d1d5db',
+                borderRadius: '14px',
+                background: '#fff',
+                color: '#374151',
+                padding: '13px 18px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%',
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <div
         style={{

@@ -1557,12 +1557,13 @@ export const diarioService = {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/diarios/${id}`)
     return adaptDiarioDetail(data.data)
   },
-  async resolveDraft(payload: { obraId?: number | null; obraNumero?: string; operadorId: number; equipamentoId: number }) {
+  async resolveDraft(payload: { obraId?: number | null; obraNumero?: string; operadorId: number; equipamentoId: number; dataDiario?: string | null }) {
     const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>('/gontijo/operador/diarios/resolve-draft', {
       obra_id: payload.obraId ?? null,
       obra_numero: payload.obraNumero || null,
       operador_id: payload.operadorId,
       equipamento_id: payload.equipamentoId,
+      data_diario: payload.dataDiario || null,
     })
     return adaptDiarioDetail(data.data)
   },
