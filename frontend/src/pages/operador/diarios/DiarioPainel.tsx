@@ -389,6 +389,7 @@ function DatePickerModal(_props: {
       <div style={{ padding: '18px 18px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <button
+            type="button"
             onClick={() => onMonthChange(-1)}
             style={{
               border: 'none',
@@ -409,6 +410,7 @@ function DatePickerModal(_props: {
           </div>
 
           <button
+            type="button"
             onClick={() => onMonthChange(1)}
             style={{
               border: 'none',
@@ -425,6 +427,27 @@ function DatePickerModal(_props: {
           </button>
         </div>
 
+        <input
+          type="date"
+          value={value}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            onSelect(nextValue)
+          }}
+          style={{
+            width: '100%',
+            marginTop: '14px',
+            border: '1px solid #d1d5db',
+            borderRadius: '12px',
+            padding: '11px 12px',
+            fontSize: '16px',
+            fontWeight: 700,
+            color: '#111827',
+            boxSizing: 'border-box',
+            background: '#fff',
+          }}
+        />
+
         <div style={{ marginTop: '14px', display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center' }}>
           {WEEKDAY_LABELS.map((item, index) => (
             <div key={`${item}-${index}`} style={{ fontSize: '13px', color: '#6b7280', fontWeight: 600, paddingBottom: '4px' }}>
@@ -435,6 +458,7 @@ function DatePickerModal(_props: {
             const selected = item.iso === value
             return (
               <button
+                type="button"
                 key={item.iso}
                 onClick={() => onSelect(item.iso)}
                 style={{
@@ -466,6 +490,7 @@ function DatePickerModal(_props: {
         }}
       >
         <button
+          type="button"
           onClick={onCancel}
           style={{
             border: 'none',
@@ -479,6 +504,7 @@ function DatePickerModal(_props: {
           CANCELAR
         </button>
         <button
+          type="button"
           onClick={onConfirm}
           disabled={!value || isSaving}
           style={{
@@ -838,8 +864,9 @@ export default function DiarioPainel() {
 
   const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
 
+  const draftQueryKey = ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, retroDate] as const
   const draftQuery = useQuery({
-    queryKey: ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, retroDate],
+    queryKey: draftQueryKey,
     enabled: Boolean(selectedId && equipamento?.obraNumero && user?.id),
     queryFn: () =>
       diarioService.resolveDraft({
@@ -897,12 +924,26 @@ export default function DiarioPainel() {
     onSuccess: async (_data, variables) => {
       setTopModalError('')
       setActiveTopModal(null)
+      queryClient.setQueryData(draftQueryKey, (current: typeof draftQuery.data) => {
+        if (!current) return current
+        const currentJson = (current.dadosJson as Record<string, unknown> | null) || {}
+        return {
+          ...current,
+          dataDiario: variables.key === 'data' ? variables.value : current.dataDiario,
+          dadosJson: {
+            ...currentJson,
+            [variables.key === 'data' ? 'date' : variables.key === 'entrada' ? 'start' : 'end']: variables.value,
+            ...(variables.key === 'data' ? { date_confirmed: true } : {}),
+          },
+        }
+      })
       if (variables.key === 'data') {
         // Changing the date updates the diary's stored date. If we refetch for
         // today (retroDate=null), resolve-draft would find no draft for today and
         // create a fresh diary, losing the date selection. Instead, update
         // retroDate so the query key points to the newly-selected date.
         setRetroDate(variables.value)
+        await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
       } else {
         await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
       }
@@ -1594,7 +1635,11 @@ export default function DiarioPainel() {
           onMonthChange={(direction) =>
             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1))
           }
-          onSelect={setTopModalValue}
+          onSelect={(value) => {
+            setTopModalValue(value)
+            const parsed = parseIsoDate(value)
+            if (parsed) setCalendarMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
+          }}
           onCancel={closeTopModal}
           onConfirm={saveTopModal}
           isSaving={topSaveMutation.isPending}
