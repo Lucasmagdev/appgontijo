@@ -6,6 +6,7 @@ export default function OperadorSplash() {
   const navigate = useNavigate()
   const { isAuthenticated, isReady, user } = useOperadorAuth()
   const startRef = useRef(Date.now())
+  const authAtMountRef = useRef(isAuthenticated)
 
   useEffect(() => {
     if (!isReady) return
@@ -14,11 +15,11 @@ export default function OperadorSplash() {
     const remaining = Math.max(0, 1000 - elapsed)
 
     const timer = setTimeout(() => {
-      navigate(isAuthenticated ? '/operador' : '/operador/login', { replace: true })
+      navigate(authAtMountRef.current ? '/operador' : '/operador/login', { replace: true })
     }, remaining)
 
     return () => clearTimeout(timer)
-  }, [isReady, isAuthenticated, navigate])
+  }, [isReady, navigate])
 
   const firstName = user?.nome?.split(' ')[0] ?? 'Operador'
 

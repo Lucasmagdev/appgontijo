@@ -7,6 +7,12 @@ export const api = axios.create({
   withCredentials: true,
 })
 
+const AUTH_STORAGE_KEYS: Record<string, string> = {
+  '/operador/login': 'gontijo-operador-auth',
+  '/portal-cliente/login': 'gontijo-portal-cliente-auth',
+  '/login': 'gontijo-auth',
+}
+
 function resolveUnauthorizedRedirect(pathname: string, requestUrl: string): string | null {
   const isAdminRequest = requestUrl.includes('/admin/')
 
@@ -30,6 +36,19 @@ api.interceptors.response.use(
       const requestUrl = String(err.config?.url || '')
       const redirectTo = resolveUnauthorizedRedirect(pathname, requestUrl)
       if (redirectTo && pathname !== redirectTo) {
+        const storageKey = AUTH_STORAGE_KEYS[redirectTo]
+        if (storageKey) {
+          try {
+            const stored = localStorage.getItem(storageKey)
+            if (stored) {
+              const parsed = JSON.parse(stored)
+              parsed.state = { ...parsed.state, isAuthenticated: false, user: null }
+              localStorage.setItem(storageKey, JSON.stringify(parsed))
+            }
+          } catch {
+            // ignore storage errors
+          }
+        }
         window.location.href = redirectTo
       }
     }

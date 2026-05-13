@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CalendarDays,
@@ -77,6 +77,17 @@ function formatIsoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function getSaoPauloTodayIso() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || ''
+  return `${get('year')}-${get('month')}-${get('day')}`
 }
 
 function createMonthGrid(currentMonth: Date) {
@@ -188,6 +199,144 @@ function OpeningDiaryLoading() {
         </div>
       </div>
       <style>{'@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }'}</style>
+    </div>
+  )
+}
+
+function DiaryDateSelection(_props: {
+  equipamentoNome: string
+  obraNumero: string
+  value: string
+  maxDate: string
+  error?: string
+  onChange: (value: string) => void
+  onConfirm: () => void
+  onBack: () => void
+}) {
+  const { equipamentoNome, obraNumero, value, maxDate, error, onChange, onConfirm, onBack } = _props
+  const invalidFutureDate = Boolean(value && value > maxDate)
+
+  return (
+    <div
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
+        padding: '24px',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '360px',
+          borderRadius: '24px',
+          background: '#fff',
+          padding: '24px',
+          boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
+        }}
+      >
+        <div style={{ fontSize: '13px', color: '#a72727', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Novo diario
+        </div>
+        <div style={{ marginTop: '8px', fontSize: '22px', lineHeight: '1.15', fontWeight: 900, color: '#111827' }}>
+          Escolha a data do diario
+        </div>
+        <div style={{ marginTop: '10px', fontSize: '13px', lineHeight: '1.5', color: '#6b7280' }}>
+          Obra {obraNumero || '-'} | {equipamentoNome || 'Maquina selecionada'}
+        </div>
+
+        <label style={{ display: 'block', marginTop: '20px' }}>
+          <span style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: 800, color: '#374151' }}>
+            Data
+          </span>
+          <input
+            type="date"
+            max={maxDate}
+            value={value}
+            onChange={(event) => onChange(event.target.value || maxDate)}
+            style={{
+              width: '100%',
+              border: '1px solid #d1d5db',
+              borderRadius: '12px',
+              padding: '13px 14px',
+              fontSize: '16px',
+              fontWeight: 700,
+              color: '#111827',
+              boxSizing: 'border-box',
+              background: '#fff',
+            }}
+          />
+        </label>
+
+        {invalidFutureDate ? (
+          <div
+            style={{
+              marginTop: '14px',
+              border: '1px solid #fecaca',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              background: '#fef2f2',
+              color: '#b91c1c',
+              fontSize: '13px',
+              fontWeight: 700,
+              lineHeight: '1.45',
+            }}
+          >
+            A data do diario nao pode ser futura.
+          </div>
+        ) : error ? (
+          <div
+            style={{
+              marginTop: '14px',
+              border: '1px solid #fecaca',
+              borderRadius: '14px',
+              padding: '12px 14px',
+              background: '#fef2f2',
+              color: '#b91c1c',
+              fontSize: '13px',
+              fontWeight: 700,
+              lineHeight: '1.45',
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
+
+        <button
+          onClick={onConfirm}
+          disabled={!value || invalidFutureDate}
+          style={{
+            marginTop: '18px',
+            border: 'none',
+            borderRadius: '14px',
+            background: value && !invalidFutureDate ? '#a72727' : '#cbd5e1',
+            color: '#fff',
+            padding: '14px 18px',
+            fontWeight: 800,
+            cursor: value && !invalidFutureDate ? 'pointer' : 'not-allowed',
+            width: '100%',
+          }}
+        >
+          Abrir diario
+        </button>
+        <button
+          onClick={onBack}
+          style={{
+            marginTop: '10px',
+            border: '1px solid #d1d5db',
+            borderRadius: '14px',
+            background: '#fff',
+            color: '#374151',
+            padding: '13px 18px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            width: '100%',
+          }}
+        >
+          Voltar
+        </button>
+      </div>
     </div>
   )
 }
@@ -364,13 +513,15 @@ function ModalShell({ children }: { children: React.ReactNode }) {
 function DatePickerModal(_props: {
   month: Date
   value: string
+  maxDate: string
+  error?: string
   onMonthChange: (direction: -1 | 1) => void
   onSelect: (value: string) => void
   onCancel: () => void
   onConfirm: () => void
   isSaving: boolean
 }) {
-  const { month, value, onMonthChange, onSelect, onCancel, onConfirm, isSaving } = _props
+  const { month, value, maxDate, error, onMonthChange, onSelect, onCancel, onConfirm, isSaving } = _props
   const days = useMemo(() => createMonthGrid(month), [month])
 
   return (
@@ -429,6 +580,7 @@ function DatePickerModal(_props: {
 
         <input
           type="date"
+          max={maxDate}
           value={value}
           onChange={(event) => {
             const nextValue = event.target.value
@@ -456,22 +608,26 @@ function DatePickerModal(_props: {
           ))}
           {days.map((item) => {
             const selected = item.iso === value
+            const disabled = item.iso > maxDate
             return (
               <button
                 type="button"
                 key={item.iso}
-                onClick={() => onSelect(item.iso)}
+                disabled={disabled}
+                onClick={() => {
+                  if (!disabled) onSelect(item.iso)
+                }}
                 style={{
                   border: 'none',
                   background: selected ? '#0f9488' : 'transparent',
-                  color: selected ? '#fff' : item.isCurrentMonth ? '#1f2937' : '#9ca3af',
+                  color: disabled ? '#cbd5e1' : selected ? '#fff' : item.isCurrentMonth ? '#1f2937' : '#9ca3af',
                   width: '38px',
                   height: '38px',
                   borderRadius: '999px',
                   margin: '0 auto',
                   fontSize: '15px',
                   fontWeight: selected ? 800 : 600,
-                  cursor: 'pointer',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
                 }}
               >
                 {item.date.getDate()}
@@ -479,6 +635,24 @@ function DatePickerModal(_props: {
             )
           })}
         </div>
+
+        {error ? (
+          <div
+            style={{
+              marginTop: '14px',
+              border: '1px solid #fecaca',
+              borderRadius: '12px',
+              padding: '10px 12px',
+              background: '#fef2f2',
+              color: '#b91c1c',
+              fontSize: '12px',
+              fontWeight: 800,
+              lineHeight: '1.4',
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -857,8 +1031,9 @@ export default function DiarioPainel() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date())
   const [timeStep, setTimeStep] = useState<TimeStep>('hour')
   const [topModalError, setTopModalError] = useState('')
-  const [retroDate, setRetroDate] = useState<string | null>(null)
-  const [showRetroDatePicker, setShowRetroDatePicker] = useState(false)
+  const todayIso = useMemo(() => getSaoPauloTodayIso(), [])
+  const [draftDateInput, setDraftDateInput] = useState(todayIso)
+  const [confirmedDraftDate, setConfirmedDraftDate] = useState<string | null>(null)
 
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
@@ -874,16 +1049,16 @@ export default function DiarioPainel() {
     retry: false,
   })
 
-  const draftQueryKey = ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, retroDate] as const
+  const draftQueryKey = ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, confirmedDraftDate] as const
   const draftQuery = useQuery({
     queryKey: draftQueryKey,
-    enabled: !hasRouteDiaryId && Boolean(selectedId && equipamento?.obraNumero && user?.id),
+    enabled: !hasRouteDiaryId && Boolean(selectedId && equipamento?.obraNumero && user?.id && confirmedDraftDate),
     queryFn: () =>
       diarioService.resolveDraft({
         equipamentoId: selectedId,
         operadorId: user!.id,
         obraNumero: equipamento!.obraNumero,
-        dataDiario: retroDate || null,
+        dataDiario: confirmedDraftDate,
       }),
     gcTime: 0,
     retry: false,
@@ -954,11 +1129,7 @@ export default function DiarioPainel() {
         }
       })
       if (variables.key === 'data') {
-        // Changing the date updates the diary's stored date. If we refetch for
-        // today (retroDate=null), resolve-draft would find no draft for today and
-        // create a fresh diary, losing the date selection. Instead, update
-        // retroDate so the query key points to the newly-selected date.
-        if (!hasRouteDiaryId) setRetroDate(variables.value)
+        if (!hasRouteDiaryId) setConfirmedDraftDate(variables.value)
         if (hasRouteDiaryId) {
           await queryClient.invalidateQueries({ queryKey: ['operador-diario', routeDiaryId] })
         }
@@ -1055,6 +1226,11 @@ export default function DiarioPainel() {
   }
   const visibleModuleButtons = MODULE_BUTTONS.filter((item) => item.key !== 'assinatura' || canGenerateSignatureLink)
 
+  useEffect(() => {
+    if (hasRouteDiaryId || !draftQuery.data?.id || !selectedId) return
+    navigate(`/operador/diario-de-obras/novo/${selectedId}?diario=${draftQuery.data.id}`, { replace: true })
+  }, [draftQuery.data?.id, hasRouteDiaryId, navigate, selectedId])
+
   function openTopModal(key: TopFieldKey) {
     if (!activeDiary) return
     setTopModalError('')
@@ -1080,6 +1256,10 @@ export default function DiarioPainel() {
 
   function saveTopModal() {
     if (!activeTopModal || !topModalValue) return
+    if (activeTopModal === 'data' && topModalValue > todayIso) {
+      setTopModalError('A data do diario nao pode ser futura.')
+      return
+    }
     setTopModalError('')
     topSaveMutation.mutate({ key: activeTopModal, value: topModalValue })
   }
@@ -1090,7 +1270,7 @@ export default function DiarioPainel() {
     navigate(`/operador/diario-de-obras/novo/${panelEquipmentId}/${modulo}?diario=${activeDiary.id}`)
   }
 
-  if (equipamentosQuery.isLoading || routeDiaryQuery.isLoading || draftQuery.isLoading) {
+  if (equipamentosQuery.isLoading || routeDiaryQuery.isLoading || draftQuery.isLoading || (!hasRouteDiaryId && Boolean(draftQuery.data?.id))) {
     return <OpeningDiaryLoading />
   }
 
@@ -1169,11 +1349,6 @@ export default function DiarioPainel() {
     )
   }
 
-  const draftErrorStatus = draftQuery.isError
-    ? (draftQuery.error as { response?: { status?: number } })?.response?.status
-    : null
-  const isDuplicateError = draftErrorStatus === 409
-
   if (routeDiaryQuery.isError) {
     return (
       <div
@@ -1219,157 +1394,32 @@ export default function DiarioPainel() {
     )
   }
 
+  if (!hasRouteDiaryId && (!confirmedDraftDate || draftQuery.isError)) {
+    return (
+      <DiaryDateSelection
+        equipamentoNome={equipamento?.nome || ''}
+        obraNumero={equipamento?.obraNumero || ''}
+        value={draftDateInput}
+        maxDate={todayIso}
+        error={draftQuery.isError ? extractApiErrorMessage(draftQuery.error) : undefined}
+        onChange={(value) => {
+          setDraftDateInput(value)
+          if (draftQuery.isError) setConfirmedDraftDate(null)
+        }}
+        onConfirm={() => {
+          if (!draftDateInput) return
+          if (confirmedDraftDate === draftDateInput) {
+            void draftQuery.refetch()
+            return
+          }
+          setConfirmedDraftDate(draftDateInput)
+        }}
+        onBack={() => navigate('/operador/diario-de-obras/novo')}
+      />
+    )
+  }
+
   if (draftQuery.isError || !activeDiary) {
-    if (isDuplicateError && !showRetroDatePicker) {
-      return (
-        <div
-          style={{
-            minHeight: '100dvh',
-            display: 'grid',
-            placeItems: 'center',
-            background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
-            padding: '24px',
-          }}
-        >
-          <div
-            style={{
-              maxWidth: '340px',
-              borderRadius: '24px',
-              background: '#fff',
-              padding: '24px',
-              boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Diario ja existe</div>
-            <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
-              {extractApiErrorMessage(draftQuery.error)}
-            </div>
-            <div style={{ marginTop: '16px', fontSize: '13px', color: '#374151', fontWeight: 600 }}>
-              Quer criar um diario retroativo para outra data?
-            </div>
-            <button
-              onClick={() => {
-                const yesterday = new Date()
-                yesterday.setDate(yesterday.getDate() - 1)
-                setRetroDate(yesterday.toISOString().slice(0, 10))
-                setShowRetroDatePicker(true)
-              }}
-              style={{
-                marginTop: '12px',
-                border: 'none',
-                borderRadius: '14px',
-                background: '#a72727',
-                color: '#fff',
-                padding: '13px 18px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                width: '100%',
-              }}
-            >
-              Escolher data retroativa
-            </button>
-            <button
-              onClick={() => navigate('/operador/diario-de-obras/novo')}
-              style={{
-                marginTop: '10px',
-                border: '1px solid #d1d5db',
-                borderRadius: '14px',
-                background: '#fff',
-                color: '#374151',
-                padding: '13px 18px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                width: '100%',
-              }}
-            >
-              Voltar
-            </button>
-          </div>
-        </div>
-      )
-    }
-
-    if (isDuplicateError && showRetroDatePicker) {
-      const today = new Date().toISOString().slice(0, 10)
-      return (
-        <div
-          style={{
-            minHeight: '100dvh',
-            display: 'grid',
-            placeItems: 'center',
-            background: 'linear-gradient(180deg, #faf6f6 0%, #ffffff 100%)',
-            padding: '24px',
-          }}
-        >
-          <div
-            style={{
-              maxWidth: '340px',
-              borderRadius: '24px',
-              background: '#fff',
-              padding: '24px',
-              boxShadow: '0 16px 30px rgba(15,23,42,0.08)',
-            }}
-          >
-            <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937', marginBottom: '8px' }}>
-              Diario retroativo
-            </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.5', marginBottom: '18px' }}>
-              Selecione a data do diario que deseja criar.
-            </div>
-            <input
-              type="date"
-              max={today}
-              value={retroDate || today}
-              onChange={(e) => setRetroDate(e.target.value || today)}
-              style={{
-                width: '100%',
-                border: '1px solid #d1d5db',
-                borderRadius: '10px',
-                padding: '12px 14px',
-                fontSize: '16px',
-                boxSizing: 'border-box',
-                marginBottom: '14px',
-              }}
-            />
-            <button
-              onClick={() => {
-                setShowRetroDatePicker(false)
-              }}
-              style={{
-                border: 'none',
-                borderRadius: '14px',
-                background: '#a72727',
-                color: '#fff',
-                padding: '13px 18px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                width: '100%',
-                marginBottom: '10px',
-              }}
-            >
-              Confirmar data
-            </button>
-            <button
-              onClick={() => { setShowRetroDatePicker(false); setRetroDate(null) }}
-              style={{
-                border: '1px solid #d1d5db',
-                borderRadius: '14px',
-                background: '#fff',
-                color: '#374151',
-                padding: '13px 18px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                width: '100%',
-              }}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )
-    }
-
     return (
       <div
         style={{
@@ -1699,10 +1749,13 @@ export default function DiarioPainel() {
         <DatePickerModal
           month={calendarMonth}
           value={topModalValue}
+          maxDate={todayIso}
+          error={topModalError}
           onMonthChange={(direction) =>
             setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1))
           }
           onSelect={(value) => {
+            setTopModalError('')
             setTopModalValue(value)
             const parsed = parseIsoDate(value)
             if (parsed) setCalendarMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
