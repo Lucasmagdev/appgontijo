@@ -47,6 +47,9 @@ export const useClientePortalAuth = create<ClientePortalAuthState>()(
         window.location.href = '/portal-cliente/login'
       },
     }),
-    { name: 'gontijo-client-portal-auth' }
+    {
+      name: 'gontijo-client-portal-auth',
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+    }
   )
 )

@@ -63,6 +63,9 @@ export const useOperadorAuth = create<OperadorAuthState>()(
         window.location.href = '/operador/login'
       },
     }),
-    { name: 'gontijo-operador-auth' }
+    {
+      name: 'gontijo-operador-auth',
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+    }
   )
 )

@@ -77,6 +77,9 @@ export const useAuth = create<AuthState>()(
       },
       setUser: (user) => set({ user, isAuthenticated: true, isReady: true }),
     }),
-    { name: 'gontijo-auth' }
+    {
+      name: 'gontijo-auth',
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+    }
   )
 )
