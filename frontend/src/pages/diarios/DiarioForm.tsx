@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, PencilLine, Plus, Save, Trash2, Wand2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, PencilLine, Plus, Save, Trash2, Wand2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { diarioService, equipamentoService, extractApiErrorMessage, textCorrectionService, type DiarioPayload } from '@/lib/gontijo-api'
@@ -316,6 +316,7 @@ export default function DiarioFormPage() {
   const [selectedStakeIndex, setSelectedStakeIndex] = useState(0)
   const [submitError, setSubmitError] = useState('')
   const [correctionFeedback, setCorrectionFeedback] = useState('')
+  const [showExtras, setShowExtras] = useState(false)
 
   const diarioQuery = useQuery({
     queryKey: ['diario', id],
@@ -729,9 +730,21 @@ export default function DiarioFormPage() {
           </section>
 
           <section className="app-panel section-panel">
-            <h2 className="section-heading">JSON complementar</h2>
-            <p className="page-subtitle">Campos ainda nao mapeados no formulario permanecem aqui para nao perder informacao.</p>
-            <textarea value={editor.extrasText} onChange={(event) => setEditorField('extrasText', event.target.value)} className="field-textarea font-mono" style={{ minHeight: '16rem' }} />
+            <button
+              type="button"
+              className="section-heading"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+              onClick={() => setShowExtras((v) => !v)}
+            >
+              JSON complementar
+              <ChevronDown size={16} style={{ transition: 'transform 200ms', transform: showExtras ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+            </button>
+            {showExtras && (
+              <>
+                <p className="page-subtitle">Campos ainda nao mapeados no formulario permanecem aqui para nao perder informacao.</p>
+                <textarea value={editor.extrasText} onChange={(event) => setEditorField('extrasText', event.target.value)} className="field-textarea font-mono" style={{ minHeight: '16rem' }} />
+              </>
+            )}
           </section>
 
           <div className="inline-actions justify-end">

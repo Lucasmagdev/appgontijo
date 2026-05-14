@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { conferenciaEstacasApi, diarioAdminSignatureService, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
@@ -39,6 +40,7 @@ function ExpandedRow({
   onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
 }) {
   const { autoComparacao, estacas, producaoPlanejada } = item
+  const [rejectingStake, setRejectingStake] = useState<{ stakeIndex: number; obs: string } | null>(null)
 
   if (autoComparacao.semEstacas) {
     return <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
@@ -110,30 +112,61 @@ function ExpandedRow({
                     </div>
                   </td>
                   <td style={tdStyle}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
-                        disabled={Boolean(pendingStakeAction)}
-                        onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
-                      >
-                        {isApproving ? 'Aprovando...' : 'Aprovar'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 96 }}
-                        disabled={Boolean(pendingStakeAction)}
-                        onClick={() => {
-                          const obs = window.prompt(`Motivo para reprovar a estaca ${detail.estaca || fallbackIndex + 1}:`)
-                          if (obs?.trim()) onStakeAction(item.id, stakeIndex, 'rejeitado', obs.trim())
-                        }}
-                      >
-                        {isRejecting ? 'Reprovando...' : 'Reprovar'}
-                      </button>
-                      {isThisPending ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
-                    </div>
+                    {rejectingStake?.stakeIndex === stakeIndex ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220 }}>
+                        <textarea
+                          autoFocus
+                          placeholder="Motivo da reprovação (obrigatório)"
+                          value={rejectingStake.obs}
+                          onChange={(e) => setRejectingStake({ stakeIndex, obs: e.target.value })}
+                          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #fc8181', minHeight: 60, resize: 'vertical' }}
+                        />
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, flex: 1 }}
+                            disabled={!rejectingStake.obs.trim() || Boolean(pendingStakeAction)}
+                            onClick={() => {
+                              onStakeAction(item.id, stakeIndex, 'rejeitado', rejectingStake.obs.trim())
+                              setRejectingStake(null)
+                            }}
+                          >
+                            {isRejecting ? 'Reprovando...' : 'Confirmar'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 9px', fontSize: 12 }}
+                            onClick={() => setRejectingStake(null)}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
+                          disabled={Boolean(pendingStakeAction)}
+                          onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
+                        >
+                          {isApproving ? 'Aprovando...' : 'Aprovar'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 96 }}
+                          disabled={Boolean(pendingStakeAction)}
+                          onClick={() => setRejectingStake({ stakeIndex, obs: '' })}
+                        >
+                          Reprovar
+                        </button>
+                        {isThisPending ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
@@ -519,8 +552,30 @@ export default function DiarioConferenciaPage() {
                       }
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      {item.conferenciaStatus === 'pendente' ? (
-                        <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                        {item.conferenciaStatus === 'pendente' ? (
+                          <div style={{ display: 'flex', gap: 5 }}>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                              disabled={aprovarMutation.isPending}
+                              onClick={() => aprovarMutation.mutate({ id: item.id })}
+                            >
+                              {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ background: '#e53e3e', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                              disabled={rejeitarMutation.isPending}
+                              onClick={() => setRejeitarId(item.id)}
+                            >
+                              Rejeitar
+                            </button>
+                          </div>
+                        ) : null}
+                        {item.conferenciaStatus === 'rejeitado' ? (
                           <button
                             type="button"
                             className="btn"
@@ -530,44 +585,27 @@ export default function DiarioConferenciaPage() {
                           >
                             {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
                           </button>
+                        ) : null}
+                        <div style={{ display: 'flex', gap: 5 }}>
                           <button
                             type="button"
                             className="btn"
-                            style={{ background: '#e53e3e', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                            disabled={rejeitarMutation.isPending}
-                            onClick={() => setRejeitarId(item.id)}
+                            style={{ background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                            disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
+                            title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
+                            onClick={() => void handleSignatureLink(item)}
                           >
-                            Rejeitar
+                            {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
                           </button>
+                          <Link
+                            to={`/diarios/${item.id}/editar`}
+                            className="btn"
+                            style={{ background: '#4a5568', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                          >
+                            Editar diário
+                          </Link>
                         </div>
-                      ) : null}
-                      {item.conferenciaStatus === 'rejeitado' ? (
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                          disabled={aprovarMutation.isPending}
-                          onClick={() => aprovarMutation.mutate({ id: item.id })}
-                        >
-                          {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{
-                          background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0',
-                          color: '#fff',
-                          padding: '4px 10px',
-                          fontSize: 12,
-                          marginTop: item.conferenciaStatus === 'pendente' ? 6 : 0,
-                        }}
-                        disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
-                        title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
-                        onClick={() => void handleSignatureLink(item)}
-                      >
-                        {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
-                      </button>
+                      </div>
                     </td>
                   </tr>
                   {expanded === item.id ? (
