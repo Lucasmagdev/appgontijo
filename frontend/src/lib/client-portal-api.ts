@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL, resolveApiUrl } from '@/lib/api'
+import { API_BASE_URL } from '@/lib/api'
 
 export const clientPortalApi = axios.create({
   baseURL: API_BASE_URL,
@@ -15,6 +15,20 @@ clientPortalApi.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+function resolveApiUrl(path: string): string {
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
+
+  const base = API_BASE_URL.replace(/\/+$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const pathWithoutApiPrefix =
+    normalizedPath.startsWith('/api/') && base.endsWith('/api')
+      ? normalizedPath.slice('/api'.length)
+      : normalizedPath
+
+  return `${base}${pathWithoutApiPrefix}`
+}
 
 export type ClientPortalUser = {
   accessId: number

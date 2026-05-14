@@ -1,5 +1,5 @@
 import { AxiosError } from 'axios'
-import { api, resolveApiUrl } from '@/lib/api'
+import { API_BASE_URL, api } from '@/lib/api'
 
 type ApiEnvelope<T> = {
   ok: boolean
@@ -1603,6 +1603,20 @@ export const diarioService = {
   getPdfUrl(id: number) {
     return resolveApiUrl(`/api/gontijo/diarios/${id}/pdf`)
   },
+}
+
+function resolveApiUrl(path: string): string {
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
+
+  const base = API_BASE_URL.replace(/\/+$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const pathWithoutApiPrefix =
+    normalizedPath.startsWith('/api/') && base.endsWith('/api')
+      ? normalizedPath.slice('/api'.length)
+      : normalizedPath
+
+  return `${base}${pathWithoutApiPrefix}`
 }
 
 export const helperEvaluationService = {
