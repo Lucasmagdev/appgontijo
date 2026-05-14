@@ -34,15 +34,19 @@ function formatDateBr(value: string) {
 function formatDateTimeBr(value: string) {
   const text = String(value || '').trim()
   if (!text) return ''
-  const parsed = new Date(text.replace(' ', 'T'))
-  if (Number.isNaN(parsed.getTime())) return text
+  const parsed = new Date(text)
+  const fallbackParsed = Number.isNaN(parsed.getTime()) && /^\d{4}-\d{2}-\d{2} /.test(text)
+    ? new Date(text.replace(' ', 'T'))
+    : parsed
+  if (Number.isNaN(fallbackParsed.getTime())) return text
   return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(parsed)
+  }).format(fallbackParsed)
 }
 
 export default function AssinaturaClientePage() {
