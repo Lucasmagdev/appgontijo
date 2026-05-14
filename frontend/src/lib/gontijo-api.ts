@@ -1,5 +1,5 @@
 import { AxiosError } from 'axios'
-import { api } from '@/lib/api'
+import { api, resolveApiUrl } from '@/lib/api'
 
 type ApiEnvelope<T> = {
   ok: boolean
@@ -1601,7 +1601,7 @@ export const diarioService = {
     return data.data
   },
   getPdfUrl(id: number) {
-    return `/api/gontijo/diarios/${id}/pdf`
+    return resolveApiUrl(`/api/gontijo/diarios/${id}/pdf`)
   },
 }
 
@@ -1703,7 +1703,7 @@ function adaptPublicDiarySignatureDetail(row: Record<string, unknown>): PublicDi
     cliente: toStringValue(row.cliente),
     equipamento: toStringValue(row.equipamento),
     dataDiario: toDateOnly(row.dataDiario),
-    pdfUrl: toStringValue(row.pdfUrl),
+    pdfUrl: resolveApiUrl(toStringValue(row.pdfUrl)),
     operatorName: toStringValue(row.operatorName),
     operatorDocument: toStringValue(row.operatorDocument),
     operatorSignature: toStringValue(row.operatorSignature),

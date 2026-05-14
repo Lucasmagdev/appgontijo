@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE_URL } from '@/lib/api'
+import { API_BASE_URL, resolveApiUrl } from '@/lib/api'
 
 export const clientPortalApi = axios.create({
   baseURL: API_BASE_URL,
@@ -191,7 +191,7 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
         titulo: toStringValue(rowItem.titulo),
         descricao: toStringValue(rowItem.descricao),
         detalhe: toStringValue(rowItem.detalhe),
-        pdfUrl: toStringValue(rowItem.pdfUrl),
+        pdfUrl: resolveApiUrl(toStringValue(rowItem.pdfUrl)),
       }
     }),
     diarios: diarios.map((item) => {
@@ -226,7 +226,7 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
           }
         }),
         reviewConfirmed: Boolean(rowItem.reviewConfirmed),
-        pdfUrl: toStringValue(rowItem.pdfUrl),
+        pdfUrl: resolveApiUrl(toStringValue(rowItem.pdfUrl)),
       }
     }),
   }
@@ -259,6 +259,6 @@ export const clientPortalService = {
     return data.data ?? []
   },
   getDocumentoDownloadUrl(docId: number): string {
-    return `${API_BASE_URL}/client-portal/documentos/${docId}/download`
+    return resolveApiUrl(`/client-portal/documentos/${docId}/download`)
   },
 }
