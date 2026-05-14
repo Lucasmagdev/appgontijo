@@ -34,11 +34,11 @@ export default function IntroScreen({ onDone }: IntroScreenProps) {
     }
 
     const timers = [
-      window.setTimeout(() => setPhase('logo'), 3100),
-      window.setTimeout(() => setPhase('underline'), 4600),
-      window.setTimeout(() => setPhase('fade'), 6500),
-      window.setTimeout(finish, 7200),
-      window.setTimeout(finish, 8200),
+      window.setTimeout(() => setPhase('logo'), 1923),
+      window.setTimeout(() => setPhase('underline'), 2846),
+      window.setTimeout(() => setPhase('fade'), 4000),
+      window.setTimeout(finish, 4462),
+      window.setTimeout(finish, 5077),
     ]
 
     return () => timers.forEach((timer) => window.clearTimeout(timer))
@@ -57,9 +57,12 @@ export default function IntroScreen({ onDone }: IntroScreenProps) {
       if (unit >= visualUnits) {
         window.clearInterval(timer)
       }
-    }, 130)
+    }, 81)
 
-    return () => window.clearInterval(timer)
+    return () => {
+      setLogoClip(0)
+      window.clearInterval(timer)
+    }
   }, [phase])
 
   useEffect(() => {
@@ -106,7 +109,7 @@ export default function IntroScreen({ onDone }: IntroScreenProps) {
       const centerX = width / 2
       const centerY = height / 2
       const phase = phaseRef.current
-      const converge = clamp((elapsed - 2.15) / 1.2, 0, 1)
+      const converge = clamp((elapsed - 1.65) / 0.92, 0, 1)
       const pulse = (Math.sin(elapsed * 2.6) + 1) / 2
 
       context.clearRect(0, 0, width, height)

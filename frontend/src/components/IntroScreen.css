@@ -30,7 +30,7 @@
     linear-gradient(105deg, transparent 0%, rgba(167, 39, 39, 0.1) 36%, rgba(255, 255, 255, 0.14) 48%, rgba(167, 39, 39, 0.08) 56%, transparent 70%),
     radial-gradient(circle at 50% 50%, rgba(167, 39, 39, 0.18), transparent 28%);
   transform: translateX(-42%) skewX(-13deg);
-  animation: intro-beam-pass 6.1s cubic-bezier(0.21, 0.8, 0.22, 1) forwards;
+  animation: intro-beam-pass 3.8s cubic-bezier(0.21, 0.8, 0.22, 1) forwards;
   pointer-events: none;
   mix-blend-mode: screen;
 }
