@@ -21,6 +21,8 @@ interface AuthState {
   setUser: (user: User) => void
 }
 
+let adminAuthRevision = 0
+
 export const useAuth = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -28,8 +30,11 @@ export const useAuth = create<AuthState>()(
       isAuthenticated: false,
       isReady: false,
       initialize: async () => {
+        const revisionAtStart = adminAuthRevision
         try {
           const { data } = await api.get('/admin/status')
+
+          if (revisionAtStart !== adminAuthRevision) return
 
           if (data?.authenticated) {
             const serverUser = data.user
@@ -49,13 +54,17 @@ export const useAuth = create<AuthState>()(
             return
           }
         } catch {
-          return undefined
+          if (revisionAtStart !== adminAuthRevision) return
+          set({ isReady: true })
+          return
         }
 
+        if (revisionAtStart !== adminAuthRevision) return
         set({ user: null, isAuthenticated: false, isReady: true })
       },
       login: async (cpf, password, remember) => {
         const { data } = await api.post('/admin/session', { cpf, password, remember })
+        adminAuthRevision += 1
         const u = data.user
         set({
           user: {
@@ -71,6 +80,7 @@ export const useAuth = create<AuthState>()(
         })
       },
       logout: async () => {
+        adminAuthRevision += 1
         await api.post('/admin/logout')
         set({ user: null, isAuthenticated: false, isReady: true })
         window.location.href = '/login'
