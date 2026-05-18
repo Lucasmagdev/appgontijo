@@ -4141,7 +4141,9 @@ app.get("/api/client-portal/status", async (req, res) => {
 
 app.get("/api/client-portal/dashboard", requireClientPortal, async (req, res) => {
   try {
-    const payload = await fetchClientPortalDashboard(req.clientPortalSession.constructionId);
+    const dataInicio = textOrNull(req.query.data_inicio) || null
+    const dataFim = textOrNull(req.query.data_fim) || null
+    const payload = await fetchClientPortalDashboard(req.clientPortalSession.constructionId, { dataInicio, dataFim });
     if (!payload) {
       clientPortalSessions.delete(req.clientPortalSession.token);
       clearCookie(res, "client_portal_session");
@@ -5134,7 +5136,7 @@ async function fetchClientPortalAccessByLogin(login) {
   return rows[0] || null;
 }
 
-async function fetchClientPortalDashboard(constructionId) {
+async function fetchClientPortalDashboard(constructionId, filters = {}) {
   const construction = await fetchActiveConstructionById(constructionId);
   if (!construction) return null;
   let constructionPhotos = [];
@@ -5152,6 +5154,15 @@ async function fetchClientPortalDashboard(constructionId) {
     }, constructionPhotos);
   }
 
+  const { dataInicio, dataFim } = filters
+  const hasValorFaturado = await columnExists('diaries', 'valor_faturado')
+  const dateExpr = "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d'))"
+
+  let dateWhere = ''
+  const dateParams = []
+  if (dataInicio) { dateWhere += ` AND ${dateExpr} >= ?`; dateParams.push(dataInicio) }
+  if (dataFim)    { dateWhere += ` AND ${dateExpr} <= ?`; dateParams.push(dataFim) }
+
   const [rows] = await db.query(
     `SELECT d.id,
             d.created_at,
@@ -5166,6 +5177,7 @@ async function fetchClientPortalDashboard(constructionId) {
               NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''),
               DATE_FORMAT(d.created_at, '%Y-%m-%d')
             ) AS data_diario
+            ${hasValorFaturado ? ', d.valor_faturado' : ''}
      FROM diaries d
      LEFT JOIN users u ON u.id = d.user_id
      LEFT JOIN equipments e
@@ -5175,12 +5187,14 @@ async function fetchClientPortalDashboard(constructionId) {
        OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')), '') = ?
      )
      AND d.conferencia_status = 'aprovado'
+     ${dateWhere}
      ORDER BY data_diario DESC, d.id DESC`,
-    [constructionId, String(construction.construction_number || "")]
+    [constructionId, String(construction.construction_number || ""), ...dateParams]
   );
 
   let estacasExecutadas = 0;
   let estacasPlanejadas = 0;
+  let valorProducaoTotal = 0;
   let latestPlanningCursor = "";
   let latestPlanningRows = [];
   const allPhotos = [...constructionPhotos];
@@ -5192,6 +5206,7 @@ async function fetchClientPortalDashboard(constructionId) {
     const weather = extractPortalWeatherLabel(data);
     const diaryDate = firstFilledText(row.data_diario);
     estacasExecutadas += estacasNoDia;
+    if (row.valor_faturado != null) valorProducaoTotal += Number(row.valor_faturado);
 
     const planned = sumConstructionPlanning(data.endConstruction);
     const planningCursor = `${diaryDate}|${String(row.id).padStart(12, "0")}`;
@@ -5273,6 +5288,7 @@ async function fetchClientPortalDashboard(constructionId) {
         .join(", "),
       status: "em andamento",
     },
+    filtros: { dataInicio: dataInicio || null, dataFim: dataFim || null },
     resumo: {
       totalDiarios: publicDiarios.length,
       estacasExecutadas,
@@ -5282,6 +5298,7 @@ async function fetchClientPortalDashboard(constructionId) {
       diasTrabalhados,
       diasSemProducao,
       mediaDiaria,
+      valorProducao: valorProducaoTotal > 0 ? valorProducaoTotal : null,
       ultimaAtualizacao,
     },
     progressoPorDiametro: progressByDiameter,

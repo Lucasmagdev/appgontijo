@@ -104,6 +104,7 @@ export type ClientPortalDashboard = {
     endereco: string
     status: string
   }
+  filtros: { dataInicio: string | null; dataFim: string | null }
   resumo: {
     totalDiarios: number
     estacasExecutadas: number
@@ -114,6 +115,7 @@ export type ClientPortalDashboard = {
     diasSemProducao: number
     mediaDiaria: number
     ultimaAtualizacao: string
+    valorProducao: number | null
   }
   progressoPorDiametro: ClientPortalProgressRow[]
   fotos: ClientPortalPhoto[]
@@ -147,12 +149,17 @@ function adaptClientPortalUser(row: Record<string, unknown>): ClientPortalUser {
 function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
   const obra = (row.obra as Record<string, unknown> | undefined) || {}
   const resumo = (row.resumo as Record<string, unknown> | undefined) || {}
+  const filtros = (row.filtros as Record<string, unknown> | undefined) || {}
   const diarios = Array.isArray(row.diarios) ? row.diarios : []
   const progressoPorDiametro = Array.isArray(row.progressoPorDiametro) ? row.progressoPorDiametro : []
   const fotos = Array.isArray(row.fotos) ? row.fotos : []
   const timeline = Array.isArray(row.timeline) ? row.timeline : []
 
   return {
+    filtros: {
+      dataInicio: filtros.dataInicio ? toStringValue(filtros.dataInicio) : null,
+      dataFim: filtros.dataFim ? toStringValue(filtros.dataFim) : null,
+    },
     obra: {
       id: toNumberValue(obra.id),
       numero: toStringValue(obra.numero),
@@ -173,6 +180,7 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
       diasSemProducao: toNumberValue(resumo.diasSemProducao),
       mediaDiaria: toNumberValue(resumo.mediaDiaria),
       ultimaAtualizacao: toStringValue(resumo.ultimaAtualizacao),
+      valorProducao: resumo.valorProducao != null ? toNumberValue(resumo.valorProducao) : null,
     },
     progressoPorDiametro: progressoPorDiametro.map((item) => {
       const rowItem = item as Record<string, unknown>
@@ -264,8 +272,11 @@ export const clientPortalService = {
       user: data.user ? adaptClientPortalUser(data.user) : null,
     }
   },
-  async getDashboard() {
-    const { data } = await clientPortalApi.get<{ ok: boolean; data: Record<string, unknown> }>('/client-portal/dashboard')
+  async getDashboard(filters?: { dataInicio?: string | null; dataFim?: string | null }) {
+    const params: Record<string, string> = {}
+    if (filters?.dataInicio) params.data_inicio = filters.dataInicio
+    if (filters?.dataFim) params.data_fim = filters.dataFim
+    const { data } = await clientPortalApi.get<{ ok: boolean; data: Record<string, unknown> }>('/client-portal/dashboard', { params })
     return adaptDashboard(data.data || {})
   },
   async getDocumentos(): Promise<PortalClienteDocumento[]> {

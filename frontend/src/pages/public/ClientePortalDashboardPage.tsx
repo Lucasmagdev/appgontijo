@@ -52,13 +52,23 @@ function formatPhotoDay(value: string) {
   return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} - ${formattedDate}`
 }
 
+function formatBRL(value: number | null) {
+  if (value == null) return '—'
+  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export default function ClientePortalDashboardPage() {
   const { user, logout } = useClientePortalAuth()
   const [expandedPhotoDays, setExpandedPhotoDays] = useState<Record<string, boolean>>({})
+  const [filterDraft, setFilterDraft] = useState({ dataInicio: '', dataFim: '' })
+  const [filterApplied, setFilterApplied] = useState({ dataInicio: '', dataFim: '' })
 
   const dashboardQuery = useQuery({
-    queryKey: ['client-portal-dashboard'],
-    queryFn: clientPortalService.getDashboard,
+    queryKey: ['client-portal-dashboard', filterApplied],
+    queryFn: () => clientPortalService.getDashboard({
+      dataInicio: filterApplied.dataInicio || null,
+      dataFim: filterApplied.dataFim || null,
+    }),
     staleTime: 60_000,
   })
 
@@ -186,9 +196,52 @@ export default function ClientePortalDashboardPage() {
 
             {data ? (
               <div className="grid gap-6">
+                <section className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Data início</label>
+                    <input
+                      type="date"
+                      value={filterDraft.dataInicio}
+                      onChange={(e) => setFilterDraft((prev) => ({ ...prev, dataInicio: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-red)]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Data fim</label>
+                    <input
+                      type="date"
+                      value={filterDraft.dataFim}
+                      onChange={(e) => setFilterDraft((prev) => ({ ...prev, dataFim: e.target.value }))}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-red)]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFilterApplied(filterDraft)}
+                    className="rounded-lg bg-[var(--brand-red)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                  >
+                    Filtrar
+                  </button>
+                  {(filterApplied.dataInicio || filterApplied.dataFim) && (
+                    <button
+                      type="button"
+                      onClick={() => { setFilterDraft({ dataInicio: '', dataFim: '' }); setFilterApplied({ dataInicio: '', dataFim: '' }) }}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-100"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                  {dashboardQuery.isFetching && (
+                    <span className="text-xs text-slate-400">Atualizando...</span>
+                  )}
+                </section>
+
                 <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard icon={FileText} label="Diarios disponiveis" value={String(data.resumo.totalDiarios)} detail={latestDiary ? `Ultimo: ${formatSafeDate(latestDiary.dataDiario)}` : 'Aguardando diarios'} />
                   <MetricCard icon={TrendingUp} label="Estacas executadas" value={String(data.resumo.estacasExecutadas)} detail={`${data.resumo.estacasRestantes} restantes`} tone="success" />
+                  {data.resumo.valorProducao != null && (
+                    <MetricCard icon={TrendingUp} label="Valor de produção" value={`R$ ${formatBRL(data.resumo.valorProducao)}`} detail="Diários aprovados no período" tone="success" />
+                  )}
                 </section>
 
                 {photoGroups.length > 0 && (
