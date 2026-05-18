@@ -107,12 +107,18 @@ function ExpandedRow({
   item,
   pendingStakeAction,
   onStakeAction,
+  onConsideraFatMinimo,
+  pendingFatMinimo,
 }: {
   item: ConferenciaEstacaItem
   pendingStakeAction: StakeActionState
   onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
+  onConsideraFatMinimo: (diaryId: number, considera: boolean) => void
+  pendingFatMinimo: number | null
 }) {
-  const { estacasComCusto, ocorrencias } = item
+  const { estacasComCusto, ocorrencias, contratoPrecos, consideraFatMinimo, producaoReal, valorFaturado, producaoRealFechado, valorFaturadoFechado, conferenciaStatus } = item
+  const fatMinimoValor = contratoPrecos?.fatMinimoValor ?? null
+  const isFatMinimoPending = pendingFatMinimo === item.id
 
   if (!estacasComCusto || estacasComCusto.length === 0) {
     return <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
@@ -196,6 +202,67 @@ function ExpandedRow({
           <p style={{ color: '#a0aec0', fontSize: 12, margin: '6px 0 0' }}>Nenhuma ocorrência registrada.</p>
         )}
       </div>
+
+      {temAlgumCusto && (
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 24 }}>
+          <div>
+            <strong style={{ fontSize: 13, color: '#2d3748', display: 'block', marginBottom: 8 }}>Faturamento</strong>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ color: '#718096' }}>Produção Real:</span>
+                <span style={{ fontWeight: 700, color: '#2d3748' }}>R$ {formatBRL(producaoReal)}</span>
+              </div>
+              {fatMinimoValor != null && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ color: '#718096' }}>Faturamento Mínimo:</span>
+                  <span style={{ fontWeight: 600, color: '#744210' }}>R$ {formatBRL(fatMinimoValor)}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
+                <span style={{ color: '#718096' }}>Valor a Faturar:</span>
+                <span style={{ fontWeight: 700, fontSize: 15, color: '#276749' }}>
+                  R$ {formatBRL(conferenciaStatus === 'aprovado' && valorFaturadoFechado != null ? valorFaturadoFechado : valorFaturado)}
+                </span>
+                {consideraFatMinimo && fatMinimoValor != null && producaoReal != null && producaoReal < fatMinimoValor && (
+                  <span style={{ fontSize: 11, background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e', borderRadius: 4, padding: '1px 6px' }}>mín. aplicado</span>
+                )}
+                {conferenciaStatus === 'aprovado' && valorFaturadoFechado != null && (
+                  <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '1px 6px' }}>fechado</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {fatMinimoValor != null && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <strong style={{ fontSize: 13, color: '#2d3748' }}>Considerar Faturamento Mínimo</strong>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isFatMinimoPending ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+                <div
+                  onClick={() => !isFatMinimoPending && onConsideraFatMinimo(item.id, !consideraFatMinimo)}
+                  style={{
+                    width: 40, height: 22, borderRadius: 11, position: 'relative', cursor: isFatMinimoPending ? 'not-allowed' : 'pointer',
+                    background: consideraFatMinimo ? '#38a169' : '#cbd5e0', transition: 'background 0.2s',
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute', top: 3, left: consideraFatMinimo ? 21 : 3,
+                    width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
+                  }} />
+                </div>
+                <span style={{ fontSize: 13, color: consideraFatMinimo ? '#276749' : '#718096', fontWeight: consideraFatMinimo ? 700 : 400 }}>
+                  {isFatMinimoPending ? 'Salvando...' : consideraFatMinimo ? 'Sim' : 'Não'}
+                </span>
+              </label>
+              <p style={{ fontSize: 11, color: '#a0aec0', margin: 0, maxWidth: 220 }}>
+                {consideraFatMinimo
+                  ? 'Usa o maior valor entre produção real e faturamento mínimo.'
+                  : 'Usa estritamente a produção real.'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -356,6 +423,7 @@ export default function DiarioConferenciaPage() {
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
+  const [pendingFatMinimo, setPendingFatMinimo] = useState<number | null>(null)
 
   const query = useQuery({
     queryKey: ['conferencia-estacas', applied],
@@ -401,6 +469,21 @@ export default function DiarioConferenciaPage() {
     onError: (error) => setActionError(extractApiErrorMessage(error)),
     onSettled: () => setPendingStakeAction(null),
   })
+
+  const fatMinimoMutation = useMutation({
+    mutationFn: ({ id, considera }: { id: number; considera: boolean }) =>
+      conferenciaEstacasApi.setConsideraFatMinimo(id, considera),
+    onMutate: (variables) => setPendingFatMinimo(variables.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    },
+    onError: (error) => setActionError(extractApiErrorMessage(error)),
+    onSettled: () => setPendingFatMinimo(null),
+  })
+
+  function handleConsideraFatMinimo(diaryId: number, considera: boolean) {
+    fatMinimoMutation.mutate({ id: diaryId, considera })
+  }
 
   function handleApply() {
     setApplied({ ...filters, page: 1 })
@@ -523,6 +606,7 @@ export default function DiarioConferenciaPage() {
                 <th style={thStyle}>Operador</th>
                 <th style={thStyle}>Estacas</th>
                 <th style={thStyle}>Conferência</th>
+                <th style={thStyle}>Valor Faturado</th>
                 <th style={thStyle}>Portal</th>
                 <th style={thStyle}>Ações</th>
               </tr>
@@ -562,6 +646,18 @@ export default function DiarioConferenciaPage() {
                           </span>
                         ) : null}
                       </div>
+                    </td>
+                    <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
+                      {item.conferenciaStatus === 'aprovado' && item.valorFaturadoFechado != null ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontWeight: 700, color: '#276749', fontSize: 13 }}>R$ {formatBRL(item.valorFaturadoFechado)}</span>
+                          {item.producaoRealFechado != null && item.producaoRealFechado !== item.valorFaturadoFechado && (
+                            <span style={{ fontSize: 11, color: '#a0aec0' }}>Prod.: R$ {formatBRL(item.producaoRealFechado)}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#a0aec0', fontSize: 12 }}>—</span>
+                      )}
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
                       {item.conferenciaStatus === 'aprovado'
@@ -633,6 +729,8 @@ export default function DiarioConferenciaPage() {
                           item={item}
                           pendingStakeAction={pendingStakeAction}
                           onStakeAction={(id, stakeIndex, status, obs) => estacaMutation.mutate({ id, stakeIndex, status, obs })}
+                          onConsideraFatMinimo={handleConsideraFatMinimo}
+                          pendingFatMinimo={pendingFatMinimo}
                         />
                       </td>
                     </tr>

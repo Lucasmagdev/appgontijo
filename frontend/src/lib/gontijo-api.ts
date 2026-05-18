@@ -2779,8 +2779,13 @@ export type ConferenciaEstacaItem = {
   autoComparacao: AutoComparacao
   estacasComCusto: EstacaComCusto[]
   ocorrencias: OcorrenciaConferencia[]
-  contratoPrecos: { valorBits: number | null; acrescimoBitPct: number | null; valorArmacao: number | null }
+  contratoPrecos: { valorBits: number | null; acrescimoBitPct: number | null; valorArmacao: number | null; fatMinimoValor: number | null }
   toleranciaConferencia: number
+  consideraFatMinimo: boolean | null
+  producaoReal: number | null
+  valorFaturado: number | null
+  producaoRealFechado: number | null
+  valorFaturadoFechado: number | null
 }
 
 export const conferenciaEstacasApi = {
@@ -2804,6 +2809,10 @@ export const conferenciaEstacasApi = {
 
   async definirStatusEstaca(id: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string): Promise<void> {
     await api.post(`/gontijo/conferencia-estacas/${id}/estacas/${stakeIndex}/status`, { status, obs })
+  },
+
+  async setConsideraFatMinimo(id: number, considera: boolean): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/considera-fat-minimo`, { considera })
   },
 }
 
