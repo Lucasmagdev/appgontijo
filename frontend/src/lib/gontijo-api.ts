@@ -358,6 +358,7 @@ export type ObraDetail = {
   fatMinimoDias: number | null
   usaBits: boolean
   valorBits: number | null
+  acrescimoBitPct: number | null
   transporteNoturno: boolean
   icamento: boolean
   seguroPct: number | null
@@ -909,6 +910,7 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
     fatMinimoDias: toNumberValue(row.fat_minimo_dias),
     usaBits: toBooleanValue(row.usa_bits),
     valorBits: toNumberValue(row.valor_bits),
+    acrescimoBitPct: toNumberValue(row.acrescimo_bit_pct),
     transporteNoturno: toBooleanValue(row.transporte_noturno),
     icamento: toBooleanValue(row.icamento),
     seguroPct: toNumberValue(row.seguro_pct),
@@ -1094,6 +1096,7 @@ function buildObraPayload(payload: ObraDetail) {
     fat_minimo_dias: payload.fatMinimoDias,
     usa_bits: payload.usaBits,
     valor_bits: payload.valorBits,
+    acrescimo_bit_pct: payload.acrescimoBitPct,
     transporte_noturno: payload.transporteNoturno,
     icamento: payload.icamento,
     seguro_pct: payload.seguroPct,
@@ -2733,6 +2736,30 @@ export type AutoComparacao = {
   detalhes: ComparacaoDetalhe[]
 }
 
+export type EstacaComCusto = {
+  index: number
+  nome: string
+  diametroExec: number | null
+  profExec: number | null
+  usoBits: boolean
+  metrosIcamento: number | null
+  valorMetro: number | null
+  custo_metro: number | null
+  custo_bit: number | null
+  custo_armacao: number | null
+  custo_total: number | null
+  conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaObs: string | null
+  conferenciaPorNome: string | null
+  conferenciaEm: string | null
+}
+
+export type OcorrenciaConferencia = {
+  desc: string
+  hora_ini: string
+  hora_fim: string
+}
+
 export type ConferenciaEstacaItem = {
   id: number
   obraId: number
@@ -2750,6 +2777,9 @@ export type ConferenciaEstacaItem = {
   estacas: EstacaExecutada[]
   producaoPlanejada: ProducaoPlanejada[]
   autoComparacao: AutoComparacao
+  estacasComCusto: EstacaComCusto[]
+  ocorrencias: OcorrenciaConferencia[]
+  contratoPrecos: { valorBits: number | null; acrescimoBitPct: number | null; valorArmacao: number | null }
   toleranciaConferencia: number
 }
 
