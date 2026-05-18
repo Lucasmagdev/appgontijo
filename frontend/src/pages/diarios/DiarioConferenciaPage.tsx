@@ -415,8 +415,8 @@ export default function DiarioConferenciaPage() {
   const { user } = useAuth()
   const isAdmin = user?.isAdmin ?? false
 
-  const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '' })
-  const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', page: 1 })
+  const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '', engenheiro: '' })
+  const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', engenheiro: '', page: 1 })
   const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
@@ -432,6 +432,7 @@ export default function DiarioConferenciaPage() {
       limit: 20,
       obra_numero: applied.obra_numero || undefined,
       conferencia_status: applied.conferencia_status || undefined,
+      engenheiro: applied.engenheiro || undefined,
     }),
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 2,
@@ -569,6 +570,17 @@ export default function DiarioConferenciaPage() {
               <option value="aprovado">Aprovado</option>
               <option value="rejeitado">Rejeitado</option>
             </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="field-label">Engenheiro Responsável</label>
+            <input
+              type="text"
+              value={filters.engenheiro}
+              onChange={(event) => setFilters((current) => ({ ...current, engenheiro: event.target.value }))}
+              placeholder="Nome do engenheiro"
+              className="field-input w-44"
+            />
           </div>
 
           <button

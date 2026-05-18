@@ -371,6 +371,7 @@ export type ObraDetail = {
   responsavelContratante: string
   telContratante: string
   observacoes: string
+  engenheiroResponsavel: string
   modalidadeContratual: string
   faturamentoMinimoDiarioGlobal: number | null
   diasIncidenciaFatMinimo: string
@@ -918,6 +919,7 @@ function adaptObraDetail(row: Record<string, unknown>): ObraDetail {
     mobilizacao: toNumberValue(row.mobilizacao),
     desmobilizacao: toNumberValue(row.desmobilizacao),
     totalGeral: toNumberValue(row.total_geral),
+    engenheiroResponsavel: toStringValue(row.engenheiro_responsavel),
     responsavelComercialGontijo: toStringValue(row.responsavel_comercial_gontijo),
     telComercialGontijo: toStringValue(row.tel_comercial_gontijo),
     responsavelContratante: toStringValue(row.responsavel_contratante),
@@ -1104,6 +1106,7 @@ function buildObraPayload(payload: ObraDetail) {
     mobilizacao: payload.mobilizacao,
     desmobilizacao: payload.desmobilizacao,
     total_geral: payload.totalGeral,
+    engenheiro_responsavel: payload.engenheiroResponsavel,
     responsavel_comercial_gontijo: payload.responsavelComercialGontijo,
     tel_comercial_gontijo: payload.telComercialGontijo,
     responsavel_contratante: payload.responsavelContratante,
@@ -2768,6 +2771,7 @@ export type ConferenciaEstacaItem = {
   dataDiario: string
   equipamento: string
   operadorNome: string
+  engenheiroResponsavel: string | null
   conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
   conferenciaEm: string | null
   conferenciaObs: string | null
@@ -2789,7 +2793,7 @@ export type ConferenciaEstacaItem = {
 }
 
 export const conferenciaEstacasApi = {
-  async list(params: { page?: number; limit?: number; conferencia_status?: string; obra_numero?: string }): Promise<ApiListResult<ConferenciaEstacaItem>> {
+  async list(params: { page?: number; limit?: number; conferencia_status?: string; obra_numero?: string; engenheiro?: string }): Promise<ApiListResult<ConferenciaEstacaItem>> {
     const res = await api.get<ApiEnvelope<ConferenciaEstacaItem[]>>('/gontijo/conferencia-estacas', { params })
     return {
       items: res.data.data ?? [],
