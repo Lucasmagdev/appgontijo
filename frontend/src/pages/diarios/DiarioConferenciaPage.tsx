@@ -116,7 +116,7 @@ function ExpandedRow({
   onConsideraFatMinimo: (diaryId: number, considera: boolean) => void
   pendingFatMinimo: number | null
 }) {
-  const { estacasComCusto, ocorrencias, contratoPrecos, consideraFatMinimo, producaoReal, valorFaturado, producaoRealFechado, valorFaturadoFechado, conferenciaStatus } = item
+  const { estacasComCusto, ocorrencias, contratoPrecos, consideraFatMinimo, producaoReal, valorFaturado, valorFaturadoFechado, conferenciaStatus } = item
   const fatMinimoValor = contratoPrecos?.fatMinimoValor ?? null
   const isFatMinimoPending = pendingFatMinimo === item.id
 
