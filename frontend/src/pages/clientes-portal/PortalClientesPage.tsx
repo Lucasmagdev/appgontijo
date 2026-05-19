@@ -117,7 +117,7 @@ export default function PortalClientesPage() {
   const selectedPhotoAccessRef = useRef<ClientPortalAccessRecord | null>(null)
   const photoInputRef = useRef<HTMLInputElement | null>(null)
   const [docAccessId, setDocAccessId] = useState<number | null>(null)
-  const [docTipo, setDocTipo] = useState('projeto')
+  const [docTipo, setDocTipo] = useState('pre_obra')
   const [docError, setDocError] = useState('')
   const docInputRef = useRef<HTMLInputElement | null>(null)
   const { copy, copiedKey } = useClipboard()
@@ -950,7 +950,7 @@ function AccessCard({
                 <Paperclip size={16} className="text-blue-600" />
                 Documentos do portal — obra {access.obraNumero}
               </div>
-              <p className="mt-1 text-sm text-slate-500">Projetos, sondagens e outros arquivos visíveis ao cliente.</p>
+              <p className="mt-1 text-sm text-slate-500">Relatórios pré-obra, visitas, projetos e outros arquivos visíveis ao cliente.</p>
             </div>
             <button type="button" className="btn btn-secondary" onClick={docManager.onClose}>Fechar</button>
           </div>
@@ -958,7 +958,10 @@ function AccessCard({
           <div className="mt-4 flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1">
               <label className="field-label">Tipo</label>
-              <select value={docManager.tipo} onChange={(e) => docManager.onTipoChange(e.target.value)} className="field-select w-36">
+              <select value={docManager.tipo} onChange={(e) => docManager.onTipoChange(e.target.value)} className="field-select w-48">
+                <option value="pre_obra">Pré-obra</option>
+                <option value="visita_primeiro_dia">Visita 1° dia</option>
+                <option value="visita_tecnica">Visita técnica</option>
                 <option value="projeto">Projeto</option>
                 <option value="sondagem">Sondagem</option>
                 <option value="outro">Outro</option>

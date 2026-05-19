@@ -2830,6 +2830,9 @@ export type PortalDocumento = {
 }
 
 export const TIPO_DOCUMENTO_LABELS: Record<string, string> = {
+  pre_obra: 'Pré-obra',
+  visita_primeiro_dia: 'Visita 1° dia',
+  visita_tecnica: 'Visita técnica',
   projeto: 'Projeto',
   sondagem: 'Sondagem',
   outro: 'Outro',
@@ -2921,5 +2924,147 @@ export const textCorrectionService = {
   async correct(text: string): Promise<TextCorrectionResult> {
     const res = await api.post<ApiEnvelope<TextCorrectionResult>>('/gontijo/texto/corrigir', { text })
     return res.data.data
+  },
+}
+
+// ── Medições ──────────────────────────────────────────────────────────────────
+
+export type MedicaoEstaca = {
+  id: number
+  medicao_id: number
+  data_estaca: string | null
+  nome_estaca: string | null
+  diametro: number | null
+  profundidade: number | null
+  valor_metro: number | null
+  uso_bits: number
+  metros_armacao: number | null
+  valor_armacao_metro: number | null
+  custo_total: number | null
+  observacao: string | null
+  origem_diario_id: number | null
+  ordem: number
+}
+
+export type MedicaoItemExtra = {
+  id: number
+  medicao_id: number
+  descricao: string
+  valor: number
+  ordem: number
+}
+
+export type MedicaoFatMinimoRow = {
+  data: string
+  producao: number
+  saldo: number
+  consideraFatMinimo: boolean
+  observacao: string | null
+  dayType: string | null
+}
+
+export type MedicaoTotais = {
+  valorEstacas: number
+  valorFatMinimo: number
+  valorExtras: number
+  valorTotal: number
+}
+
+export type MedicaoDetalhe = {
+  medicao: {
+    id: number
+    construction_id: number
+    numero: number
+    data_medicao: string
+    data_inicio: string
+    data_fim: string
+    responsavel_medicao: string | null
+    conferido_por: string | null
+    status: 'rascunho' | 'fechada'
+    fat_minimo_valor: number | null
+    obra_numero: string
+    cliente: string
+    endereco: string
+    responsavel_comercial: string | null
+  }
+  estacas: MedicaoEstaca[]
+  extras: MedicaoItemExtra[]
+  fatMinimoTable: MedicaoFatMinimoRow[]
+  totais: MedicaoTotais
+}
+
+export type MedicaoListItem = {
+  id: number
+  construction_id: number
+  numero: number
+  data_medicao: string
+  data_inicio: string
+  data_fim: string
+  responsavel_medicao: string | null
+  conferido_por: string | null
+  status: 'rascunho' | 'fechada'
+  obra_numero: string
+  cliente: string
+}
+
+export const medicoesApi = {
+  async list(params: { obraId?: number; page?: number; limit?: number } = {}): Promise<{ total: number; page: number; limit: number; items: MedicaoListItem[] }> {
+    const q = new URLSearchParams()
+    if (params.obraId) q.set('obraId', String(params.obraId))
+    if (params.page) q.set('page', String(params.page))
+    if (params.limit) q.set('limit', String(params.limit))
+    const res = await api.get<{ ok: boolean; total: number; page: number; limit: number; items: MedicaoListItem[] }>(`/gontijo/medicoes?${q}`)
+    return res.data
+  },
+  async create(payload: {
+    obraId: number
+    dataInicio: string
+    dataFim: string
+    responsavelMedicao?: string
+    conferidoPor?: string
+    itensExtras?: { descricao: string; valor: number }[]
+  }): Promise<{ id: number; numero: number }> {
+    const res = await api.post<{ ok: boolean; id: number; numero: number }>('/gontijo/medicoes', payload)
+    return res.data
+  },
+  async get(id: number): Promise<MedicaoDetalhe> {
+    const res = await api.get<{ ok: boolean; data: MedicaoDetalhe }>(`/gontijo/medicoes/${id}`)
+    return res.data.data
+  },
+  async update(id: number, payload: {
+    responsavelMedicao?: string
+    conferidoPor?: string
+    dataMedicao?: string
+    dataInicio?: string
+    dataFim?: string
+    itensExtras?: { descricao: string; valor: number }[]
+  }): Promise<void> {
+    await api.put(`/gontijo/medicoes/${id}`, payload)
+  },
+  async remove(id: number): Promise<void> {
+    await api.delete(`/gontijo/medicoes/${id}`)
+  },
+  async setStatus(id: number, status: 'rascunho' | 'fechada'): Promise<void> {
+    await api.put(`/gontijo/medicoes/${id}/status`, { status })
+  },
+  async updateEstaca(medicaoId: number, estacaId: number, payload: Partial<MedicaoEstaca>): Promise<void> {
+    await api.patch(`/gontijo/medicoes/${medicaoId}/estacas/${estacaId}`, payload)
+  },
+  async addEstaca(medicaoId: number, payload: Partial<MedicaoEstaca>): Promise<{ id: number }> {
+    const res = await api.post<{ ok: boolean; id: number }>(`/gontijo/medicoes/${medicaoId}/estacas`, payload)
+    return res.data
+  },
+  async removeEstaca(medicaoId: number, estacaId: number): Promise<void> {
+    await api.delete(`/gontijo/medicoes/${medicaoId}/estacas/${estacaId}`)
+  },
+  async reimportar(id: number): Promise<{ estacasImportadas: number }> {
+    const res = await api.post<{ ok: boolean; estacasImportadas: number }>(`/gontijo/medicoes/${id}/reimportar`)
+    return res.data
+  },
+  async salvarObservacaoDia(id: number, data: string, observacao: string): Promise<void> {
+    await api.patch(`/gontijo/medicoes/${id}/dias/${data}/observacao`, { observacao })
+  },
+  pdfUrl(id: number): string {
+    return `${api.defaults.baseURL ?? ''}/gontijo/medicoes/${id}/pdf`
   },
 }

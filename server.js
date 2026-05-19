@@ -3967,7 +3967,7 @@ app.post("/api/admin/client-portals/:id/documentos", requireAdmin, portalDocsUpl
     await db.query(
       `INSERT INTO portal_documents (construction_id, tipo, nome_original, nome_arquivo, tamanho, mime_type)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [access.construction_id, tipo, req.file.originalname, req.file.filename, req.file.size, req.file.mimetype]
+      [access.construction_id, tipo, Buffer.from(req.file.originalname, 'latin1').toString('utf8'), req.file.filename, req.file.size, req.file.mimetype]
     )
     return res.json({ ok: true })
   } catch (error) {

@@ -7,6 +7,7 @@ import {
   MessageCircle,
   Gauge,
   ListChecks,
+  Receipt,
   ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -31,6 +32,7 @@ const navItems = [
   { label: 'WhatsApp', to: '/whatsapp', icon: MessageCircle },
   { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
   { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
+  { label: 'Medicoes', to: '/medicoes', icon: Receipt },
   { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
   { type: 'divider', label: 'Treinamento' },
   { label: 'Cursos e Provas', to: '/cursos', icon: BookOpen },

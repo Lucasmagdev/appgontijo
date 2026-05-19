@@ -21,6 +21,9 @@ import { cn, formatDate } from '@/lib/utils'
 import { extractApiErrorMessage } from '@/lib/gontijo-api'
 
 const TIPO_DOC_LABELS: Record<string, string> = {
+  pre_obra: 'Pré-obra',
+  visita_primeiro_dia: 'Visita 1° dia',
+  visita_tecnica: 'Visita técnica',
   projeto: 'Projeto',
   sondagem: 'Sondagem',
   outro: 'Outro',
@@ -379,30 +382,45 @@ export default function ClientePortalDashboardPage() {
                   <section className="overflow-hidden rounded-xl border border-blue-100 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
                     <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900 sm:text-xl">
                       <Paperclip size={20} className="text-blue-600" />
-                      Documentos da Obra
+                      Relatórios e Documentos
                     </h2>
-                    <p className="mt-1 text-sm text-slate-500">Projetos, sondagens e arquivos disponibilizados pela equipe Gontijo.</p>
+                    <p className="mt-1 text-sm text-slate-500">Arquivos e relatórios disponibilizados pela equipe Gontijo.</p>
 
-                    <div className="mt-4 grid gap-2">
-                      {documentosQuery.data.map((doc) => (
-                        <a
-                          key={doc.id}
-                          href={clientPortalService.getDocumentoDownloadUrl(doc.id)}
-                          download={doc.nome_original}
-                          className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50"
-                        >
-                          <div className="flex min-w-0 items-center gap-3">
-                            <FileText size={18} className="shrink-0 text-blue-500" />
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-slate-800">{doc.nome_original}</div>
-                              <div className="text-xs text-slate-400">
-                                {TIPO_DOC_LABELS[doc.tipo] ?? doc.tipo}
-                                {doc.tamanho ? ` · ${Math.round(doc.tamanho / 1024)} KB` : ''}
-                              </div>
-                            </div>
+                    <div className="mt-4 flex flex-col gap-5">
+                      {Object.entries(
+                        documentosQuery.data.reduce<Record<string, typeof documentosQuery.data>>((acc, doc) => {
+                          const key = doc.tipo || 'outro'
+                          if (!acc[key]) acc[key] = []
+                          acc[key].push(doc)
+                          return acc
+                        }, {})
+                      ).map(([tipo, docs]) => (
+                        <div key={tipo}>
+                          <div className="mb-2 text-xs font-bold uppercase tracking-widest text-blue-600">
+                            {TIPO_DOC_LABELS[tipo] ?? tipo}
                           </div>
-                          <Download size={16} className="shrink-0 text-blue-400 group-hover:text-blue-600" />
-                        </a>
+                          <div className="grid gap-2">
+                            {docs.map((doc) => (
+                              <a
+                                key={doc.id}
+                                href={clientPortalService.getDocumentoDownloadUrl(doc.id)}
+                                download={doc.nome_original}
+                                className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50"
+                              >
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <FileText size={18} className="shrink-0 text-blue-500" />
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold text-slate-800">{doc.nome_original}</div>
+                                    {doc.tamanho ? (
+                                      <div className="text-xs text-slate-400">{Math.round(doc.tamanho / 1024)} KB</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <Download size={16} className="shrink-0 text-blue-400 group-hover:text-blue-600" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </section>
@@ -440,7 +458,6 @@ export default function ClientePortalDashboardPage() {
                           <th>Operador</th>
                           <th>Estacas</th>
                           <th>Clima</th>
-                          <th>Fotos</th>
                           <th>PDF</th>
                         </tr>
                       </thead>
@@ -449,7 +466,7 @@ export default function ClientePortalDashboardPage() {
                           data.diarios.map((diario) => <DiaryRow key={diario.id} diario={diario} />)
                         ) : (
                           <tr>
-                            <td colSpan={8}>
+                            <td colSpan={7}>
                               <QueryFeedback
                                 type="empty"
                                 title="Nenhum diario encontrado"
@@ -489,7 +506,6 @@ function DiaryRow({ diario }: { diario: ClientPortalDiarySummary }) {
       <td>{diario.operadorNome || '-'}</td>
       <td className="font-semibold text-slate-900">{diario.estacasNoDia}</td>
       <td>{diario.clima || '-'}</td>
-      <td>{diario.fotos.length}</td>
       <td>
         <a
           href={diario.pdfUrl}
@@ -528,7 +544,6 @@ function DiaryMobileCard({ diario }: { diario: ClientPortalDiarySummary }) {
         <InfoPill label="Equipamento" value={diario.equipamento || '-'} />
         <InfoPill label="Operador" value={diario.operadorNome || '-'} />
         <InfoPill label="Estacas" value={String(diario.estacasNoDia)} />
-        <InfoPill label="Fotos" value={String(diario.fotos.length)} />
       </div>
 
       <a
