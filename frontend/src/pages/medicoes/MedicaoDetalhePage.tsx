@@ -7,7 +7,7 @@ import {
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   extractApiErrorMessage, medicoesApi,
-  type MedicaoEstaca, type MedicaoItemExtra,
+  type MedicaoEstaca,
 } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 

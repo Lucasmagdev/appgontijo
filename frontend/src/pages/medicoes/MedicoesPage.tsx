@@ -17,10 +17,6 @@ type CreateForm = {
 
 const EMPTY_FORM: CreateForm = { obraId: '', obraSearch: '', dataInicio: '', dataFim: '', responsavelMedicao: '', conferidoPor: '' }
 
-function fmtBRL(v: number | null | undefined) {
-  if (v == null) return '—'
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 export default function MedicoesPage() {
   const navigate = useNavigate()
