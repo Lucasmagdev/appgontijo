@@ -93,7 +93,7 @@ function MedicaoDetalhePageInner() {
   const medicaoId = Number(id)
 
   const [headerEdit, setHeaderEdit] = useState(false)
-  const [headerDraft, setHeaderDraft] = useState({ responsavelMedicao: '', conferidoPor: '' })
+  const [headerDraft, setHeaderDraft] = useState({ responsavelMedicao: '', conferidoPor: '', issqnPct: '', pctNf: '', pctLocacao: '', issqnCobradoCliente: false })
   const [headerError, setHeaderError] = useState('')
   const [extraDraft, setExtraDraft] = useState<{ descricao: string; valor: string }[]>([])
   const [extraError, setExtraError] = useState('')
@@ -125,6 +125,10 @@ function MedicaoDetalhePageInner() {
     mutationFn: () => medicoesApi.update(medicaoId, {
       responsavelMedicao: headerDraft.responsavelMedicao,
       conferidoPor: headerDraft.conferidoPor,
+      issqnPct: headerDraft.issqnPct !== '' ? parseFloat(headerDraft.issqnPct.replace(',', '.')) || 0 : null,
+      pctNf: headerDraft.pctNf !== '' ? parseFloat(headerDraft.pctNf.replace(',', '.')) || 0 : null,
+      pctLocacao: headerDraft.pctLocacao !== '' ? parseFloat(headerDraft.pctLocacao.replace(',', '.')) || 0 : null,
+      issqnCobradoCliente: headerDraft.issqnCobradoCliente,
     }),
     onSuccess: async () => { setHeaderEdit(false); setHeaderError(''); await invalidate() },
     onError: e => setHeaderError(extractApiErrorMessage(e)),
@@ -256,7 +260,7 @@ function MedicaoDetalhePageInner() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div className="text-sm font-bold text-slate-800">Informações da medição</div>
           {!isFechada && !headerEdit && (
-            <button type="button" onClick={() => { setHeaderDraft({ responsavelMedicao: medicao.responsavel_medicao ?? '', conferidoPor: medicao.conferido_por ?? '' }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
+            <button type="button" onClick={() => { setHeaderDraft({ responsavelMedicao: medicao.responsavel_medicao ?? '', conferidoPor: medicao.conferido_por ?? '', issqnPct: medicao.issqn_pct != null ? String(medicao.issqn_pct) : '', pctNf: medicao.pct_nf != null ? String(medicao.pct_nf) : '', pctLocacao: medicao.pct_locacao != null ? String(medicao.pct_locacao) : '', issqnCobradoCliente: Number(medicao.issqn_cobrado_cliente) === 1 }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
               <Pencil size={12} /> Editar
             </button>
           )}
@@ -270,6 +274,24 @@ function MedicaoDetalhePageInner() {
             <div>
               <label className="field-label">Conferido por</label>
               <input type="text" value={headerDraft.conferidoPor} onChange={e => setHeaderDraft(d => ({ ...d, conferidoPor: e.target.value }))} className="field-input" />
+            </div>
+            <div>
+              <label className="field-label">% NF (Nota Fiscal)</label>
+              <input type="number" min="0" max="100" step="0.01" placeholder="Ex: 70" value={headerDraft.pctNf} onChange={e => setHeaderDraft(d => ({ ...d, pctNf: e.target.value }))} className="field-input" />
+            </div>
+            <div>
+              <label className="field-label">% Fatura de Locação</label>
+              <input type="number" min="0" max="100" step="0.01" placeholder="Ex: 30" value={headerDraft.pctLocacao} onChange={e => setHeaderDraft(d => ({ ...d, pctLocacao: e.target.value }))} className="field-input" />
+            </div>
+            <div>
+              <label className="field-label">ISSQN (% sobre NF)</label>
+              <input type="number" min="0" max="100" step="0.01" placeholder="Ex: 3" value={headerDraft.issqnPct} onChange={e => setHeaderDraft(d => ({ ...d, issqnPct: e.target.value }))} className="field-input" />
+            </div>
+            <div className="flex items-center gap-3 pt-5">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700">
+                <input type="checkbox" checked={headerDraft.issqnCobradoCliente} onChange={e => setHeaderDraft(d => ({ ...d, issqnCobradoCliente: e.target.checked }))} className="rounded" />
+                ISSQN cobrado do cliente
+              </label>
             </div>
             {headerError && <div className="col-span-2 text-sm text-red-600">{headerError}</div>}
             <div className="col-span-2 flex gap-2">
@@ -285,6 +307,9 @@ function MedicaoDetalhePageInner() {
             <InfoItem label="Responsável" value={medicao.responsavel_medicao || '—'} />
             <InfoItem label="Conferido por" value={medicao.conferido_por || '—'} />
             <InfoItem label="Fat. mínimo/dia" value={medicao.fat_minimo_valor != null ? `R$ ${fmtBRL(medicao.fat_minimo_valor)}` : '—'} />
+            <InfoItem label="% NF" value={medicao.pct_nf != null && medicao.pct_nf > 0 ? `${fmtBRL(medicao.pct_nf)}%` : '—'} />
+            <InfoItem label="% Locação" value={medicao.pct_locacao != null && medicao.pct_locacao > 0 ? `${fmtBRL(medicao.pct_locacao)}%` : '—'} />
+            <InfoItem label="ISSQN" value={medicao.issqn_pct != null && medicao.issqn_pct > 0 ? `${fmtBRL(medicao.issqn_pct)}% ${Number(medicao.issqn_cobrado_cliente) === 1 ? '(cobrado do cliente)' : '(incluso)'}` : '—'} />
           </div>
         )}
       </div>
@@ -519,8 +544,27 @@ function MedicaoDetalhePageInner() {
           {totais.valorFatMinimo > 0 && <SummaryRow label="Saldo Faturamento Mínimo Diário" value={totais.valorFatMinimo} />}
           {extras.map(e => <SummaryRow key={e.id} label={e.descricao} value={Number(e.valor)} />)}
           <SummaryRow label="TOTAL" value={totais.valorTotal} bold />
-          <SummaryRow label="VALOR BRUTO (R$) — NF" value={totais.valorTotal} bold />
-          <SummaryRow label="VALOR LÍQUIDO (R$) — NF" value={totais.valorTotal} bold />
+          {totais.pctNf > 0 && <SummaryRow label={`Fatura NF (${fmtBRL(totais.pctNf)}%)`} value={totais.valorNf} />}
+          {totais.pctLocacao > 0 && <SummaryRow label={`Fatura de Locação (${fmtBRL(totais.pctLocacao)}%)`} value={totais.valorLocacao} />}
+          {totais.issqnPct > 0 && (
+            <SummaryRow
+              label={totais.issqnCobradoCliente ? `ISSQN (${fmtBRL(totais.issqnPct)}% sobre NF) — cobrado do cliente` : `ISSQN (${fmtBRL(totais.issqnPct)}% sobre NF) — incluso nos preços`}
+              value={totais.issqnCobradoCliente ? totais.valorIssqn : -totais.valorIssqn}
+            />
+          )}
+          {(() => {
+            const brutoNf = totais.pctNf > 0
+              ? (totais.issqnCobradoCliente ? totais.valorNf + totais.valorIssqn : totais.valorNf)
+              : (totais.issqnCobradoCliente ? totais.valorTotal + totais.valorIssqn : totais.valorTotal)
+            const liquidoNf = totais.pctNf > 0
+              ? (totais.issqnCobradoCliente ? totais.valorNf : totais.valorNf - totais.valorIssqn)
+              : (totais.issqnCobradoCliente ? totais.valorTotal : totais.valorTotal - totais.valorIssqn)
+            return <>
+              <SummaryRow label="VALOR BRUTO (R$) — NF" value={brutoNf} bold />
+              <SummaryRow label="VALOR LÍQUIDO (R$) — NF" value={liquidoNf} bold />
+              {totais.pctLocacao > 0 && <SummaryRow label="VALOR (R$) — LOCAÇÃO" value={totais.valorLocacao} bold />}
+            </>
+          })()}
         </div>
       </div>
     </div>

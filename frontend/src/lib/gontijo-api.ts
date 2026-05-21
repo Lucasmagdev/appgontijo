@@ -2968,6 +2968,14 @@ export type MedicaoTotais = {
   valorFatMinimo: number
   valorExtras: number
   valorTotal: number
+  issqnPct: number
+  pctNf: number
+  pctLocacao: number
+  issqnCobradoCliente: boolean
+  valorNf: number
+  valorLocacao: number
+  valorIssqn: number
+  valorLiquido: number
 }
 
 export type MedicaoDetalhe = {
@@ -2982,6 +2990,10 @@ export type MedicaoDetalhe = {
     conferido_por: string | null
     status: 'rascunho' | 'fechada'
     fat_minimo_valor: number | null
+    issqn_pct: number | null
+    pct_nf: number | null
+    pct_locacao: number | null
+    issqn_cobrado_cliente: number
     obra_numero: string
     cliente: string
     endereco: string
@@ -3038,6 +3050,10 @@ export const medicoesApi = {
     dataInicio?: string
     dataFim?: string
     itensExtras?: { descricao: string; valor: number }[]
+    issqnPct?: number | null
+    pctNf?: number | null
+    pctLocacao?: number | null
+    issqnCobradoCliente?: boolean
   }): Promise<void> {
     await api.put(`/gontijo/medicoes/${id}`, payload)
   },
