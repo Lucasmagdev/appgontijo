@@ -2,7 +2,7 @@ import { Component, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Download, Lock, LockOpen, Pencil, Plus, RefreshCw, Save, Trash2, X,
+  ArrowLeft, ArrowDown, Download, DollarSign, Grip, Layers, Lock, LockOpen, Pencil, Plus, RefreshCw, Save, Trash2, X,
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
@@ -305,28 +305,28 @@ function MedicaoDetalhePageInner() {
                 <RefreshCw size={12} className={reimportarMutation.isPending ? 'animate-spin' : ''} />
                 {reimportarMutation.isPending ? 'Importando...' : 'Reimportar'}
               </button>
-              <button type="button" onClick={() => addEstacaMutation.mutate()} disabled={addEstacaMutation.isPending} className="btn btn-secondary text-xs">
+              <button type="button" onClick={() => addEstacaMutation.mutate()} disabled={addEstacaMutation.isPending} className="btn btn-primary text-xs">
                 <Plus size={12} /> Adicionar estaca
               </button>
             </div>
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                <th className="w-8 px-2 py-2 text-center">#</th>
-                <th className="px-2 py-2 text-left">Data</th>
-                <th className="px-2 py-2 text-left">Estaca</th>
-                <th className="px-2 py-2 text-right">Diâm.</th>
-                <th className="px-2 py-2 text-right">Prof. (m)</th>
-                <th className="px-2 py-2 text-right">R$/m</th>
-                <th className="px-2 py-2 text-center">Bits</th>
-                <th className="px-2 py-2 text-right">Arm. (m)</th>
-                <th className="px-2 py-2 text-right">R$/Arm.</th>
-                <th className="px-2 py-2 text-right font-bold text-slate-600">Total</th>
-                <th className="px-2 py-2 text-left">Obs.</th>
-                {!isFechada && <th className="w-8" />}
+              <tr className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-400">
+                <th className="w-10 px-4 py-3 text-center whitespace-nowrap">#</th>
+                <th className="min-w-[100px] px-4 py-3 text-left whitespace-nowrap">Data</th>
+                <th className="min-w-[80px] px-4 py-3 text-left whitespace-nowrap">Estaca</th>
+                <th className="min-w-[60px] px-4 py-3 text-right whitespace-nowrap">Ø (CM)</th>
+                <th className="min-w-[70px] px-4 py-3 text-right whitespace-nowrap">Prof. (M)</th>
+                <th className="min-w-[50px] px-4 py-3 text-center whitespace-nowrap">Bits</th>
+                <th className="min-w-[70px] px-4 py-3 text-right whitespace-nowrap">Arm. (M)</th>
+                <th className="min-w-[60px] px-4 py-3 text-right whitespace-nowrap">R$/M</th>
+                <th className="min-w-[70px] px-4 py-3 text-right whitespace-nowrap">R$/Arm.</th>
+                <th className="min-w-[90px] px-4 py-3 text-right font-bold text-slate-600 whitespace-nowrap">Total</th>
+                <th className="px-4 py-3 text-left whitespace-nowrap">Observações</th>
+                {!isFechada && <th className="w-10" />}
               </tr>
             </thead>
             <tbody>
@@ -345,23 +345,45 @@ function MedicaoDetalhePageInner() {
                 />
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-xs">
-                <td colSpan={4} className="px-2 py-2 text-right text-slate-500">TOTAIS</td>
-                <td className="px-2 py-2 text-right">
-                  {fmtBRL(estacas.reduce((s, e) => s + (Number(e.profundidade) || 0), 0))}
-                </td>
-                <td colSpan={3} />
-                <td className="px-2 py-2 text-right">
-                  {fmtBRL(estacas.reduce((s, e) => s + (Number(e.metros_armacao) || 0), 0))}
-                </td>
-                <td className="px-2 py-2 text-right text-slate-900">
-                  R$ {fmtBRL(totais.valorEstacas)}
-                </td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
           </table>
+        </div>
+        <div className="grid grid-cols-4 divide-x divide-slate-100 border-t-2 border-slate-200 bg-slate-50">
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <Layers size={20} />
+            </div>
+            <div>
+              <div className="text-xl font-black text-slate-800">{estacas.length}</div>
+              <div className="text-xs text-slate-400">Estacas</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <ArrowDown size={20} />
+            </div>
+            <div>
+              <div className="text-xl font-black text-slate-800">{fmtBRL(estacas.reduce((s, e) => s + (Number(e.profundidade) || 0), 0))} m</div>
+              <div className="text-xs text-slate-400">Profundidade total</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <Grip size={20} />
+            </div>
+            <div>
+              <div className="text-xl font-black text-slate-800">{fmtBRL(estacas.reduce((s, e) => s + (Number(e.metros_armacao) || 0), 0))} m</div>
+              <div className="text-xs text-slate-400">Armação total</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-5 py-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <DollarSign size={20} />
+            </div>
+            <div>
+              <div className="text-xl font-black text-slate-800">R$ {fmtBRL(totais.valorEstacas)}</div>
+              <div className="text-xs text-slate-400">Valor total</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -525,30 +547,30 @@ function EstacaRow({ idx, estaca, disabled, confirmingDelete, onPatch, onDeleteR
   isDeleting: boolean
 }) {
   return (
-    <tr className="border-b border-slate-50 hover:bg-slate-50/50">
-      <td className="px-2 py-1 text-center text-slate-400">{idx + 1}</td>
-      <td className="px-1 py-1"><InlineCell value={estaca.data_estaca ? String(estaca.data_estaca).slice(0, 10) : ''} onSave={v => onPatch('data_estaca', v)} type="date" disabled={disabled} /></td>
-      <td className="px-1 py-1 min-w-[80px]"><InlineCell value={estaca.nome_estaca} onSave={v => onPatch('nome_estaca', v)} disabled={disabled} /></td>
-      <td className="px-1 py-1 text-right"><InlineCell value={estaca.diametro} onSave={v => onPatch('diametro', v)} type="number" disabled={disabled} /></td>
-      <td className="px-1 py-1 text-right"><InlineCell value={estaca.profundidade} onSave={v => onPatch('profundidade', v)} type="number" disabled={disabled} /></td>
-      <td className="px-1 py-1 text-right"><InlineCell value={estaca.valor_metro} onSave={v => onPatch('valor_metro', v)} type="number" disabled={disabled} /></td>
-      <td className="px-1 py-1 text-center">
+    <tr className="border-b border-slate-100 transition-colors hover:bg-slate-50/60">
+      <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
+      <td className="px-4 py-3"><InlineCell value={estaca.data_estaca ? String(estaca.data_estaca).slice(0, 10) : ''} onSave={v => onPatch('data_estaca', v)} type="date" disabled={disabled} /></td>
+      <td className="px-4 py-3 font-medium text-slate-800"><InlineCell value={estaca.nome_estaca} onSave={v => onPatch('nome_estaca', v)} disabled={disabled} /></td>
+      <td className="px-4 py-3 text-right"><InlineCell value={estaca.diametro} onSave={v => onPatch('diametro', v)} type="number" disabled={disabled} /></td>
+      <td className="px-4 py-3 text-right"><InlineCell value={estaca.profundidade} onSave={v => onPatch('profundidade', v)} type="number" disabled={disabled} /></td>
+      <td className="px-4 py-3 text-center">
         {disabled
-          ? <span>{estaca.uso_bits ? 'Sim' : 'Não'}</span>
-          : <button type="button" onClick={() => onPatch('uso_bits', estaca.uso_bits ? '0' : '1')} className="rounded px-2 py-0.5 text-xs hover:bg-blue-50">
+          ? <span className={estaca.uso_bits ? 'font-semibold text-emerald-600' : 'text-slate-400'}>{estaca.uso_bits ? 'Sim' : 'Não'}</span>
+          : <button type="button" onClick={() => onPatch('uso_bits', estaca.uso_bits ? '0' : '1')} className={`rounded px-2 py-0.5 text-sm font-medium transition hover:bg-emerald-50 ${estaca.uso_bits ? 'text-emerald-600' : 'text-slate-400'}`}>
               {estaca.uso_bits ? 'Sim' : 'Não'}
             </button>
         }
       </td>
-      <td className="px-1 py-1 text-right"><InlineCell value={estaca.metros_armacao} onSave={v => onPatch('metros_armacao', v)} type="number" disabled={disabled} /></td>
-      <td className="px-1 py-1 text-right"><InlineCell value={estaca.valor_armacao_metro} onSave={v => onPatch('valor_armacao_metro', v)} type="number" disabled={disabled} /></td>
-      <td className="px-2 py-1 text-right font-semibold text-slate-800">
+      <td className="px-4 py-3 text-right"><InlineCell value={estaca.metros_armacao} onSave={v => onPatch('metros_armacao', v)} type="number" disabled={disabled} /></td>
+      <td className="px-4 py-3 text-right"><InlineCell value={estaca.valor_metro} onSave={v => onPatch('valor_metro', v)} type="number" disabled={disabled} /></td>
+      <td className="px-4 py-3 text-right"><InlineCell value={estaca.valor_armacao_metro} onSave={v => onPatch('valor_armacao_metro', v)} type="number" disabled={disabled} /></td>
+      <td className="px-4 py-3 text-right font-semibold text-slate-800">
         {disabled
           ? (estaca.custo_total != null ? `R$ ${fmtBRL(estaca.custo_total)}` : '—')
           : <InlineCell value={estaca.custo_total} onSave={v => onPatch('custo_total', v)} type="number" disabled={false} />
         }
       </td>
-      <td className="px-1 py-1 min-w-[80px]"><InlineCell value={estaca.observacao} onSave={v => onPatch('observacao', v)} disabled={disabled} /></td>
+      <td className="px-4 py-3"><InlineCell value={estaca.observacao} onSave={v => onPatch('observacao', v)} disabled={disabled} /></td>
       {!disabled && (
         <td className="px-1 py-1">
           {confirmingDelete ? (

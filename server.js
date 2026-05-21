@@ -2804,7 +2804,7 @@ app.post("/api/admin/session", async (req, res) => {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
 
-    const isAdmin = user.document === "09653344650";
+    const isAdmin = ["09653344650", "70062920693", "15155410614", "15705286678"].includes(user.document);
     const token = crypto.randomUUID();
     adminSessions.set(token, {
       userId: user.id,
