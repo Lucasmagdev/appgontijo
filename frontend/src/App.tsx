@@ -19,6 +19,7 @@ const EquipamentosPage = lazy(() => import('@/pages/equipamentos/Equipamentos'))
 const DiariosPage = lazy(() => import('@/pages/diarios/Diarios'))
 const DiarioFormPage = lazy(() => import('@/pages/diarios/DiarioForm'))
 const DiarioConferenciaPage = lazy(() => import('@/pages/diarios/DiarioConferenciaPage'))
+const PlanejamentoDiarioPage = lazy(() => import('@/pages/planejamento/PlanejamentoDiarioPage'))
 const MedicoesPage = lazy(() => import('@/pages/medicoes/MedicoesPage'))
 const MedicaoDetalhePage = lazy(() => import('@/pages/medicoes/MedicaoDetalhePage'))
 const ProducaoPage = lazy(() => import('@/pages/producao/Producao'))
@@ -261,6 +262,7 @@ export default function App() {
             <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
             <Route path="diarios" element={<DiariosPage />} />
             <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />
+            <Route path="planejamento-diario" element={<PlanejamentoDiarioPage />} />
             <Route path="medicoes" element={<MedicoesPage />} />
             <Route path="medicoes/:id" element={<MedicaoDetalhePage />} />
             <Route path="diarios/:id/editar" element={<DiarioFormPage />} />

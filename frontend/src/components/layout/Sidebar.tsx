@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, HardHat, Wrench,
   FileText, BarChart3, KeyRound, BookOpen,
@@ -8,7 +9,8 @@ import {
   Gauge,
   ListChecks,
   Receipt,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown,
+  Layers, ClipboardList, CalendarClock,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -17,7 +19,12 @@ import {
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
-const navItems = [
+type NavLeaf = { label: string; to: string; icon: React.ElementType; exact?: boolean }
+type NavDivider = { type: 'divider'; label: string }
+type NavGroup = { type: 'group'; label: string; icon: React.ElementType; children: NavLeaf[] }
+type NavItem = NavLeaf | NavDivider | NavGroup
+
+const navItems: NavItem[] = [
   { label: 'Home', to: '/', icon: LayoutDashboard, exact: true },
   { type: 'divider', label: 'Cadastros' },
   { label: 'Usuarios', to: '/usuarios', icon: Users },
@@ -31,12 +38,30 @@ const navItems = [
   { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
   { label: 'WhatsApp', to: '/whatsapp', icon: MessageCircle },
   { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
-  { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
-  { label: 'Medicoes', to: '/medicoes', icon: Receipt },
+  {
+    type: 'group',
+    label: 'Diarios e Medicoes',
+    icon: Layers,
+    children: [
+      { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
+      { label: 'Conferencia de Estacas', to: '/diarios/conferencia', icon: ClipboardList },
+      { label: 'Medicoes', to: '/medicoes', icon: Receipt },
+      { label: 'Planejamento Diario', to: '/planejamento-diario', icon: CalendarClock },
+    ],
+  },
   { label: 'Portal do Cliente', to: '/portal-clientes', icon: KeyRound },
   { type: 'divider', label: 'Treinamento' },
   { label: 'Cursos e Provas', to: '/cursos', icon: BookOpen },
 ]
+
+function loadOpenGroups(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem('sidebar-groups')
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
 
 interface SidebarProps {
   open: boolean
@@ -45,6 +70,27 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onToggle }: SidebarProps) {
   const queryClient = useQueryClient()
+  const location = useLocation()
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const saved = loadOpenGroups()
+    // default: open any group whose child is currently active
+    const defaults: Record<string, boolean> = {}
+    for (const item of navItems) {
+      if (item.type !== 'group') continue
+      const active = item.children.some((c) => location.pathname.startsWith(c.to))
+      defaults[item.label] = saved[item.label] ?? active ?? true
+    }
+    return defaults
+  })
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] }
+      try { localStorage.setItem('sidebar-groups', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   function prefetch(to: string) {
     if (to === '/') {
@@ -79,6 +125,30 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
     } else if (to === '/pre-ocorrencias') {
       void queryClient.prefetchQuery({ queryKey: ['predefined-occurrences-admin'], queryFn: predefinedOccurrencesAdminService.list })
     }
+  }
+
+  function renderLeaf(item: NavLeaf) {
+    const Icon = item.icon
+    return (
+      <NavLink
+        key={item.to}
+        to={item.to}
+        end={item.exact}
+        onMouseEnter={() => prefetch(item.to)}
+        className={({ isActive }) =>
+          cn(
+            'mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors',
+            isActive
+              ? 'bg-[var(--brand-red)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
+              : 'text-slate-200 hover:bg-white/8 hover:text-white',
+            !open && 'justify-center px-0'
+          )
+        }
+      >
+        <Icon size={27} className="shrink-0" strokeWidth={2.2} />
+        {open && <span className="truncate">{item.label}</span>}
+      </NavLink>
+    )
   }
 
   return (
@@ -143,28 +213,52 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
             )
           }
 
-          const Icon = item.icon!
+          if (item.type === 'group') {
+            const GroupIcon = item.icon
+            const isExpanded = openGroups[item.label] ?? true
+            const hasActiveChild = item.children.some((c) => location.pathname.startsWith(c.to))
 
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to!}
-              end={item.exact}
-              onMouseEnter={() => prefetch(item.to!)}
-              className={({ isActive }) =>
-                cn(
-                  'mb-1 flex items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors',
-                  isActive
-                    ? 'bg-[var(--brand-red)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
-                    : 'text-slate-200 hover:bg-white/8 hover:text-white',
-                  !open && 'justify-center px-0'
-                )
-              }
-            >
-              <Icon size={27} className="shrink-0" strokeWidth={2.2} />
-              {open && <span className="truncate">{item.label}</span>}
-            </NavLink>
-          )
+            if (!open) {
+              // sidebar collapsed: show child icons directly
+              return (
+                <div key={item.label}>
+                  <div className="mx-auto my-1 h-px w-8 bg-white/10" />
+                  {item.children.map((child) => renderLeaf(child))}
+                  <div className="mx-auto my-1 h-px w-8 bg-white/10" />
+                </div>
+              )
+            }
+
+            return (
+              <div key={item.label} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.label)}
+                  className={cn(
+                    'mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-[13px] font-medium transition-colors',
+                    hasActiveChild
+                      ? 'text-white'
+                      : 'text-slate-300 hover:bg-white/8 hover:text-white'
+                  )}
+                >
+                  <GroupIcon size={27} className="shrink-0" strokeWidth={2.2} />
+                  <span className="flex-1 truncate text-left">{item.label}</span>
+                  <ChevronDown
+                    size={14}
+                    className={cn('shrink-0 text-slate-400 transition-transform duration-200', isExpanded && 'rotate-180')}
+                  />
+                </button>
+
+                {isExpanded && (
+                  <div className="ml-3 border-l border-white/10 pl-2">
+                    {item.children.map((child) => renderLeaf(child))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          return renderLeaf(item)
         })}
       </nav>
     </aside>

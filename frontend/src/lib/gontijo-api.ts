@@ -3084,3 +3084,51 @@ export const medicoesApi = {
     return `${api.defaults.baseURL ?? ''}/gontijo/medicoes/${id}/pdf`
   },
 }
+
+// ── Planejamento Diário ───────────────────────────────────────────────────────
+
+export type PlanejamentoDiarioItem = {
+  id?: number
+  metaQtdEstacas: number
+  diametro: string
+  profundidade: number
+}
+
+export type PlanejamentoDiario = {
+  id: number
+  data: string
+  equipamentoId: number
+  equipamentoNome: string
+  obraId: number
+  obraNumero: string
+  cliente: string
+  fatMinimoGarantido: boolean
+  itens: PlanejamentoDiarioItem[]
+}
+
+export type PlanejamentoDiarioPayload = {
+  data_inicio: string
+  data_fim?: string
+  equipamento_id: number
+  obra_numero: string
+  fat_minimo_garantido: boolean
+  itens: PlanejamentoDiarioItem[]
+}
+
+export const planejamentoDiarioApi = {
+  async list(params?: { data_inicio?: string; data_fim?: string; equipamento_id?: number }): Promise<PlanejamentoDiario[]> {
+    const res = await api.get<{ ok: boolean; data: PlanejamentoDiario[] }>('/gontijo/planejamento-diario', { params })
+    return res.data.data ?? []
+  },
+  async create(payload: PlanejamentoDiarioPayload): Promise<{ created: number }> {
+    const res = await api.post<{ ok: boolean; created: number }>('/gontijo/planejamento-diario', payload)
+    return res.data
+  },
+  async update(id: number, payload: { fat_minimo_garantido: boolean; itens: PlanejamentoDiarioItem[] }): Promise<void> {
+    await api.put(`/gontijo/planejamento-diario/${id}`, payload)
+  },
+  async remove(id: number): Promise<void> {
+    await api.delete(`/gontijo/planejamento-diario/${id}`)
+  },
+}
+
