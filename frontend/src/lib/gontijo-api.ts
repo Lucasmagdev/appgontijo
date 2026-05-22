@@ -2803,8 +2803,8 @@ export const conferenciaEstacasApi = {
     }
   },
 
-  async aprovar(id: number, obs?: string): Promise<void> {
-    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, { obs })
+  async aprovar(id: number, opts: { obs?: string; meta_atingida: boolean; perda?: string }): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, opts)
   },
 
   async rejeitar(id: number, obs: string): Promise<void> {

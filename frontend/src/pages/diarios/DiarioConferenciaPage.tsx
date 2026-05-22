@@ -1,16 +1,10 @@
 import { Fragment, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { conferenciaEstacasApi, diarioAdminSignatureService, toleranciaConferenciaApi, type ConferenciaEstacaItem, type EstacaComCusto, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { conferenciaEstacasApi, diarioAdminSignatureService, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
-
-function formatBRL(value: number | null): string {
-  if (value == null) return '—'
-  return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 
 type ConferenciaStatus = 'pendente' | 'aprovado' | 'rejeitado'
 type StakeActionState = { diaryId: number; stakeIndex: number; status: 'aprovado' | 'rejeitado' } | null
@@ -35,234 +29,122 @@ function Badge({ status, rounded = false }: { status: ConferenciaStatus; rounded
   )
 }
 
-function StakeAcoes({
-  item,
-  stakeIndex,
-  pendingStakeAction,
-  onStakeAction,
-}: {
-  item: ConferenciaEstacaItem
-  stakeIndex: number
-  pendingStakeAction: StakeActionState
-  onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
-}) {
-  const [rejectingObs, setRejectingObs] = useState<string | null>(null)
-  const isApproving = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'aprovado'
-  const isRejecting = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'rejeitado'
-
-  if (rejectingObs !== null) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220 }}>
-        <textarea
-          autoFocus
-          placeholder="Motivo da reprovação (obrigatório)"
-          value={rejectingObs}
-          onChange={(e) => setRejectingObs(e.target.value)}
-          style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #fc8181', minHeight: 60, resize: 'vertical' }}
-        />
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            type="button"
-            className="btn"
-            style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, flex: 1 }}
-            disabled={!rejectingObs.trim() || Boolean(pendingStakeAction)}
-            onClick={() => { onStakeAction(item.id, stakeIndex, 'rejeitado', rejectingObs.trim()); setRejectingObs(null) }}
-          >
-            {isRejecting ? 'Reprovando...' : 'Confirmar'}
-          </button>
-          <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: 12 }} onClick={() => setRejectingObs(null)}>
-            Cancelar
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      <button
-        type="button"
-        className="btn"
-        style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
-        disabled={Boolean(pendingStakeAction)}
-        onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
-      >
-        {isApproving ? 'Aprovando...' : 'Aprovar'}
-      </button>
-      <button
-        type="button"
-        className="btn"
-        style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 96 }}
-        disabled={Boolean(pendingStakeAction)}
-        onClick={() => setRejectingObs('')}
-      >
-        Reprovar
-      </button>
-      {(isApproving || isRejecting) ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
-    </div>
-  )
-}
-
 function ExpandedRow({
   item,
   pendingStakeAction,
   onStakeAction,
-  onConsideraFatMinimo,
-  pendingFatMinimo,
 }: {
   item: ConferenciaEstacaItem
   pendingStakeAction: StakeActionState
   onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
-  onConsideraFatMinimo: (diaryId: number, considera: boolean) => void
-  pendingFatMinimo: number | null
 }) {
-  const { estacasComCusto, ocorrencias, contratoPrecos, consideraFatMinimo, producaoReal, valorFaturado, valorFaturadoFechado, conferenciaStatus } = item
-  const fatMinimoValor = contratoPrecos?.fatMinimoValor ?? null
-  const isFatMinimoPending = pendingFatMinimo === item.id
+  const { autoComparacao, estacas, producaoPlanejada } = item
 
-  if (!estacasComCusto || estacasComCusto.length === 0) {
+  if (autoComparacao.semEstacas) {
     return <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
   }
 
-  const totalCusto = estacasComCusto.reduce((sum, e) => sum + (e.custo_total ?? 0), 0)
-  const temAlgumCusto = estacasComCusto.some((e) => e.custo_total != null)
+  if (autoComparacao.semProducao && autoComparacao.detalhes.length === 0) {
+    return <p style={{ color: '#718096', fontSize: 13 }}>Sem composição de produção cadastrada para esta obra. Revisão manual necessária.</p>
+  }
 
   return (
     <div>
+      <p style={{ fontSize: 12, marginBottom: 8, color: '#4a5568' }}>
+        Comparação com composição de produção da obra ({producaoPlanejada.length} tipo{producaoPlanejada.length !== 1 ? 's' : ''} cadastrado{producaoPlanejada.length !== 1 ? 's' : ''}).
+      </p>
+
+      {autoComparacao.semProducao ? (
+        <div style={{ marginBottom: 10, border: '1px solid #fbd38d', background: '#fffaf0', color: '#744210', borderRadius: 10, padding: '10px 12px', fontSize: 12, fontWeight: 700 }}>
+          Sem composição de produção cadastrada para esta obra. Confira manualmente as estacas abaixo.
+        </div>
+      ) : null}
+
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse', fontSize: 13 }}>
+        <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: '#f7fafc' }}>
               <th style={thStyle}>Estaca</th>
               <th style={thStyle}>Diâm. Exec.</th>
+              <th style={thStyle}>Diâm. Plan.</th>
               <th style={thStyle}>Prof. Exec. (m)</th>
-              <th style={thStyle}>Usou Bit</th>
-              <th style={thStyle}>Metros Arm.</th>
-              <th style={thStyle}>R$/m</th>
-              <th style={thStyle}>Custo Metro</th>
-              <th style={thStyle}>Acrésc. Bit</th>
-              <th style={thStyle}>Custo Arm.</th>
-              <th style={{ ...thStyle, fontWeight: 700 }}>Custo Total</th>
+              <th style={thStyle}>Prof. Plan. (m)</th>
+              <th style={thStyle}>Diferença</th>
+              <th style={thStyle}>Sistema</th>
               <th style={thStyle}>Conferência</th>
               <th style={thStyle}>Ações</th>
             </tr>
           </thead>
           <tbody>
-            {estacasComCusto.map((estaca: EstacaComCusto) => (
-              <tr key={estaca.index} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={tdStyle}>{estaca.nome || '—'}</td>
-                <td style={tdStyle}>{estaca.diametroExec != null ? `${estaca.diametroExec} cm` : '—'}</td>
-                <td style={tdStyle}>{estaca.profExec != null ? estaca.profExec : '—'}</td>
-                <td style={tdStyle}>{estaca.usoBits ? <span style={{ color: '#276749', fontWeight: 700 }}>✓</span> : <span style={{ color: '#a0aec0' }}>—</span>}</td>
-                <td style={tdStyle}>{estaca.metrosIcamento != null ? `${estaca.metrosIcamento} m` : '—'}</td>
-                <td style={tdStyle}>{formatBRL(estaca.valorMetro)}</td>
-                <td style={tdStyle}>{formatBRL(estaca.custo_metro)}</td>
-                <td style={tdStyle}>{formatBRL(estaca.custo_bit)}</td>
-                <td style={tdStyle}>{formatBRL(estaca.custo_armacao)}</td>
-                <td style={{ ...tdStyle, fontWeight: 700 }}>{formatBRL(estaca.custo_total)}</td>
-                <td style={tdStyle}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Badge status={estaca.conferenciaStatus || 'pendente'} rounded />
-                    {estaca.conferenciaPorNome ? <span style={{ color: '#718096', fontSize: 11 }}>{estaca.conferenciaPorNome}</span> : null}
-                    {estaca.conferenciaObs ? <span style={{ color: '#718096', fontSize: 11, fontStyle: 'italic' }}>{estaca.conferenciaObs}</span> : null}
-                  </div>
-                </td>
-                <td style={tdStyle}>
-                  <StakeAcoes item={item} stakeIndex={estaca.index} pendingStakeAction={pendingStakeAction} onStakeAction={onStakeAction} />
-                </td>
-              </tr>
-            ))}
+            {autoComparacao.detalhes.map((detail, fallbackIndex) => {
+              const stakeIndex = detail.index ?? fallbackIndex
+              const isApproving = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'aprovado'
+              const isRejecting = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'rejeitado'
+              const isThisPending = isApproving || isRejecting
+
+              return (
+                <tr key={stakeIndex} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={tdStyle}>{detail.estaca || '-'}</td>
+                  <td style={tdStyle}>{detail.diametroExec != null ? `${detail.diametroExec} cm` : '-'}</td>
+                  <td style={tdStyle}>{detail.diametroPlan != null ? `${detail.diametroPlan} cm` : '-'}</td>
+                  <td style={tdStyle}>{detail.profExec != null ? detail.profExec : '-'}</td>
+                  <td style={tdStyle}>{detail.profPlan != null ? detail.profPlan : '-'}</td>
+                  <td style={tdStyle}>
+                    {detail.diferencaPct != null
+                      ? `${detail.diferencaPct}%`
+                      : detail.motivo === 'sem_referencia' || detail.motivo === 'sem_producao'
+                        ? 'sem ref.'
+                        : '-'}
+                  </td>
+                  <td style={tdStyle}>
+                    {detail.ok
+                      ? <span style={{ color: '#276749', fontWeight: 700 }}>OK</span>
+                      : <span style={{ color: '#9b2c2c', fontWeight: 700 }}>Fora</span>
+                    }
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <Badge status={detail.conferenciaStatus || 'pendente'} rounded />
+                      {detail.conferenciaPorNome ? <span style={{ color: '#718096', fontSize: 11 }}>{detail.conferenciaPorNome}</span> : null}
+                      {detail.conferenciaObs ? <span style={{ color: '#718096', fontSize: 11, fontStyle: 'italic' }}>{detail.conferenciaObs}</span> : null}
+                    </div>
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
+                        disabled={Boolean(pendingStakeAction)}
+                        onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
+                      >
+                        {isApproving ? 'Aprovando...' : 'Aprovar'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 96 }}
+                        disabled={Boolean(pendingStakeAction)}
+                        onClick={() => {
+                          const obs = window.prompt(`Motivo para reprovar a estaca ${detail.estaca || fallbackIndex + 1}:`)
+                          if (obs?.trim()) onStakeAction(item.id, stakeIndex, 'rejeitado', obs.trim())
+                        }}
+                      >
+                        {isRejecting ? 'Reprovando...' : 'Reprovar'}
+                      </button>
+                      {isThisPending ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
-          {temAlgumCusto ? (
-            <tfoot>
-              <tr style={{ background: '#f7fafc', borderTop: '2px solid #e2e8f0' }}>
-                <td colSpan={9} style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#4a5568' }}>Total do Diário</td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: '#276749' }}>R$ {formatBRL(totalCusto)}</td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          ) : null}
         </table>
       </div>
 
-      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-        <strong style={{ fontSize: 13, color: '#2d3748' }}>Ocorrências do Diário</strong>
-        {ocorrencias && ocorrencias.length > 0 ? (
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18, listStyle: 'disc' }}>
-            {ocorrencias.map((o, i) => (
-              <li key={i} style={{ fontSize: 12, color: '#4a5568', marginBottom: 4 }}>
-                {o.hora_ini && o.hora_fim ? (
-                  <span style={{ color: '#718096', marginRight: 6 }}>{o.hora_ini}–{o.hora_fim}</span>
-                ) : null}
-                {o.desc}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p style={{ color: '#a0aec0', fontSize: 12, margin: '6px 0 0' }}>Nenhuma ocorrência registrada.</p>
-        )}
-      </div>
-
-      {temAlgumCusto && (
-        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 24 }}>
-          <div>
-            <strong style={{ fontSize: 13, color: '#2d3748', display: 'block', marginBottom: 8 }}>Faturamento</strong>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ color: '#718096' }}>Produção Real:</span>
-                <span style={{ fontWeight: 700, color: '#2d3748' }}>R$ {formatBRL(producaoReal)}</span>
-              </div>
-              {fatMinimoValor != null && (
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ color: '#718096' }}>Faturamento Mínimo:</span>
-                  <span style={{ fontWeight: 600, color: '#744210' }}>R$ {formatBRL(fatMinimoValor)}</span>
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
-                <span style={{ color: '#718096' }}>Valor a Faturar:</span>
-                <span style={{ fontWeight: 700, fontSize: 15, color: '#276749' }}>
-                  R$ {formatBRL(conferenciaStatus === 'aprovado' && valorFaturadoFechado != null ? valorFaturadoFechado : valorFaturado)}
-                </span>
-                {consideraFatMinimo && fatMinimoValor != null && producaoReal != null && producaoReal < fatMinimoValor && (
-                  <span style={{ fontSize: 11, background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e', borderRadius: 4, padding: '1px 6px' }}>mín. aplicado</span>
-                )}
-                {conferenciaStatus === 'aprovado' && valorFaturadoFechado != null && (
-                  <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '1px 6px' }}>fechado</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {fatMinimoValor != null && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#2d3748' }}>Considerar Faturamento Mínimo</strong>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: isFatMinimoPending ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
-                <div
-                  onClick={() => !isFatMinimoPending && onConsideraFatMinimo(item.id, !consideraFatMinimo)}
-                  style={{
-                    width: 40, height: 22, borderRadius: 11, position: 'relative', cursor: isFatMinimoPending ? 'not-allowed' : 'pointer',
-                    background: consideraFatMinimo ? '#38a169' : '#cbd5e0', transition: 'background 0.2s',
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute', top: 3, left: consideraFatMinimo ? 21 : 3,
-                    width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
-                  }} />
-                </div>
-                <span style={{ fontSize: 13, color: consideraFatMinimo ? '#276749' : '#718096', fontWeight: consideraFatMinimo ? 700 : 400 }}>
-                  {isFatMinimoPending ? 'Salvando...' : consideraFatMinimo ? 'Sim' : 'Não'}
-                </span>
-              </label>
-              <p style={{ fontSize: 11, color: '#a0aec0', margin: 0, maxWidth: 220 }}>
-                {consideraFatMinimo
-                  ? 'Usa o maior valor entre produção real e faturamento mínimo.'
-                  : 'Usa estritamente a produção real.'}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+      {estacas.length === 0 ? (
+        <p style={{ color: '#718096', fontSize: 13, marginTop: 8 }}>Sem dados de estacas no diário.</p>
+      ) : null}
     </div>
   )
 }
@@ -410,20 +292,92 @@ function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => vo
   )
 }
 
+const PERDAS = [
+  { grupo: 'Comercial', itens: ['Aguardando início da obra','Aguardando liberação de projeto do cliente','Aguardando projeto interno','Dificuldade de perfuração devido ao terreno','Estacas curtas / diâmetro menor','Falta de área de trabalho','Falta de liberação da obra','Interferências na obra','Mudança de projeto','Obra embargada','Paralisação do cliente','Problema com vizinhança','Reunião com cliente','Revisão de projeto'] },
+  { grupo: 'Segurança', itens: ['Aguardando documentação de equipe'] },
+  { grupo: 'Manutenção', itens: ["Aguardando documentação (equipamento)",'Aguardando manutenção','Manutenção da máquina em obra','Manutenção da máquina no pátio',"Problemas com a bomba d'água",'Problemas hidráulicos','Problemas elétricos','Quebra de equipamento','Troca de peças','Vazamentos'] },
+  { grupo: 'Caldeiraria', itens: ['Reparo de trados e/ou ponteiras','Adaptações e melhorias','Manutenção preventiva / melhorias','Pintura'] },
+  { grupo: 'Produção', itens: ['(Des)Montagem do equipamento','Aguardando armação / trilho','Aguardando bomba de concreto','Aguardando concretagem das estacas','Aguardando concreto','Aguardando ferragem','Aguardando locação','Aguardando topografia','Falta de insumos','Limpeza da área','Montagem de armação','Reposicionamento de equipamento','Testes operacionais'] },
+  { grupo: 'Logística', itens: ['Aguardando peças','Aguardando transporte','Mobilização da máquina','Desmobilização da máquina','Problemas com transporte'] },
+  { grupo: 'Condições naturais', itens: ['Chuva','Domingo','Feriado','Sábado ocioso','Terreno inacessível','Ventos fortes'] },
+  { grupo: 'Geoteste', itens: ['Aguardando execução de ensaios','Execução de ensaios'] },
+  { grupo: 'Operacional', itens: ['Diário não enviado','Erro operacional'] },
+  { grupo: 'Gestão de pessoas', itens: ['Falta de equipe','Folga acordada com o cliente','Troca de equipe'] },
+]
+
+function AprovarModal({ onConfirm, onCancel }: { onConfirm: (meta_atingida: boolean, perda?: string) => void; onCancel: () => void }) {
+  const [tipo, setTipo] = useState<'meta' | 'perda'>('meta')
+  const [perdaSelecionada, setPerdaSelecionada] = useState('')
+
+  const podeConfirmar = tipo === 'meta' || (tipo === 'perda' && perdaSelecionada !== '')
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 440, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Aprovar diário</h3>
+        <p style={{ fontSize: 13, color: '#4a5568', marginBottom: 16 }}>Informe o resultado em relação à meta diária (obrigatório):</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: tipo === 'meta' ? 600 : 400 }}>
+            <input type="radio" name="tipo" value="meta" checked={tipo === 'meta'} onChange={() => { setTipo('meta'); setPerdaSelecionada('') }} />
+            Meta atingida
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: tipo === 'perda' ? 600 : 400 }}>
+            <input type="radio" name="tipo" value="perda" checked={tipo === 'perda'} onChange={() => setTipo('perda')} />
+            Perda
+          </label>
+        </div>
+
+        {tipo === 'perda' && (
+          <select
+            value={perdaSelecionada}
+            onChange={(e) => setPerdaSelecionada(e.target.value)}
+            className="field-select"
+            style={{ width: '100%', marginBottom: 8 }}
+            autoFocus
+          >
+            <option value="">Selecione a perda...</option>
+            {PERDAS.map((grupo) => (
+              <optgroup key={grupo.grupo} label={grupo.grupo}>
+                {grupo.itens.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn" style={{ background: '#e2e8f0', color: '#2d3748' }} onClick={onCancel}>Cancelar</button>
+          <button
+            type="button"
+            className="btn"
+            style={{ background: '#38a169', color: '#fff' }}
+            disabled={!podeConfirmar}
+            onClick={() => onConfirm(tipo === 'meta', tipo === 'perda' ? perdaSelecionada : undefined)}
+          >
+            Confirmar aprovação
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DiarioConferenciaPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const isAdmin = user?.isAdmin ?? false
 
-  const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '', engenheiro: '' })
-  const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', engenheiro: '', page: 1 })
+  const [filters, setFilters] = useState({ obra_numero: '', conferencia_status: '' })
+  const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', page: 1 })
   const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
+  const [aprovarId, setAprovarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
-  const [pendingFatMinimo, setPendingFatMinimo] = useState<number | null>(null)
 
   const query = useQuery({
     queryKey: ['conferencia-estacas', applied],
@@ -432,15 +386,16 @@ export default function DiarioConferenciaPage() {
       limit: 20,
       obra_numero: applied.obra_numero || undefined,
       conferencia_status: applied.conferencia_status || undefined,
-      engenheiro: applied.engenheiro || undefined,
     }),
     placeholderData: keepPreviousData,
     staleTime: 1000 * 60 * 2,
   })
 
   const aprovarMutation = useMutation({
-    mutationFn: ({ id, obs }: { id: number; obs?: string }) => conferenciaEstacasApi.aprovar(id, obs),
+    mutationFn: ({ id, meta_atingida, perda, obs }: { id: number; meta_atingida: boolean; perda?: string; obs?: string }) =>
+      conferenciaEstacasApi.aprovar(id, { meta_atingida, perda, obs }),
     onSuccess: async () => {
+      setAprovarId(null)
       setActionError('')
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
@@ -470,21 +425,6 @@ export default function DiarioConferenciaPage() {
     onError: (error) => setActionError(extractApiErrorMessage(error)),
     onSettled: () => setPendingStakeAction(null),
   })
-
-  const fatMinimoMutation = useMutation({
-    mutationFn: ({ id, considera }: { id: number; considera: boolean }) =>
-      conferenciaEstacasApi.setConsideraFatMinimo(id, considera),
-    onMutate: (variables) => setPendingFatMinimo(variables.id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
-    },
-    onError: (error) => setActionError(extractApiErrorMessage(error)),
-    onSettled: () => setPendingFatMinimo(null),
-  })
-
-  function handleConsideraFatMinimo(diaryId: number, considera: boolean) {
-    fatMinimoMutation.mutate({ id: diaryId, considera })
-  }
 
   function handleApply() {
     setApplied({ ...filters, page: 1 })
@@ -572,17 +512,6 @@ export default function DiarioConferenciaPage() {
             </select>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="field-label">Engenheiro Responsável</label>
-            <input
-              type="text"
-              value={filters.engenheiro}
-              onChange={(event) => setFilters((current) => ({ ...current, engenheiro: event.target.value }))}
-              placeholder="Nome do engenheiro"
-              className="field-input w-44"
-            />
-          </div>
-
           <button
             type="button"
             onClick={handleApply}
@@ -618,7 +547,6 @@ export default function DiarioConferenciaPage() {
                 <th style={thStyle}>Operador</th>
                 <th style={thStyle}>Estacas</th>
                 <th style={thStyle}>Conferência</th>
-                <th style={thStyle}>Valor Faturado</th>
                 <th style={thStyle}>Portal</th>
                 <th style={thStyle}>Ações</th>
               </tr>
@@ -660,78 +588,61 @@ export default function DiarioConferenciaPage() {
                       </div>
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      {item.conferenciaStatus === 'aprovado' && item.valorFaturadoFechado != null ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <span style={{ fontWeight: 700, color: '#276749', fontSize: 13 }}>R$ {formatBRL(item.valorFaturadoFechado)}</span>
-                          {item.producaoRealFechado != null && item.producaoRealFechado !== item.valorFaturadoFechado && (
-                            <span style={{ fontSize: 11, color: '#a0aec0' }}>Prod.: R$ {formatBRL(item.producaoRealFechado)}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ color: '#a0aec0', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
                       {item.conferenciaStatus === 'aprovado'
                         ? <span style={{ background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Visível</span>
                         : <span style={{ background: '#edf2f7', color: '#718096', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Oculto</span>
                       }
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
-                        {item.conferenciaStatus === 'pendente' ? (
-                          <div style={{ display: 'flex', gap: 5 }}>
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                              disabled={aprovarMutation.isPending}
-                              onClick={() => aprovarMutation.mutate({ id: item.id })}
-                            >
-                              {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ background: '#e53e3e', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                              disabled={rejeitarMutation.isPending}
-                              onClick={() => setRejeitarId(item.id)}
-                            >
-                              Rejeitar
-                            </button>
-                          </div>
-                        ) : null}
-                        {item.conferenciaStatus === 'rejeitado' ? (
+                      {item.conferenciaStatus === 'pendente' ? (
+                        <div style={{ display: 'flex', gap: 6 }}>
                           <button
                             type="button"
                             className="btn"
                             style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
                             disabled={aprovarMutation.isPending}
-                            onClick={() => aprovarMutation.mutate({ id: item.id })}
+                            onClick={() => setAprovarId(item.id)}
                           >
-                            {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
+                            Aprovar
                           </button>
-                        ) : null}
-                        <div style={{ display: 'flex', gap: 5 }}>
                           <button
                             type="button"
                             className="btn"
-                            style={{ background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                            disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
-                            title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
-                            onClick={() => void handleSignatureLink(item)}
+                            style={{ background: '#e53e3e', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                            disabled={rejeitarMutation.isPending}
+                            onClick={() => setRejeitarId(item.id)}
                           >
-                            {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
+                            Rejeitar
                           </button>
-                          <Link
-                            to={`/diarios/${item.id}/editar`}
-                            className="btn"
-                            style={{ background: '#4a5568', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                          >
-                            Editar diário
-                          </Link>
                         </div>
-                      </div>
+                      ) : null}
+                      {item.conferenciaStatus === 'rejeitado' ? (
+                        <button
+                          type="button"
+                          className="btn"
+                          style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                          disabled={aprovarMutation.isPending}
+                          onClick={() => setAprovarId(item.id)}
+                        >
+                          Aprovar
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0',
+                          color: '#fff',
+                          padding: '4px 10px',
+                          fontSize: 12,
+                          marginTop: item.conferenciaStatus === 'pendente' ? 6 : 0,
+                        }}
+                        disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
+                        title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
+                        onClick={() => void handleSignatureLink(item)}
+                      >
+                        {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
+                      </button>
                     </td>
                   </tr>
                   {expanded === item.id ? (
@@ -741,8 +652,6 @@ export default function DiarioConferenciaPage() {
                           item={item}
                           pendingStakeAction={pendingStakeAction}
                           onStakeAction={(id, stakeIndex, status, obs) => estacaMutation.mutate({ id, stakeIndex, status, obs })}
-                          onConsideraFatMinimo={handleConsideraFatMinimo}
-                          pendingFatMinimo={pendingFatMinimo}
                         />
                       </td>
                     </tr>
@@ -767,6 +676,13 @@ export default function DiarioConferenciaPage() {
         <RejeitarModal
           onConfirm={(obs) => rejeitarMutation.mutate({ id: rejeitarId, obs })}
           onCancel={() => setRejeitarId(null)}
+        />
+      ) : null}
+
+      {aprovarId !== null ? (
+        <AprovarModal
+          onConfirm={(meta_atingida, perda) => aprovarMutation.mutate({ id: aprovarId, meta_atingida, perda })}
+          onCancel={() => setAprovarId(null)}
         />
       ) : null}
     </div>
