@@ -1,8 +1,8 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import PaginationControls from '@/components/ui/PaginationControls'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { conferenciaEstacasApi, diarioAdminSignatureService, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { conferenciaEstacasApi, diarioAdminSignatureService, planejamentoDiarioApi, toleranciaConferenciaApi, type ConferenciaEstacaItem, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -305,17 +305,62 @@ const PERDAS = [
   { grupo: 'Gestão de pessoas', itens: ['Falta de equipe','Folga acordada com o cliente','Troca de equipe'] },
 ]
 
-function AprovarModal({ onConfirm, onCancel }: { onConfirm: (meta_atingida: boolean, perda?: string) => void; onCancel: () => void }) {
+function AprovarModal({
+  equipamentoId,
+  dataDiario,
+  estacasRealizadas,
+  onConfirm,
+  onCancel,
+}: {
+  equipamentoId: number | null
+  dataDiario: string
+  estacasRealizadas: number
+  onConfirm: (meta_atingida: boolean, perda?: string) => void
+  onCancel: () => void
+}) {
+  const planQuery = useQuery({
+    queryKey: ['planejamento-modal', equipamentoId, dataDiario],
+    queryFn: () =>
+      equipamentoId
+        ? planejamentoDiarioApi.list({ equipamento_id: equipamentoId, data_inicio: dataDiario, data_fim: dataDiario })
+        : Promise.resolve([]),
+    enabled: !!equipamentoId && !!dataDiario,
+    staleTime: 1000 * 60 * 5,
+  })
+
+  const totalPlanejado = (planQuery.data ?? []).reduce(
+    (sum, p) => sum + p.itens.reduce((s, it) => s + it.metaQtdEstacas, 0),
+    0
+  )
+  const temPlanejamento = (planQuery.data ?? []).length > 0
+  const autoMeta = !temPlanejamento || estacasRealizadas >= totalPlanejado
+
   const [tipo, setTipo] = useState<'meta' | 'perda'>('meta')
   const [perdaSelecionada, setPerdaSelecionada] = useState('')
+  const [initialized, setInitialized] = useState(false)
+
+  useEffect(() => {
+    if ((planQuery.isSuccess || !equipamentoId) && !initialized) {
+      setTipo(autoMeta ? 'meta' : 'perda')
+      setInitialized(true)
+    }
+  }, [planQuery.isSuccess, equipamentoId, initialized, autoMeta])
 
   const podeConfirmar = tipo === 'meta' || (tipo === 'perda' && perdaSelecionada !== '')
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 440, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 460, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
         <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>Aprovar diário</h3>
-        <p style={{ fontSize: 13, color: '#4a5568', marginBottom: 16 }}>Informe o resultado em relação à meta diária (obrigatório):</p>
+        <p style={{ fontSize: 13, color: '#4a5568', marginBottom: temPlanejamento ? 8 : 16 }}>Informe o resultado em relação à meta diária (obrigatório):</p>
+
+        {temPlanejamento && (
+          <div style={{ background: autoMeta ? '#f0fff4' : '#fff5f5', border: `1px solid ${autoMeta ? '#c6f6d5' : '#fed7d7'}`, borderRadius: 6, padding: '8px 12px', marginBottom: 14, fontSize: 13 }}>
+            <span style={{ fontWeight: 600 }}>Meta planejada:</span> {totalPlanejado} estacas &nbsp;|&nbsp;
+            <span style={{ fontWeight: 600 }}>Realizado:</span> {estacasRealizadas} estacas &nbsp;—&nbsp;
+            <span style={{ color: autoMeta ? '#276749' : '#c53030', fontWeight: 600 }}>{autoMeta ? 'Meta atingida ✓' : 'Abaixo da meta'}</span>
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: tipo === 'meta' ? 600 : 400 }}>
@@ -353,10 +398,10 @@ function AprovarModal({ onConfirm, onCancel }: { onConfirm: (meta_atingida: bool
             type="button"
             className="btn"
             style={{ background: '#38a169', color: '#fff' }}
-            disabled={!podeConfirmar}
+            disabled={!podeConfirmar || planQuery.isPending}
             onClick={() => onConfirm(tipo === 'meta', tipo === 'perda' ? perdaSelecionada : undefined)}
           >
-            Confirmar aprovação
+            {planQuery.isPending ? 'Carregando...' : 'Confirmar aprovação'}
           </button>
         </div>
       </div>
@@ -374,7 +419,7 @@ export default function DiarioConferenciaPage() {
   const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
-  const [aprovarId, setAprovarId] = useState<number | null>(null)
+  const [aprovarItem, setAprovarItem] = useState<ConferenciaEstacaItem | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
@@ -395,7 +440,7 @@ export default function DiarioConferenciaPage() {
     mutationFn: ({ id, meta_atingida, perda, obs }: { id: number; meta_atingida: boolean; perda?: string; obs?: string }) =>
       conferenciaEstacasApi.aprovar(id, { meta_atingida, perda, obs }),
     onSuccess: async () => {
-      setAprovarId(null)
+      setAprovarItem(null)
       setActionError('')
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
@@ -601,7 +646,7 @@ export default function DiarioConferenciaPage() {
                             className="btn"
                             style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
                             disabled={aprovarMutation.isPending}
-                            onClick={() => setAprovarId(item.id)}
+                            onClick={() => setAprovarItem(item)}
                           >
                             Aprovar
                           </button>
@@ -622,7 +667,7 @@ export default function DiarioConferenciaPage() {
                           className="btn"
                           style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
                           disabled={aprovarMutation.isPending}
-                          onClick={() => setAprovarId(item.id)}
+                          onClick={() => setAprovarItem(item)}
                         >
                           Aprovar
                         </button>
@@ -679,10 +724,13 @@ export default function DiarioConferenciaPage() {
         />
       ) : null}
 
-      {aprovarId !== null ? (
+      {aprovarItem !== null ? (
         <AprovarModal
-          onConfirm={(meta_atingida, perda) => aprovarMutation.mutate({ id: aprovarId, meta_atingida, perda })}
-          onCancel={() => setAprovarId(null)}
+          equipamentoId={aprovarItem.equipamentoId}
+          dataDiario={aprovarItem.dataDiario}
+          estacasRealizadas={aprovarItem.estacas.length}
+          onConfirm={(meta_atingida, perda) => aprovarMutation.mutate({ id: aprovarItem.id, meta_atingida, perda })}
+          onCancel={() => setAprovarItem(null)}
         />
       ) : null}
     </div>

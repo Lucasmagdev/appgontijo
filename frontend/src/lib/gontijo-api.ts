@@ -2770,6 +2770,7 @@ export type ConferenciaEstacaItem = {
   cliente: string
   dataDiario: string
   equipamento: string
+  equipamentoId: number | null
   operadorNome: string
   engenheiroResponsavel: string | null
   conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
@@ -3066,5 +3067,28 @@ export const medicoesApi = {
   },
   pdfUrl(id: number): string {
     return `${api.defaults.baseURL ?? ''}/gontijo/medicoes/${id}/pdf`
+  },
+}
+
+export type PlanejamentoDiarioItemResumo = { metaQtdEstacas: number; diametro: string; profundidade: number }
+export type PlanejamentoDiarioResumo = { id: number; data: string; equipamentoId: number; fatMinimoGarantido: boolean; itens: PlanejamentoDiarioItemResumo[] }
+
+export const planejamentoDiarioApi = {
+  async list(params: { equipamento_id?: number; data_inicio?: string; data_fim?: string }): Promise<PlanejamentoDiarioResumo[]> {
+    const res = await api.get<{ ok: boolean; data: unknown[] }>('/gontijo/planejamento-diario', { params })
+    return (res.data.data ?? []).map((r) => {
+      const row = r as Record<string, unknown>
+      return {
+        id: Number(row.id),
+        data: String(row.data ?? ''),
+        equipamentoId: Number(row.equipamentoId ?? row.equipamento_id ?? 0),
+        fatMinimoGarantido: Boolean(row.fatMinimoGarantido ?? row.fat_minimo_garantido),
+        itens: ((row.itens ?? []) as Record<string, unknown>[]).map((it) => ({
+          metaQtdEstacas: Number(it.metaQtdEstacas ?? it.meta_qtd_estacas ?? 0),
+          diametro: String(it.diametro ?? ''),
+          profundidade: Number(it.profundidade ?? 0),
+        })),
+      }
+    })
   },
 }
