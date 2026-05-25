@@ -440,22 +440,48 @@ const PERDAS_GRUPOS: { grupo: string; itens: string[] }[] = [
 ]
 
 function AprovarModal({
+  item,
   onConfirm,
   onCancel,
 }: {
+  item: ConferenciaEstacaItem
   onConfirm: (opts: { meta_atingida: boolean; perda?: string; obs?: string }) => void
   onCancel: () => void
 }) {
-  const [metaAtingida, setMetaAtingida] = useState<boolean | null>(null)
+  const [metaAtingida, setMetaAtingida] = useState<boolean | null>(item.metaSugerida)
   const [perda, setPerda] = useState('')
   const [obs, setObs] = useState('')
 
-  const canConfirm = metaAtingida === true || (metaAtingida === false && perda !== '')
+  const resultadoAjustado = item.metaSugerida !== null && metaAtingida !== null && metaAtingida !== item.metaSugerida
+  const canConfirm = (metaAtingida === true || (metaAtingida === false && perda !== '')) && (!resultadoAjustado || obs.trim() !== '')
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Aprovar diário</h3>
+
+        {item.planejamentoStatus === 'calculado' && item.planejamentoValorEstipuladoDia != null ? (
+          <div style={{ marginBottom: 16, border: '1px solid #d6bcfa', borderRadius: 8, background: '#faf5ff', padding: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b46c1', marginBottom: 8 }}>Comparação com o planejamento diário</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <div><div style={{ fontSize: 11, color: '#718096' }}>Meta estipulada</div><strong>R$ {formatBRL(item.planejamentoValorEstipuladoDia)}</strong></div>
+              <div><div style={{ fontSize: 11, color: '#718096' }}>Valor faturado</div><strong>R$ {formatBRL(item.valorFaturado)}</strong></div>
+              <div>
+                <div style={{ fontSize: 11, color: '#718096' }}>Diferença</div>
+                <strong style={{ color: (item.diferencaMeta ?? 0) >= 0 ? '#276749' : '#9b2c2c' }}>
+                  R$ {formatBRL(item.diferencaMeta)}
+                </strong>
+              </div>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: item.metaSugerida ? '#276749' : '#9b2c2c' }}>
+              Sugestão automática: {item.metaSugerida ? 'meta atingida' : 'registrar perda'}.
+            </div>
+          </div>
+        ) : item.planejamentoStatus === 'pendente' ? (
+          <div style={{ marginBottom: 16, border: '1px solid #f6e05e', borderRadius: 8, background: '#fffaf0', padding: 10, color: '#744210', fontSize: 12 }}>
+            O planejamento deste dia possui valor pendente. Defina o resultado manualmente.
+          </div>
+        ) : null}
 
         <div style={{ marginBottom: 16 }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#2d3748', marginBottom: 10 }}>Meta de produção atingida?</p>
@@ -506,17 +532,24 @@ function AprovarModal({
                 </optgroup>
               ))}
             </select>
+            {perda ? (
+              <div style={{ marginTop: 9, background: '#faf5ff', border: '1px solid #d6bcfa', color: '#6b46c1', borderRadius: 6, padding: '8px 10px', fontSize: 12, fontWeight: 600 }}>
+                Perda considerada: {perda}
+              </div>
+            ) : null}
           </div>
         )}
 
         <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>Observação (opcional)</label>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>
+            Observação {resultadoAjustado ? '(obrigatória para ajustar a sugestão)' : '(opcional)'}
+          </label>
           <textarea
             value={obs}
             onChange={(e) => setObs(e.target.value)}
             rows={3}
             style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 4, padding: '6px 10px', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
-            placeholder="Observações adicionais..."
+            placeholder={resultadoAjustado ? 'Justifique a alteração do resultado sugerido...' : 'Observações adicionais...'}
           />
         </div>
 
@@ -817,8 +850,8 @@ export default function DiarioConferenciaPage() {
                           <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 3, padding: '1px 5px' }}>Meta atingida</span>
                         )}
                         {item.conferenciaStatus === 'aprovado' && item.metaAtingida === false && item.perda && (
-                          <span style={{ fontSize: 11, background: '#fff5f5', color: '#9b2c2c', border: '1px solid #fc8181', borderRadius: 3, padding: '1px 5px' }} title={item.perda}>
-                            {item.perda.length > 30 ? `${item.perda.slice(0, 30)}…` : item.perda}
+                          <span style={{ fontSize: 11, fontWeight: 600, background: '#faf5ff', color: '#6b46c1', border: '1px solid #d6bcfa', borderRadius: 3, padding: '2px 6px' }} title={`Perda considerada: ${item.perda}`}>
+                            Perda: {item.perda.length > 30 ? `${item.perda.slice(0, 30)}...` : item.perda}
                           </span>
                         )}
                         {item.conferenciaPorNome ? <span style={{ fontSize: 11, color: '#718096' }}>{item.conferenciaPorNome}</span> : null}
@@ -934,6 +967,7 @@ export default function DiarioConferenciaPage() {
 
       {aprovarId !== null ? (
         <AprovarModal
+          item={items.find((item) => item.id === aprovarId)!}
           onConfirm={(opts) => aprovarMutation.mutate({ id: aprovarId, opts })}
           onCancel={() => setAprovarId(null)}
         />

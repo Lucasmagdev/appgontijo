@@ -19,7 +19,7 @@ import {
 } from '@/lib/gontijo-api'
 import { cn } from '@/lib/utils'
 
-type NavLeaf = { label: string; to: string; icon: React.ElementType; exact?: boolean }
+type NavLeaf = { type?: undefined; label: string; to: string; icon: React.ElementType; exact?: boolean }
 type NavDivider = { type: 'divider'; label: string }
 type NavGroup = { type: 'group'; label: string; icon: React.ElementType; children: NavLeaf[] }
 type NavItem = NavLeaf | NavDivider | NavGroup

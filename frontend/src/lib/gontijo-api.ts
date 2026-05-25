@@ -2766,6 +2766,7 @@ export type OcorrenciaConferencia = {
 export type ConferenciaEstacaItem = {
   id: number
   obraId: number
+  equipamentoId: number | null
   obraNumero: string
   cliente: string
   dataDiario: string
@@ -2790,6 +2791,10 @@ export type ConferenciaEstacaItem = {
   consideraFatMinimo: boolean | null
   producaoReal: number | null
   valorFaturado: number | null
+  planejamentoValorEstipuladoDia: number | null
+  planejamentoStatus: 'calculado' | 'pendente' | null
+  metaSugerida: boolean | null
+  diferencaMeta: number | null
   producaoRealFechado: number | null
   valorFaturadoFechado: number | null
 }
@@ -3094,6 +3099,8 @@ export type PlanejamentoDiarioItem = {
   metaQtdEstacas: number
   diametro: string
   profundidade: number
+  valorMetro?: number | null
+  valorEstipulado?: number | null
 }
 
 export type PlanejamentoDiario = {
@@ -3105,6 +3112,15 @@ export type PlanejamentoDiario = {
   obraNumero: string
   cliente: string
   fatMinimoGarantido: boolean
+  valorEstipuladoDia: number | null
+  statusCalculo: 'calculado' | 'pendente'
+  incluiMobilizacao: boolean
+  valorMobilizacao: number | null
+  incluiDesmobilizacao: boolean
+  valorDesmobilizacao: number | null
+  incluiOutroAcrescimo: boolean
+  outroAcrescimoDescricao: string
+  valorOutroAcrescimo: number | null
   itens: PlanejamentoDiarioItem[]
 }
 
@@ -3114,6 +3130,11 @@ export type PlanejamentoDiarioPayload = {
   equipamento_id: number
   obra_numero: string
   fat_minimo_garantido: boolean
+  inclui_mobilizacao: boolean
+  inclui_desmobilizacao: boolean
+  inclui_outro_acrescimo: boolean
+  outro_acrescimo_descricao?: string
+  valor_outro_acrescimo?: number
   itens: PlanejamentoDiarioItem[]
 }
 
@@ -3126,7 +3147,11 @@ export const planejamentoDiarioApi = {
     const res = await api.post<{ ok: boolean; created: number }>('/gontijo/planejamento-diario', payload)
     return res.data
   },
-  async update(id: number, payload: { fat_minimo_garantido: boolean; itens: PlanejamentoDiarioItem[] }): Promise<void> {
+  async preview(payload: Pick<PlanejamentoDiarioPayload, 'obra_numero' | 'itens' | 'inclui_mobilizacao' | 'inclui_desmobilizacao' | 'inclui_outro_acrescimo' | 'outro_acrescimo_descricao' | 'valor_outro_acrescimo'>): Promise<{ itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null }> {
+    const res = await api.post<{ ok: boolean; data: { itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null } }>('/gontijo/planejamento-diario/preview', payload)
+    return res.data.data
+  },
+  async update(id: number, payload: Omit<PlanejamentoDiarioPayload, 'data_inicio' | 'data_fim' | 'equipamento_id' | 'obra_numero'>): Promise<void> {
     await api.put(`/gontijo/planejamento-diario/${id}`, payload)
   },
   async remove(id: number): Promise<void> {
