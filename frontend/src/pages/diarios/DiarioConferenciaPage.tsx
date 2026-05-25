@@ -377,6 +377,166 @@ function ParametrosModal({
   )
 }
 
+const PERDAS_GRUPOS: { grupo: string; itens: string[] }[] = [
+  {
+    grupo: 'Obra / Projeto',
+    itens: [
+      'Aguardando início da obra','Aguardando liberação de projeto do cliente','Aguardando projeto interno',
+      'Falta de liberação da obra','Mudança de projeto','Obra embargada','Paralisação do cliente',
+      'Problema com vizinhança','Reunião com cliente','Revisão de projeto',
+    ],
+  },
+  {
+    grupo: 'Execução',
+    itens: [
+      'Dificuldade de perfuração devido ao terreno','Estacas curtas / diâmetro menor',
+      'Falta de área de trabalho','Interferências na obra',
+    ],
+  },
+  {
+    grupo: 'Manutenção / Equipamento',
+    itens: [
+      'Aguardando manutenção','Manutenção da máquina em obra','Manutenção da máquina no pátio',
+      "Problemas com a bomba d'água",'Problemas hidráulicos','Problemas elétricos',
+      'Quebra de equipamento','Troca de peças','Vazamentos','Reparo de trados e/ou ponteiras',
+      'Adaptações e melhorias','Manutenção preventiva / melhorias','Pintura',
+    ],
+  },
+  {
+    grupo: 'Logística / Insumos',
+    itens: [
+      '(Des)Montagem do equipamento','Aguardando armação / trilho','Aguardando bomba de concreto',
+      'Aguardando concretagem das estacas','Aguardando concreto','Aguardando ferragem',
+      'Aguardando locação','Aguardando topografia','Falta de insumos','Limpeza da área',
+      'Montagem de armação','Reposicionamento de equipamento','Testes operacionais',
+    ],
+  },
+  {
+    grupo: 'Transporte / Mobilização',
+    itens: [
+      'Aguardando peças','Aguardando transporte','Mobilização da máquina',
+      'Desmobilização da máquina','Problemas com transporte',
+    ],
+  },
+  {
+    grupo: 'Equipe / Documentação',
+    itens: [
+      'Aguardando documentação de equipe','Aguardando documentação (equipamento)',
+      'Falta de equipe','Folga acordada com o cliente','Troca de equipe',
+    ],
+  },
+  {
+    grupo: 'Clima / Ambiente',
+    itens: ['Chuva','Domingo','Feriado','Sábado ocioso','Terreno inacessível','Ventos fortes'],
+  },
+  {
+    grupo: 'Ensaios',
+    itens: ['Aguardando execução de ensaios','Execução de ensaios'],
+  },
+  {
+    grupo: 'Operacional',
+    itens: ['Diário não enviado','Erro operacional'],
+  },
+]
+
+function AprovarModal({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: (opts: { meta_atingida: boolean; perda?: string; obs?: string }) => void
+  onCancel: () => void
+}) {
+  const [metaAtingida, setMetaAtingida] = useState<boolean | null>(null)
+  const [perda, setPerda] = useState('')
+  const [obs, setObs] = useState('')
+
+  const canConfirm = metaAtingida === true || (metaAtingida === false && perda !== '')
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Aprovar diário</h3>
+
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#2d3748', marginBottom: 10 }}>Meta de produção atingida?</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => { setMetaAtingida(true); setPerda('') }}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                border: `2px solid ${metaAtingida === true ? '#38a169' : '#e2e8f0'}`,
+                background: metaAtingida === true ? '#f0fff4' : '#f7fafc',
+                color: metaAtingida === true ? '#276749' : '#718096',
+              }}
+            >
+              Sim — meta atingida
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetaAtingida(false)}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                border: `2px solid ${metaAtingida === false ? '#e53e3e' : '#e2e8f0'}`,
+                background: metaAtingida === false ? '#fff5f5' : '#f7fafc',
+                color: metaAtingida === false ? '#9b2c2c' : '#718096',
+              }}
+            >
+              Não — registrar perda
+            </button>
+          </div>
+        </div>
+
+        {metaAtingida === false && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>
+              Motivo da perda <span style={{ color: '#e53e3e' }}>*</span>
+            </label>
+            <select
+              value={perda}
+              onChange={(e) => setPerda(e.target.value)}
+              style={{ width: '100%', border: `1px solid ${perda ? '#e2e8f0' : '#fc8181'}`, borderRadius: 4, padding: '7px 10px', fontSize: 13, boxSizing: 'border-box' }}
+            >
+              <option value="">Selecione o motivo...</option>
+              {PERDAS_GRUPOS.map(({ grupo, itens }) => (
+                <optgroup key={grupo} label={grupo}>
+                  {itens.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#4a5568', display: 'block', marginBottom: 4 }}>Observação (opcional)</label>
+          <textarea
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            rows={3}
+            style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 4, padding: '6px 10px', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }}
+            placeholder="Observações adicionais..."
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn" style={{ background: '#e2e8f0', color: '#2d3748' }} onClick={onCancel}>Cancelar</button>
+          <button
+            type="button"
+            className="btn"
+            style={{ background: canConfirm ? '#38a169' : '#a0aec0', color: '#fff', cursor: canConfirm ? 'pointer' : 'not-allowed' }}
+            disabled={!canConfirm}
+            onClick={() => onConfirm({ meta_atingida: metaAtingida!, perda: perda || undefined, obs: obs.trim() || undefined })}
+          >
+            Confirmar aprovação
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => void; onCancel: () => void }) {
   const [obs, setObs] = useState('')
 
@@ -420,6 +580,7 @@ export default function DiarioConferenciaPage() {
   const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [rejeitarId, setRejeitarId] = useState<number | null>(null)
+  const [aprovarId, setAprovarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
@@ -439,9 +600,11 @@ export default function DiarioConferenciaPage() {
   })
 
   const aprovarMutation = useMutation({
-    mutationFn: ({ id, obs }: { id: number; obs?: string }) => conferenciaEstacasApi.aprovar(id, obs),
+    mutationFn: ({ id, opts }: { id: number; opts: { meta_atingida: boolean; perda?: string; obs?: string } }) =>
+      conferenciaEstacasApi.aprovar(id, opts),
     onSuccess: async () => {
       setActionError('')
+      setAprovarId(null)
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
     onError: (error) => setActionError(extractApiErrorMessage(error)),
@@ -650,6 +813,14 @@ export default function DiarioConferenciaPage() {
                         {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'aprovado' && !item.conferenciaPorNome ? (
                           <span style={{ fontSize: 11, color: '#718096' }}>Auto-aprovado</span>
                         ) : null}
+                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === true && (
+                          <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 3, padding: '1px 5px' }}>Meta atingida</span>
+                        )}
+                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === false && item.perda && (
+                          <span style={{ fontSize: 11, background: '#fff5f5', color: '#9b2c2c', border: '1px solid #fc8181', borderRadius: 3, padding: '1px 5px' }} title={item.perda}>
+                            {item.perda.length > 30 ? `${item.perda.slice(0, 30)}…` : item.perda}
+                          </span>
+                        )}
                         {item.conferenciaPorNome ? <span style={{ fontSize: 11, color: '#718096' }}>{item.conferenciaPorNome}</span> : null}
                         {item.conferenciaEm ? <span style={{ fontSize: 11, color: '#718096' }}>{formatDate(item.conferenciaEm.slice(0, 10))}</span> : null}
                         {item.conferenciaObs ? (
@@ -685,10 +856,9 @@ export default function DiarioConferenciaPage() {
                               type="button"
                               className="btn"
                               style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                              disabled={aprovarMutation.isPending}
-                              onClick={() => aprovarMutation.mutate({ id: item.id })}
+                              onClick={() => setAprovarId(item.id)}
                             >
-                              {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
+                              Aprovar
                             </button>
                             <button
                               type="button"
@@ -706,10 +876,9 @@ export default function DiarioConferenciaPage() {
                             type="button"
                             className="btn"
                             style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                            disabled={aprovarMutation.isPending}
-                            onClick={() => aprovarMutation.mutate({ id: item.id })}
+                            onClick={() => setAprovarId(item.id)}
                           >
-                            {aprovarMutation.isPending ? 'Aprovando...' : 'Aprovar'}
+                            Aprovar
                           </button>
                         ) : null}
                         <div style={{ display: 'flex', gap: 5 }}>
@@ -760,6 +929,13 @@ export default function DiarioConferenciaPage() {
           limit={20}
           total={total}
           onPageChange={(page) => setApplied((current) => ({ ...current, page }))}
+        />
+      ) : null}
+
+      {aprovarId !== null ? (
+        <AprovarModal
+          onConfirm={(opts) => aprovarMutation.mutate({ id: aprovarId, opts })}
+          onCancel={() => setAprovarId(null)}
         />
       ) : null}
 

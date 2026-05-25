@@ -2775,6 +2775,8 @@ export type ConferenciaEstacaItem = {
   conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
   conferenciaEm: string | null
   conferenciaObs: string | null
+  metaAtingida: boolean | null
+  perda: string | null
   conferenciaPorNome: string | null
   assinaturaStatus: string
   linkGeradoEm: string | null
@@ -2803,8 +2805,8 @@ export const conferenciaEstacasApi = {
     }
   },
 
-  async aprovar(id: number, obs?: string): Promise<void> {
-    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, { obs })
+  async aprovar(id: number, opts: { obs?: string; meta_atingida: boolean; perda?: string }): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, opts)
   },
 
   async rejeitar(id: number, obs: string): Promise<void> {
