@@ -1748,9 +1748,11 @@ function setCookie(res, name, value, options = {}) {
   res.setHeader("Set-Cookie", parts.join("; "));
 }
 
-function cookieOptionsForRequest() {
+function cookieOptionsForRequest(req) {
   const isCrossOrigin = Boolean(process.env.CORS_ORIGIN);
-  const secure = process.env.NODE_ENV === "production" || isCrossOrigin;
+  const forwardedProto = req ? String(req.headers["x-forwarded-proto"] || "") : "";
+  const isHttps = forwardedProto === "https" || process.env.FORCE_HTTPS_COOKIES === "true";
+  const secure = (process.env.NODE_ENV === "production" || isCrossOrigin) && isHttps;
   return {
     path: "/",
     sameSite: isCrossOrigin ? "None" : "Lax",
@@ -2814,7 +2816,7 @@ app.post("/api/admin/session", async (req, res) => {
       remember,
     });
     setCookie(res, "admin_session", token, {
-      ...cookieOptionsForRequest(),
+      ...cookieOptionsForRequest(req),
       ...(remember ? { maxAge: 60 * 60 * 12 } : {}),
     });
 
@@ -4072,7 +4074,7 @@ app.post("/api/client-portal/session", async (req, res) => {
       createdAt: new Date().toISOString(),
     });
     setCookie(res, "client_portal_session", token, {
-      ...cookieOptionsForRequest(),
+      ...cookieOptionsForRequest(req),
       maxAge: 60 * 60 * 12,
     });
 
@@ -5613,7 +5615,7 @@ app.post("/api/operador/session", async (req, res) => {
       cpf: user.document,
       createdAt: new Date().toISOString(),
     });
-    setCookie(res, "operador_session", token, cookieOptionsForRequest());
+    setCookie(res, "operador_session", token, cookieOptionsForRequest(req));
 
     return res.json({
       ok: true,
