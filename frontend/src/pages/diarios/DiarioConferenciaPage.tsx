@@ -623,6 +623,14 @@ export default function DiarioConferenciaPage() {
                         {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'aprovado' && !item.conferenciaPorNome ? (
                           <span style={{ fontSize: 11, color: '#718096' }}>Auto-aprovado</span>
                         ) : null}
+                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === true && (
+                          <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 3, padding: '1px 5px' }}>Meta atingida</span>
+                        )}
+                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === false && item.perda && (
+                          <span style={{ fontSize: 11, background: '#fff5f5', color: '#9b2c2c', border: '1px solid #fc8181', borderRadius: 3, padding: '1px 5px' }} title={item.perda}>
+                            {item.perda.length > 30 ? `${item.perda.slice(0, 30)}…` : item.perda}
+                          </span>
+                        )}
                         {item.conferenciaPorNome ? <span style={{ fontSize: 11, color: '#718096' }}>{item.conferenciaPorNome}</span> : null}
                         {item.conferenciaEm ? <span style={{ fontSize: 11, color: '#718096' }}>{formatDate(item.conferenciaEm.slice(0, 10))}</span> : null}
                         {item.conferenciaObs ? (
