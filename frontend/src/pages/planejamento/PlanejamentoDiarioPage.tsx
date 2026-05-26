@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AxiosError } from 'axios'
 import {
   CalendarDays,
   ChevronLeft,
@@ -18,6 +19,8 @@ import {
   extractApiErrorMessage,
   type PlanejamentoDiario,
   type PlanejamentoDiarioItem,
+  type PlanejamentoSemanalDiaPayload,
+  type PlanejamentoSemanalPayload,
 } from '@/lib/gontijo-api'
 
 const DIAMETROS = ['20', '25', '30', '35', '40', '50', '60', '70', '80', '100', '120']
@@ -71,10 +74,53 @@ function planTotals(plan: PlanejamentoDiario) {
 }
 
 type ItemDraft = { id: string; metaQtdEstacas: string; diametro: string; profundidade: string }
-type ModalMode = { type: 'create'; dataInicio: string } | { type: 'edit'; plan: PlanejamentoDiario }
+type ModalMode = { type: 'create'; dataInicio: string; equipamentoId?: number } | { type: 'edit'; plan: PlanejamentoDiario }
+type WeeklyDayDraft = {
+  data: string
+  label: string
+  enabled: boolean
+  fatMinimo: boolean
+  incluiMobilizacao: boolean
+  incluiDesmobilizacao: boolean
+  incluiOutroAcrescimo: boolean
+  outroAcrescimoDescricao: string
+  valorOutroAcrescimo: string
+  items: ItemDraft[]
+}
 
 function newItem(): ItemDraft {
   return { id: crypto.randomUUID(), metaQtdEstacas: '', diametro: '', profundidade: '' }
+}
+
+function cloneItems(items: ItemDraft[]) {
+  return items.map((item) => ({ ...item, id: crypto.randomUUID() }))
+}
+
+function validDraftItems(items: ItemDraft[]) {
+  return items
+    .filter((item) => Number(item.metaQtdEstacas) > 0 && item.diametro && Number(item.profundidade) > 0)
+    .map((item): PlanejamentoDiarioItem => ({
+      metaQtdEstacas: Number(item.metaQtdEstacas),
+      diametro: item.diametro,
+      profundidade: Number(item.profundidade),
+    }))
+}
+
+function weeklyDayPayload(day: WeeklyDayDraft): PlanejamentoSemanalDiaPayload | null {
+  if (!day.enabled) return null
+  const itens = validDraftItems(day.items)
+  if (!itens.length || itens.length !== day.items.length) return null
+  if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null
+  return {
+    data: day.data,
+    fat_minimo_garantido: day.fatMinimo,
+    inclui_mobilizacao: day.incluiMobilizacao,
+    inclui_desmobilizacao: day.incluiDesmobilizacao,
+    inclui_outro_acrescimo: day.incluiOutroAcrescimo,
+    outro_acrescimo_descricao: day.outroAcrescimoDescricao.trim() || undefined,
+    valor_outro_acrescimo: day.incluiOutroAcrescimo ? Number(day.valorOutroAcrescimo) : undefined,
+    itens,
+  }
 }
 
 function MetricCard({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) {
@@ -178,7 +224,7 @@ function PlanModal({
   const isEdit = mode.type === 'edit'
   const plan = isEdit ? mode.plan : null
   const initialDate = isEdit ? plan!.data : mode.dataInicio
-  const [equipamentoId, setEquipamentoId] = useState(String(plan?.equipamentoId ?? ''))
+  const [equipamentoId, setEquipamentoId] = useState(String(plan?.equipamentoId ?? (mode.type === 'create' ? mode.equipamentoId ?? '' : '')))
   const [obraNumero, setObraNumero] = useState(plan?.obraNumero ?? '')
   const [fatMinimo, setFatMinimo] = useState(plan?.fatMinimoGarantido ?? false)
   const [incluiMobilizacao, setIncluiMobilizacao] = useState(plan?.incluiMobilizacao ?? false)
@@ -460,13 +506,250 @@ function PlanModal({
   )
 }
 
+function WeeklyPlanModal({
+  weekDays,
+  equipamentos,
+  onClose,
+  onSaved,
+}: {
+  weekDays: WeekDay[]
+  equipamentos: { id: number; nome: string }[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [equipamentoId, setEquipamentoId] = useState('')
+  const [obraNumero, setObraNumero] = useState('')
+  const [days, setDays] = useState<WeeklyDayDraft[]>(() => weekDays.map((day, index) => ({
+    data: day.iso,
+    label: day.label,
+    enabled: index === 0,
+    fatMinimo: false,
+    incluiMobilizacao: false,
+    incluiDesmobilizacao: false,
+    incluiOutroAcrescimo: false,
+    outroAcrescimoDescricao: '',
+    valorOutroAcrescimo: '',
+    items: [newItem()],
+  })))
+  const [error, setError] = useState('')
+  const [conflicts, setConflicts] = useState<string[]>([])
+  const enabledDays = days.filter((day) => day.enabled)
+  const payloadDays = days.map(weeklyDayPayload).filter((day): day is PlanejamentoSemanalDiaPayload => day !== null)
+  const areEnabledDaysValid = enabledDays.length > 0 && payloadDays.length === enabledDays.length
+  const basePayload: PlanejamentoSemanalPayload | null = equipamentoId && obraNumero.trim() && areEnabledDaysValid
+    ? { equipamento_id: Number(equipamentoId), obra_numero: obraNumero.trim(), dias: payloadDays }
+    : null
+  const previewQuery = useQuery({
+    queryKey: ['planejamento-semanal-preview', basePayload],
+    queryFn: () => planejamentoDiarioApi.previewWeekly(basePayload!),
+    enabled: Boolean(basePayload),
+    retry: false,
+  })
+  const previewByDate = new Map((previewQuery.data?.dias ?? []).map((day) => [day.data, day]))
+
+  function updateDay(index: number, updater: (day: WeeklyDayDraft) => WeeklyDayDraft) {
+    setDays((current) => current.map((day, currentIndex) => currentIndex === index ? updater(day) : day))
+    setConflicts([])
+    setError('')
+  }
+
+  function copyPreviousDay(index: number) {
+    const previous = days[index - 1]
+    if (!previous?.enabled) return
+    updateDay(index, (day) => ({
+      ...day,
+      enabled: true,
+      fatMinimo: previous.fatMinimo,
+      incluiMobilizacao: previous.incluiMobilizacao,
+      incluiDesmobilizacao: previous.incluiDesmobilizacao,
+      incluiOutroAcrescimo: previous.incluiOutroAcrescimo,
+      outroAcrescimoDescricao: previous.outroAcrescimoDescricao,
+      valorOutroAcrescimo: previous.valorOutroAcrescimo,
+      items: cloneItems(previous.items),
+    }))
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async (confirmarSubstituicao: boolean) => {
+      setError('')
+      setConflicts([])
+      if (!equipamentoId) throw new Error('Selecione o equipamento.')
+      if (!obraNumero.trim()) throw new Error('Informe o número da obra.')
+      if (!enabledDays.length) throw new Error('Ative ao menos um dia da semana.')
+      if (!areEnabledDaysValid || !basePayload) {
+        throw new Error('Preencha todas as metas e valores de acréscimo dos dias ativos.')
+      }
+      return planejamentoDiarioApi.createWeekly({
+        ...basePayload,
+        confirmar_substituicao: confirmarSubstituicao,
+      })
+    },
+    onSuccess: () => {
+      onSaved()
+      onClose()
+    },
+    onError: (cause) => {
+      if (cause instanceof AxiosError && cause.response?.status === 409) {
+        const data = cause.response.data as { error?: string; conflitos?: string[] }
+        setConflicts(data.conflitos ?? [])
+        setError(data.error ?? 'Confirme a substituição das metas existentes.')
+        return
+      }
+      setError(extractApiErrorMessage(cause))
+    },
+  })
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Adicionar meta semanal</h2>
+            <p className="mt-1 text-sm text-slate-500">Preencha apenas os dias planejados e salve a semana em uma única ação.</p>
+          </div>
+          <button type="button" className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600" onClick={onClose} aria-label="Fechar">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-6 py-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="field-label">Equipamento</label>
+              <select className="field-select" value={equipamentoId} onChange={(event) => setEquipamentoId(event.target.value)}>
+                <option value="">Selecione uma máquina</option>
+                {equipamentos.map((equipamento) => <option key={equipamento.id} value={equipamento.id}>{equipamento.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Número da obra</label>
+              <input className="field-input" value={obraNumero} onChange={(event) => setObraNumero(event.target.value)} placeholder="Ex: 22307" />
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4">
+            {days.map((day, dayIndex) => {
+              const preview = previewByDate.get(day.data)
+              const validItems = validDraftItems(day.items)
+              const totals = validItems.reduce((total, item) => ({
+                estacas: total.estacas + item.metaQtdEstacas,
+                metros: total.metros + item.metaQtdEstacas * item.profundidade,
+              }), { estacas: 0, metros: 0 })
+
+              return (
+                <section key={day.data} className={`rounded-xl border ${day.enabled ? 'border-red-200 bg-white' : 'border-slate-200 bg-slate-50/70'}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <input type="checkbox" checked={day.enabled} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, enabled: event.target.checked }))} />
+                      <span className="text-sm font-bold text-slate-800">{day.label} - {formatBr(day.data)}</span>
+                    </label>
+                    {dayIndex > 0 && (
+                      <button type="button" className="btn btn-secondary" disabled={!days[dayIndex - 1].enabled} onClick={() => copyPreviousDay(dayIndex)}>
+                        Copiar dia anterior
+                      </button>
+                    )}
+                  </div>
+
+                  {day.enabled && (
+                    <div className="grid gap-4 p-4 lg:grid-cols-[minmax(360px,1fr)_minmax(310px,0.8fr)]">
+                      <div className="grid gap-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Metas do dia</span>
+                          <button type="button" className="btn btn-secondary" onClick={() => updateDay(dayIndex, (current) => ({ ...current, items: [...current.items, newItem()] }))}>
+                            <Plus size={13} /> Meta
+                          </button>
+                        </div>
+                        {day.items.map((item, index) => (
+                          <ItemRow
+                            key={item.id}
+                            item={item}
+                            calculatedItem={preview?.itens[index]}
+                            index={index}
+                            onChange={(updated) => updateDay(dayIndex, (current) => ({
+                              ...current,
+                              items: current.items.map((currentItem) => currentItem.id === item.id ? updated : currentItem),
+                            }))}
+                            onRemove={() => updateDay(dayIndex, (current) => ({ ...current, items: current.items.filter((currentItem) => currentItem.id !== item.id) }))}
+                            canRemove={day.items.length > 1}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="grid content-start gap-3">
+                        <label className="flex cursor-pointer gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+                          <input type="checkbox" checked={day.fatMinimo} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, fatMinimo: event.target.checked }))} />
+                          Faturamento mínimo garantido
+                        </label>
+                        <div className="rounded-lg border border-slate-200 p-3">
+                          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Acréscimos</div>
+                          <div className="grid gap-2 text-sm">
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={day.incluiMobilizacao} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, incluiMobilizacao: event.target.checked }))} /> Mobilização</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={day.incluiDesmobilizacao} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, incluiDesmobilizacao: event.target.checked }))} /> Desmobilização</label>
+                            <label className="flex items-center gap-2"><input type="checkbox" checked={day.incluiOutroAcrescimo} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, incluiOutroAcrescimo: event.target.checked }))} /> Outro acréscimo</label>
+                          </div>
+                          {day.incluiOutroAcrescimo && (
+                            <div className="mt-3 grid gap-2">
+                              <input className="field-input" value={day.outroAcrescimoDescricao} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, outroAcrescimoDescricao: event.target.value }))} placeholder="Descrição do acréscimo" />
+                              <input type="number" min={0.01} step={0.01} className="field-input" value={day.valorOutroAcrescimo} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, valorOutroAcrescimo: event.target.value }))} placeholder="Valor do acréscimo" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 rounded-lg bg-red-50 p-3 text-xs">
+                          <div><span className="block text-red-500">Estacas</span><strong>{totals.estacas}</strong></div>
+                          <div><span className="block text-red-500">Metros</span><strong>{totals.metros.toLocaleString('pt-BR')}</strong></div>
+                          <div><span className="block text-red-500">Valor</span><strong>{preview ? formatCurrency(preview.valorEstipuladoDia) : 'R$ -'}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-100 bg-red-50/60 p-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-red-500">Resumo semanal</div>
+              <div className="mt-1 text-sm font-bold text-slate-800">{enabledDays.length} dia(s) ativo(s) / {payloadDays.reduce((sum, day) => sum + day.itens.reduce((itemSum, item) => itemSum + item.metaQtdEstacas, 0), 0)} estacas</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-semibold uppercase tracking-wide text-red-500">Valor estipulado</div>
+              <div className="mt-1 text-lg font-bold text-slate-800">{previewQuery.isFetching ? 'Calculando...' : formatCurrency(previewQuery.data?.valorEstipuladoSemana)}</div>
+            </div>
+          </div>
+          {previewQuery.isError && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{extractApiErrorMessage(previewQuery.error)}</div>}
+          {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          {conflicts.length > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold">Dias com meta existente: {conflicts.map(formatBr).join(', ')}.</p>
+              <p className="mt-1">Ao confirmar, as metas destes dias serão substituídas pelos dados deste formulário.</p>
+              <button type="button" className="btn btn-primary mt-3" onClick={() => saveMutation.mutate(true)} disabled={saveMutation.isPending}>
+                Confirmar substituição e salvar
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saveMutation.isPending}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={() => saveMutation.mutate(false)} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? 'Salvando...' : 'Salvar metas semanais'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PlanCard({
   plan,
+  showMachine = true,
   isDeleting,
   onEdit,
   onDelete,
 }: {
   plan: PlanejamentoDiario
+  showMachine?: boolean
   isDeleting: boolean
   onEdit: () => void
   onDelete: () => void
@@ -477,8 +760,10 @@ function PlanCard({
     <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-slate-300 hover:shadow">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-bold text-slate-800">{plan.equipamentoNome || `Equip. ${plan.equipamentoId}`}</h4>
-          <p className="truncate text-xs text-slate-500">Obra {plan.obraNumero}{plan.cliente ? ` - ${plan.cliente}` : ''}</p>
+          <h4 className="truncate text-sm font-bold text-slate-800">{showMachine ? plan.equipamentoNome || `Equip. ${plan.equipamentoId}` : `Obra ${plan.obraNumero}`}</h4>
+          <p className="truncate text-xs text-slate-500">
+            {showMachine ? `Obra ${plan.obraNumero}${plan.cliente ? ` - ${plan.cliente}` : ''}` : plan.cliente || 'Meta diária'}
+          </p>
         </div>
         {plan.fatMinimoGarantido && (
           <span className="shrink-0 rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">Fat. min.</span>
@@ -531,11 +816,106 @@ function PlanCard({
   )
 }
 
+type WeekDay = { iso: string; label: string }
+type MachineWeek = {
+  equipamentoId: number
+  equipamentoNome: string
+  plans: PlanejamentoDiario[]
+}
+
+function WeeklyMachineCard({
+  machine,
+  weekDays,
+  today,
+  deleteId,
+  isDeleting,
+  onEdit,
+  onDelete,
+  onAdd,
+}: {
+  machine: MachineWeek
+  weekDays: WeekDay[]
+  today: string
+  deleteId: number | null
+  isDeleting: boolean
+  onEdit: (plan: PlanejamentoDiario) => void
+  onDelete: (plan: PlanejamentoDiario) => void
+  onAdd: (date: string, equipamentoId: number) => void
+}) {
+  const totals = machine.plans.reduce(
+    (result, plan) => {
+      const dayTotals = planTotals(plan)
+      result.estacas += dayTotals.estacas
+      result.metros += dayTotals.metros
+      return result
+    },
+    { estacas: 0, metros: 0 }
+  )
+  const obras = Array.from(new Set(machine.plans.map((plan) => plan.obraNumero))).join(', ')
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div>
+          <h3 className="text-base font-bold text-slate-900">{machine.equipamentoNome}</h3>
+          <p className="text-xs text-slate-500">Obra{obras.includes(',') ? 's' : ''} {obras}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+          <span className="rounded-lg bg-red-50 px-3 py-2 text-red-700">{totals.estacas.toLocaleString('pt-BR')} estacas / semana</span>
+          <span className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700">{totals.metros.toLocaleString('pt-BR')} m / semana</span>
+        </div>
+      </div>
+      <div className="overflow-x-auto p-4">
+        <div className="grid min-w-[1120px] grid-cols-7 gap-3">
+          {weekDays.map((day) => {
+            const plans = machine.plans.filter((plan) => plan.data === day.iso)
+            const isToday = day.iso === today
+
+            return (
+              <div key={day.iso} className={`flex min-h-[290px] flex-col rounded-xl border ${isToday ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-slate-50/70'}`}>
+                <div className={`flex items-center justify-between border-b px-3 py-3 ${isToday ? 'border-red-100' : 'border-slate-200'}`}>
+                  <div>
+                    <div className={`text-xs font-bold uppercase tracking-wide ${isToday ? 'text-red-600' : 'text-slate-500'}`}>{day.label}</div>
+                    <div className="text-sm font-semibold text-slate-700">{shortDate(day.iso)}</div>
+                  </div>
+                  {isToday && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Hoje</span>}
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-2">
+                  {plans.map((plan) => (
+                    <PlanCard
+                      key={plan.id}
+                      plan={plan}
+                      showMachine={false}
+                      isDeleting={isDeleting && deleteId === plan.id}
+                      onEdit={() => onEdit(plan)}
+                      onDelete={() => onDelete(plan)}
+                    />
+                  ))}
+                  {plans.length === 0 && (
+                    <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-400">
+                      Nenhuma meta definida
+                    </div>
+                  )}
+                  <button type="button" className="mt-auto flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-500 hover:border-red-300 hover:text-red-600" onClick={() => onAdd(day.iso, machine.equipamentoId)}>
+                    <Plus size={13} /> Adicionar
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </article>
+  )
+}
+
 export default function PlanejamentoDiarioPage() {
   const queryClient = useQueryClient()
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
   const [equipFiltro, setEquipFiltro] = useState<number | ''>('')
   const [modal, setModal] = useState<ModalMode | null>(null)
+  const [weeklyModalOpen, setWeeklyModalOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<'daily' | 'machine'>('daily')
   const [actionError, setActionError] = useState('')
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
@@ -571,10 +951,28 @@ export default function PlanejamentoDiarioPage() {
 
   const plans = useMemo(() => query.data ?? [], [query.data])
   const equipamentos = (equipQuery.data ?? []).map((equipamento) => ({ id: equipamento.id, nome: equipamento.nome }))
-  const weekDays = Array.from({ length: 7 }, (_, index) => {
+  const weekDays: WeekDay[] = Array.from({ length: 7 }, (_, index) => {
     const iso = toISO(addDays(weekStart, index))
-    return { iso, label: DIAS_SEMANA[index], plans: plans.filter((plan) => plan.data === iso) }
+    return { iso, label: DIAS_SEMANA[index] }
   })
+  const machineWeeks = useMemo(() => {
+    const grouped = new Map<number, MachineWeek>()
+
+    plans.forEach((plan) => {
+      const existing = grouped.get(plan.equipamentoId)
+      if (existing) {
+        existing.plans.push(plan)
+        return
+      }
+      grouped.set(plan.equipamentoId, {
+        equipamentoId: plan.equipamentoId,
+        equipamentoNome: plan.equipamentoNome || `Equip. ${plan.equipamentoId}`,
+        plans: [plan],
+      })
+    })
+
+    return Array.from(grouped.values()).sort((a, b) => a.equipamentoNome.localeCompare(b.equipamentoNome, 'pt-BR'))
+  }, [plans])
   const summary = useMemo(() => plans.reduce(
     (result, plan) => {
       const totals = planTotals(plan)
@@ -600,10 +998,16 @@ export default function PlanejamentoDiarioPage() {
           <h1 className="page-heading">Planejamento Diário</h1>
           <p className="page-subtitle">Organize as metas de produção por máquina e acompanhe a semana em um único quadro.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => setModal({ type: 'create', dataInicio })}>
-          <Plus size={15} />
-          Novo planejamento
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-primary" onClick={() => setModal({ type: 'create', dataInicio })}>
+            <Plus size={15} />
+            Adicionar meta
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setWeeklyModalOpen(true)}>
+            <CalendarDays size={15} />
+            Adicionar meta semanal
+          </button>
+        </div>
       </div>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -629,12 +1033,25 @@ export default function PlanejamentoDiarioPage() {
             <button type="button" className="btn btn-secondary" onClick={() => setWeekStart(getMonday(new Date()))}>Hoje</button>
           </div>
         </div>
-        <div className="w-full sm:w-64">
-          <label className="field-label">Filtrar por equipamento</label>
-          <select className="field-select" value={equipFiltro} onChange={(event) => setEquipFiltro(event.target.value ? Number(event.target.value) : '')}>
-            <option value="">Todos os equipamentos</option>
-            {equipamentos.map((equipamento) => <option key={equipamento.id} value={equipamento.id}>{equipamento.nome}</option>)}
-          </select>
+        <div className="flex w-full flex-wrap items-end gap-3 sm:w-auto">
+          <div className="w-full sm:w-64">
+            <label className="field-label">Filtrar por equipamento</label>
+            <select className="field-select" value={equipFiltro} onChange={(event) => setEquipFiltro(event.target.value ? Number(event.target.value) : '')}>
+              <option value="">Todos os equipamentos</option>
+              {equipamentos.map((equipamento) => <option key={equipamento.id} value={equipamento.id}>{equipamento.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Visualização</label>
+            <div className="flex rounded-lg border border-slate-200 bg-white p-1">
+              <button type="button" className={`rounded-md px-3 py-2 text-xs font-semibold ${viewMode === 'daily' ? 'bg-red-50 text-red-700' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setViewMode('daily')}>
+                Grade diária
+              </button>
+              <button type="button" className={`rounded-md px-3 py-2 text-xs font-semibold ${viewMode === 'machine' ? 'bg-red-50 text-red-700' : 'text-slate-500 hover:text-slate-700'}`} onClick={() => setViewMode('machine')}>
+                Por máquina
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -644,47 +1061,84 @@ export default function PlanejamentoDiarioPage() {
 
       {!query.isLoading && !query.isError && (
         <section className="app-panel overflow-hidden p-0">
-          <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-sm font-bold text-slate-800">Quadro semanal</h2>
-            <p className="text-xs text-slate-500">Adicione um planejamento diretamente no dia desejado.</p>
-          </div>
-          <div className="overflow-x-auto p-4">
-            <div className="grid min-w-[1120px] grid-cols-7 gap-3">
-              {weekDays.map((day) => {
-                const isToday = day.iso === today
-                return (
-                  <div key={day.iso} className={`flex min-h-[430px] flex-col rounded-xl border ${isToday ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-slate-50/70'}`}>
-                    <div className={`flex items-center justify-between border-b px-3 py-3 ${isToday ? 'border-red-100' : 'border-slate-200'}`}>
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-wide ${isToday ? 'text-red-600' : 'text-slate-500'}`}>{day.label}</div>
-                        <div className="text-sm font-semibold text-slate-700">{shortDate(day.iso)}</div>
-                      </div>
-                      {isToday && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Hoje</span>}
-                    </div>
-                    <div className="flex flex-1 flex-col gap-2 p-2">
-                      {day.plans.map((plan) => (
-                        <PlanCard
-                          key={plan.id}
-                          plan={plan}
-                          isDeleting={deleteMutation.isPending && deleteId === plan.id}
-                          onEdit={() => setModal({ type: 'edit', plan })}
-                          onDelete={() => confirmDelete(plan)}
-                        />
-                      ))}
-                      {day.plans.length === 0 && (
-                        <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-400">
-                          Nenhuma meta definida
-                        </div>
-                      )}
-                      <button type="button" className="mt-auto flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-500 hover:border-red-300 hover:text-red-600" onClick={() => setModal({ type: 'create', dataInicio: day.iso })}>
-                        <Plus size={13} /> Adicionar
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">{viewMode === 'daily' ? 'Quadro semanal' : 'Metas por máquina'}</h2>
+              <p className="text-xs text-slate-500">
+                {viewMode === 'daily' ? 'Adicione ou edite a meta diretamente no dia desejado.' : 'Cada card reúne a meta semanal da máquina e o detalhamento de cada dia.'}
+              </p>
             </div>
+            {viewMode === 'daily' && (
+              <button type="button" className="btn btn-secondary" onClick={() => setWeeklyModalOpen(true)}>
+                <CalendarDays size={14} />
+                Adicionar meta semanal
+              </button>
+            )}
           </div>
+          {viewMode === 'daily' ? (
+            <div className="overflow-x-auto p-4">
+              <div className="grid min-w-[1120px] grid-cols-7 gap-3">
+                {weekDays.map((day) => {
+                  const dayPlans = plans.filter((plan) => plan.data === day.iso)
+                  const isToday = day.iso === today
+                  return (
+                    <div key={day.iso} className={`flex min-h-[430px] flex-col rounded-xl border ${isToday ? 'border-red-200 bg-red-50/30' : 'border-slate-200 bg-slate-50/70'}`}>
+                      <div className={`flex items-center justify-between border-b px-3 py-3 ${isToday ? 'border-red-100' : 'border-slate-200'}`}>
+                        <div>
+                          <div className={`text-xs font-bold uppercase tracking-wide ${isToday ? 'text-red-600' : 'text-slate-500'}`}>{day.label}</div>
+                          <div className="text-sm font-semibold text-slate-700">{shortDate(day.iso)}</div>
+                        </div>
+                        {isToday && <span className="rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Hoje</span>}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-2 p-2">
+                        {dayPlans.map((plan) => (
+                          <PlanCard
+                            key={plan.id}
+                            plan={plan}
+                            isDeleting={deleteMutation.isPending && deleteId === plan.id}
+                            onEdit={() => setModal({ type: 'edit', plan })}
+                            onDelete={() => confirmDelete(plan)}
+                          />
+                        ))}
+                        {dayPlans.length === 0 && (
+                          <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-400">
+                            Nenhuma meta definida
+                          </div>
+                        )}
+                        <button type="button" className="mt-auto flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-500 hover:border-red-300 hover:text-red-600" onClick={() => setModal({ type: 'create', dataInicio: day.iso })}>
+                          <Plus size={13} /> Adicionar
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 p-4">
+              {machineWeeks.map((machine) => (
+                <WeeklyMachineCard
+                  key={machine.equipamentoId}
+                  machine={machine}
+                  weekDays={weekDays}
+                  today={today}
+                  deleteId={deleteId}
+                  isDeleting={deleteMutation.isPending}
+                  onEdit={(plan) => setModal({ type: 'edit', plan })}
+                  onDelete={confirmDelete}
+                  onAdd={(date, equipamentoId) => setModal({ type: 'create', dataInicio: date, equipamentoId })}
+                />
+              ))}
+              {machineWeeks.length === 0 && (
+                <QueryFeedback type="empty" title="Nenhuma meta cadastrada" description="Adicione um planejamento para criar o primeiro card de máquina desta semana." />
+              )}
+              {machineWeeks.length > 0 && (
+                <button type="button" className="btn btn-secondary justify-center" onClick={() => setModal({ type: 'create', dataInicio })}>
+                  <Plus size={14} /> Adicionar outra máquina
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -693,6 +1147,14 @@ export default function PlanejamentoDiarioPage() {
           mode={modal}
           equipamentos={equipamentos}
           onClose={() => setModal(null)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['planejamento-diario'] })}
+        />
+      )}
+      {weeklyModalOpen && (
+        <WeeklyPlanModal
+          weekDays={weekDays}
+          equipamentos={equipamentos}
+          onClose={() => setWeeklyModalOpen(false)}
           onSaved={() => queryClient.invalidateQueries({ queryKey: ['planejamento-diario'] })}
         />
       )}

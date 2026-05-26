@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
-  extractApiErrorMessage, medicoesApi,
+  extractApiErrorMessage, medicoesApi, usuarioService,
   type MedicaoEstaca,
 } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
@@ -105,6 +105,12 @@ function MedicaoDetalhePageInner() {
     queryKey: ['medicao-detalhe', medicaoId],
     queryFn: () => medicoesApi.get(medicaoId),
     staleTime: 30_000,
+  })
+
+  const colaboradoresQuery = useQuery({
+    queryKey: ['usuarios-options'],
+    queryFn: usuarioService.listOptions,
+    staleTime: 1000 * 60 * 15,
   })
 
   const data = query.data
@@ -269,7 +275,15 @@ function MedicaoDetalhePageInner() {
           <div className="grid gap-4 p-5 sm:grid-cols-2">
             <div>
               <label className="field-label">Responsável pela medição</label>
-              <input type="text" value={headerDraft.responsavelMedicao} onChange={e => setHeaderDraft(d => ({ ...d, responsavelMedicao: e.target.value }))} className="field-input" />
+              <select value={headerDraft.responsavelMedicao} onChange={e => setHeaderDraft(d => ({ ...d, responsavelMedicao: e.target.value }))} className="field-select">
+                <option value="">Selecione um colaborador</option>
+                {headerDraft.responsavelMedicao && !colaboradoresQuery.data?.some(colaborador => colaborador.nome === headerDraft.responsavelMedicao) && (
+                  <option value={headerDraft.responsavelMedicao}>{headerDraft.responsavelMedicao}</option>
+                )}
+                {colaboradoresQuery.data?.map(colaborador => (
+                  <option key={colaborador.id} value={colaborador.nome}>{colaborador.nome}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="field-label">Conferido por</label>
@@ -445,13 +459,29 @@ function MedicaoDetalhePageInner() {
                       {row.saldo > 0 ? `R$ ${fmtBRL(row.saldo)}` : '—'}
                     </td>
                     <td className="px-4 py-2 text-slate-600 max-w-xs min-w-[160px]">
-                      {isFechada
-                        ? (row.observacao || '—')
-                        : <InlineCell
-                            value={row.observacao ?? ''}
+                      {row.ocorrenciasDiario && (
+                        <div className="mb-1.5">
+                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                            Diário de obra
+                          </span>
+                          <div className="mt-1 whitespace-normal text-slate-700">{row.ocorrenciasDiario}</div>
+                        </div>
+                      )}
+                      {isFechada ? (
+                        row.observacaoManual
+                          ? <div className={row.ocorrenciasDiario ? 'mt-1 text-slate-500' : ''}>
+                              {row.ocorrenciasDiario ? `Complemento: ${row.observacaoManual}` : row.observacaoManual}
+                            </div>
+                          : (!row.ocorrenciasDiario && '—')
+                      ) : (
+                        <div className={row.ocorrenciasDiario ? 'mt-1' : ''}>
+                          {row.ocorrenciasDiario && <div className="mb-0.5 text-[10px] font-semibold uppercase text-slate-400">Complemento da medição</div>}
+                          <InlineCell
+                            value={row.observacaoManual ?? ''}
                             onSave={v => obsDiaMutation.mutate({ data: row.data, observacao: v })}
                           />
-                      }
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

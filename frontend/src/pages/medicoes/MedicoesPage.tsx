@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Plus, Search, Trash2, X } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { extractApiErrorMessage, medicoesApi, obraService, type MedicaoListItem } from '@/lib/gontijo-api'
+import { extractApiErrorMessage, medicoesApi, obraService, usuarioService, type MedicaoListItem } from '@/lib/gontijo-api'
 import { cn, formatDate } from '@/lib/utils'
 
 type CreateForm = {
@@ -32,6 +32,12 @@ export default function MedicoesPage() {
     queryKey: ['medicoes-obras'],
     queryFn: () => obraService.list({ status: 'em andamento', page: 1, limit: 300 }),
     staleTime: 1000 * 60 * 5,
+  })
+
+  const colaboradoresQuery = useQuery({
+    queryKey: ['usuarios-options'],
+    queryFn: usuarioService.listOptions,
+    staleTime: 1000 * 60 * 15,
   })
 
   const medicoesQuery = useQuery({
@@ -164,7 +170,12 @@ export default function MedicoesPage() {
             </div>
             <div>
               <label className="field-label">Responsável pela medição</label>
-              <input type="text" value={form.responsavelMedicao} onChange={e => setForm(f => ({ ...f, responsavelMedicao: e.target.value }))} className="field-input" placeholder="Nome" />
+              <select value={form.responsavelMedicao} onChange={e => setForm(f => ({ ...f, responsavelMedicao: e.target.value }))} className="field-select">
+                <option value="">Selecione um colaborador</option>
+                {colaboradoresQuery.data?.map(colaborador => (
+                  <option key={colaborador.id} value={colaborador.nome}>{colaborador.nome}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="field-label">Conferido por</label>
