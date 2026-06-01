@@ -24,7 +24,7 @@ function resolveUnauthorizedRedirect(pathname: string, requestUrl: string): stri
     return isAdminRequest ? null : '/portal-cliente/login'
   }
 
-  if (pathname.startsWith('/assinatura/diario/')) return null
+  if (pathname.startsWith('/assinatura/diario/') || pathname.startsWith('/assinatura/medicao/')) return null
   return '/login'
 }
 

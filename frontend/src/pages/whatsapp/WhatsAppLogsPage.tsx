@@ -126,6 +126,8 @@ export default function WhatsAppLogsPage() {
 
   useEffect(() => {
     if (sendDiaryMutation.isPending) {
+      // Reset visual progress when a new asynchronous send starts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSendProgress(0)
       const total = Math.max(1, selectedDiaryKeys.length)
       const estimatedMs = Math.max(2000, total * 1800)
@@ -140,7 +142,7 @@ export default function WhatsAppLogsPage() {
     return () => {
       if (sendProgressRef.current) clearInterval(sendProgressRef.current)
     }
-  }, [sendDiaryMutation.isPending, sendDiaryMutation.isSuccess])
+  }, [selectedDiaryKeys.length, sendDiaryMutation.isPending, sendDiaryMutation.isSuccess])
 
   const status = statusQuery.data
   const qrImage = qrCodeQuery.data?.image

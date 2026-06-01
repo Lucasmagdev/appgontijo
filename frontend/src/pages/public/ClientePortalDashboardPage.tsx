@@ -26,6 +26,7 @@ const TIPO_DOC_LABELS: Record<string, string> = {
   visita_tecnica: 'Visita técnica',
   projeto: 'Projeto',
   sondagem: 'Sondagem',
+  medicao: 'Medição (PDF)',
   outro: 'Outro',
 }
 
@@ -239,12 +240,49 @@ export default function ClientePortalDashboardPage() {
                   )}
                 </section>
 
+                {data.resumo.diariosPendentesAssinatura > 0 && (
+                  <section className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm sm:rounded-[24px] sm:p-5">
+                    <div className="flex items-start gap-3 text-red-800">
+                      <AlertTriangle size={22} className="mt-0.5 shrink-0" />
+                      <div>
+                        <h2 className="text-base font-black">
+                          {data.resumo.diariosPendentesAssinatura} diário{data.resumo.diariosPendentesAssinatura === 1 ? '' : 's'} pendente{data.resumo.diariosPendentesAssinatura === 1 ? '' : 's'} de assinatura
+                        </h2>
+                        <p className="mt-1 text-sm text-red-700">
+                          Há diário de obra enviado para assinatura do cliente aguardando conclusão.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-2">
+                      {data.assinaturasPendentes.map((diario) => (
+                        <div key={diario.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm">
+                          <span className="font-semibold text-red-900">
+                            {formatSafeDate(diario.dataDiario)} - {diario.equipamento || 'Equipamento'}
+                          </span>
+                          <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold uppercase text-red-700">
+                            Aguardando assinatura
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <DiariosSection diarios={data.diarios} />
+
                 <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard icon={FileText} label="Diarios disponiveis" value={String(data.resumo.totalDiarios)} detail={latestDiary ? `Ultimo: ${formatSafeDate(latestDiary.dataDiario)}` : 'Aguardando diarios'} />
                   <MetricCard icon={TrendingUp} label="Estacas executadas" value={String(data.resumo.estacasExecutadas)} detail={`${data.resumo.estacasRestantes} restantes`} tone="success" />
                   {data.resumo.valorProducao != null && (
                     <MetricCard icon={TrendingUp} label="Valor de produção" value={`R$ ${formatBRL(data.resumo.valorProducao)}`} detail="Diários aprovados no período" tone="success" />
                   )}
+                  <MetricCard
+                    icon={FileText}
+                    label="Fat. mínimo cobrado"
+                    value={`R$ ${formatBRL(data.resumo.valorFatMinimoCobrado)}`}
+                    detail={`${data.resumo.medicoesComFatMinimo} medição${data.resumo.medicoesComFatMinimo === 1 ? '' : 'ões'} com cobrança`}
+                    tone={data.resumo.valorFatMinimoCobrado > 0 ? 'warning' : 'neutral'}
+                  />
                 </section>
 
                 {photoGroups.length > 0 && (
@@ -426,65 +464,58 @@ export default function ClientePortalDashboardPage() {
                   </section>
                 )}
 
-                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h2 className="text-xl font-bold text-slate-900">Diarios da obra</h2>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Registros recentes, producao do dia e acesso ao PDF de cada diario.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 sm:hidden">
-                    {data.diarios.length ? (
-                      data.diarios.map((diario) => <DiaryMobileCard key={diario.id} diario={diario} />)
-                    ) : (
-                      <QueryFeedback
-                        type="empty"
-                        title="Nenhum diario encontrado"
-                        description="Ainda nao existem diarios vinculados a esta obra ativa."
-                      />
-                    )}
-                  </div>
-
-                  <div className="mt-5 hidden overflow-x-auto sm:block">
-                    <table className="data-table min-w-[1020px]">
-                      <thead>
-                        <tr>
-                          <th>Data</th>
-                          <th>Status</th>
-                          <th>Equipamento</th>
-                          <th>Operador</th>
-                          <th>Estacas</th>
-                          <th>Clima</th>
-                          <th>PDF</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.diarios.length ? (
-                          data.diarios.map((diario) => <DiaryRow key={diario.id} diario={diario} />)
-                        ) : (
-                          <tr>
-                            <td colSpan={7}>
-                              <QueryFeedback
-                                type="empty"
-                                title="Nenhum diario encontrado"
-                                description="Ainda nao existem diarios vinculados a esta obra ativa."
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
               </div>
             ) : null}
           </div>
         </section>
       </div>
     </div>
+  )
+}
+
+function DiariosSection({ diarios }: { diarios: ClientPortalDiarySummary[] }) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
+      <div>
+        <h2 className="text-xl font-bold text-slate-900">Diarios da obra</h2>
+        <p className="mt-1 text-sm text-slate-500">Registros recentes, producao do dia e acesso ao PDF de cada diario.</p>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:hidden">
+        {diarios.length ? (
+          diarios.map((diario) => <DiaryMobileCard key={diario.id} diario={diario} />)
+        ) : (
+          <QueryFeedback type="empty" title="Nenhum diario encontrado" description="Ainda nao existem diarios vinculados a esta obra ativa." />
+        )}
+      </div>
+
+      <div className="mt-5 hidden overflow-x-auto sm:block">
+        <table className="data-table min-w-[1020px]">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Status</th>
+              <th>Equipamento</th>
+              <th>Operador</th>
+              <th>Estacas</th>
+              <th>Clima</th>
+              <th>PDF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {diarios.length ? (
+              diarios.map((diario) => <DiaryRow key={diario.id} diario={diario} />)
+            ) : (
+              <tr>
+                <td colSpan={7}>
+                  <QueryFeedback type="empty" title="Nenhum diario encontrado" description="Ainda nao existem diarios vinculados a esta obra ativa." />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 

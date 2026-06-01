@@ -55,6 +55,8 @@ export default function DiarioRevisaoPage({ diarioId, equipamentoId }: Props) {
     const alreadyReviewed = json.revisao_confirmed === true || json.review_confirmed === true
     if (!pdfLoaded || markedOnce || !diarioQuery.data || alreadyReviewed) return
     markReviewedMutation.mutate()
+    // Avoid issuing the same review mutation again while query data refreshes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMarkedOnce(true)
   }, [diarioQuery.data, markReviewedMutation, markedOnce, pdfLoaded])
 

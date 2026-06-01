@@ -67,6 +67,8 @@ export default function AssinaturaClientePage() {
     const data = signatureQuery.data
     if (!data) return
 
+    // Populate the editable signature form from the loaded public record.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm({
       nome: data.clientName || '',
       documento: data.clientDocument || '',

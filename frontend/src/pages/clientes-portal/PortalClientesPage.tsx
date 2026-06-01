@@ -356,11 +356,17 @@ export default function PortalClientesPage() {
       <input
         ref={docInputRef}
         type="file"
+        accept={docTipo === 'medicao' ? 'application/pdf,.pdf' : undefined}
         className="sr-only"
         tabIndex={-1}
         onChange={(event) => {
           const file = event.target.files?.[0]
           if (!file || !docAccessId) return
+          if (docTipo === 'medicao' && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+            setDocError('A medição deve ser enviada em arquivo PDF.')
+            if (docInputRef.current) docInputRef.current.value = ''
+            return
+          }
           uploadDocMutation.mutate({ file, tipo: docTipo })
           if (docInputRef.current) docInputRef.current.value = ''
         }}
@@ -950,7 +956,7 @@ function AccessCard({
                 <Paperclip size={16} className="text-blue-600" />
                 Documentos do portal — obra {access.obraNumero}
               </div>
-              <p className="mt-1 text-sm text-slate-500">Relatórios pré-obra, visitas, projetos e outros arquivos visíveis ao cliente.</p>
+              <p className="mt-1 text-sm text-slate-500">Medições em PDF, relatórios, visitas, projetos e outros arquivos visíveis ao cliente.</p>
             </div>
             <button type="button" className="btn btn-secondary" onClick={docManager.onClose}>Fechar</button>
           </div>
@@ -964,6 +970,7 @@ function AccessCard({
                 <option value="visita_tecnica">Visita técnica</option>
                 <option value="projeto">Projeto</option>
                 <option value="sondagem">Sondagem</option>
+                <option value="medicao">Medição (PDF)</option>
                 <option value="outro">Outro</option>
               </select>
             </div>
@@ -988,7 +995,7 @@ function AccessCard({
             <div className="mt-4 rounded-2xl border border-dashed border-blue-200 bg-white/80 px-5 py-8 text-center">
               <FileText size={28} className="mx-auto text-blue-400" />
               <div className="mt-2 text-sm font-bold text-slate-800">Nenhum documento cadastrado</div>
-              <p className="mt-1 text-sm text-slate-500">Envie projetos ou sondagens para aparecerem no portal.</p>
+              <p className="mt-1 text-sm text-slate-500">Envie medições em PDF, projetos ou sondagens para aparecerem no portal.</p>
             </div>
           ) : (
             <div className="mt-4 grid gap-2">

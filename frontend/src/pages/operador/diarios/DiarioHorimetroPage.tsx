@@ -41,6 +41,8 @@ export default function DiarioHorimetroPage({ diarioId, equipamentoId }: Props) 
 
   useEffect(() => {
     const json = (diarioQuery.data?.dadosJson as Record<string, unknown> | null) || {}
+    // Populate this module field from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHorimetro(String(json.horimetro || ''))
   }, [diarioQuery.data?.dadosJson])
 

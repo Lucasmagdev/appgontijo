@@ -64,6 +64,8 @@ export default function DiarioClimaPage({ diarioId, equipamentoId }: Props) {
 
   useEffect(() => {
     const json = (diarioQuery.data?.dadosJson as Record<string, unknown> | null) || {}
+    // Populate this module field from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setClima(normalizeClima(json.clima || json.tempo))
   }, [diarioQuery.data?.dadosJson])
 

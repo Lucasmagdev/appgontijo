@@ -2,12 +2,13 @@ import { Component, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, ArrowDown, Download, DollarSign, Grip, Layers, Lock, LockOpen, Pencil, Plus, RefreshCw, Save, Trash2, X,
+  ArrowLeft, ArrowDown, CheckCircle2, Copy, Download, DollarSign, Grip, Layers, Link2, Lock, LockOpen, Pencil, Plus, RefreshCw, Save, Trash2, X,
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   extractApiErrorMessage, medicoesApi, usuarioService,
   type MedicaoEstaca,
+  type MedicaoFatMinimoRow,
 } from '@/lib/gontijo-api'
 import { formatDate } from '@/lib/utils'
 
@@ -37,6 +38,43 @@ function fmtBRL(v: number | null | undefined) {
 function fmtDate(v: string | null | undefined) {
   if (!v) return '—'
   return formatDate(String(v).slice(0, 10))
+}
+
+function fmtDateTime(v: string | null | undefined) {
+  if (!v) return '—'
+  const parsed = new Date(String(v).replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) return String(v)
+  return parsed.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+const MEDICAO_DESCONTO_OPTIONS = [
+  'Manutenção',
+  'Comercial',
+  'Desconto Amigável',
+  'Erro Operacional',
+  'Logística de Obras',
+  'Chuva',
+  'Geoteste',
+  'Outros',
+  'Baixada de Equipe',
+] as const
+
+const CUSTOM_DESCONTO_VALUE = '__custom__'
+
+type ExtraDraftItem = {
+  descricao: string
+  valor: string
+  tipo: string
+}
+
+function buildExtraDraftItem(descricao: string, valor: string): ExtraDraftItem {
+  const normalized = descricao.trim()
+  const matched = MEDICAO_DESCONTO_OPTIONS.find((option) => option === normalized)
+  return {
+    descricao,
+    valor,
+    tipo: matched ?? (normalized ? CUSTOM_DESCONTO_VALUE : ''),
+  }
 }
 
 function InlineCell({ value, onSave, type = 'text', disabled }: {
@@ -86,6 +124,102 @@ function InlineCell({ value, onSave, type = 'text', disabled }: {
   )
 }
 
+function MedicaoOccurrencesCell({ row, disabled, saving, onSaveOccurrences, onRestoreDiary, onSaveComplement }: {
+  row: MedicaoFatMinimoRow
+  disabled: boolean
+  saving: boolean
+  onSaveOccurrences: (value: string) => void
+  onRestoreDiary: () => void
+  onSaveComplement: (value: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const occurrenceText = row.ocorrenciasMedicao ?? ''
+  const badgeLabel = row.ocorrenciasEditadas ? 'Ocorrências da medição' : 'Diário de obra'
+
+  function openEditor() {
+    setDraft(occurrenceText)
+    setEditing(true)
+  }
+
+  function saveEditor() {
+    onSaveOccurrences(draft)
+    setEditing(false)
+  }
+
+  if (disabled) {
+    return (
+      <>
+        {occurrenceText ? (
+          <div className="mb-1.5">
+            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">{badgeLabel}</span>
+            <div className="mt-1 whitespace-normal text-slate-700">{occurrenceText}</div>
+          </div>
+        ) : null}
+        {row.observacaoManual ? (
+          <div className={occurrenceText ? 'mt-1 text-slate-500' : ''}>
+            {occurrenceText ? `Complemento: ${row.observacaoManual}` : row.observacaoManual}
+          </div>
+        ) : (!occurrenceText && '—')}
+      </>
+    )
+  }
+
+  return (
+    <div>
+      {editing ? (
+        <div className="space-y-1.5">
+          <textarea
+            value={draft}
+            onChange={event => setDraft(event.target.value)}
+            rows={3}
+            className="w-full min-w-[300px] rounded border border-blue-400 px-2 py-1 text-xs text-slate-700 focus:outline-none"
+            placeholder="Informe as ocorrências desta medição"
+          />
+          <div className="flex flex-wrap gap-1">
+            <button type="button" onClick={saveEditor} disabled={saving} className="rounded bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50">
+              Salvar
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="rounded px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-slate-100">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {occurrenceText ? (
+            <div className="mb-1.5">
+              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">{badgeLabel}</span>
+              <div className="mt-1 whitespace-normal text-slate-700">{occurrenceText}</div>
+            </div>
+          ) : row.ocorrenciasEditadas && row.ocorrenciasDiario ? (
+            <div className="mb-1 text-[10px] font-semibold text-slate-400">Ocorrência removida desta medição</div>
+          ) : null}
+          <div className="mb-1.5 flex flex-wrap gap-1">
+            <button type="button" onClick={openEditor} disabled={saving} className="rounded bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50">
+              {occurrenceText ? 'Editar' : 'Adicionar ocorrência'}
+            </button>
+            {occurrenceText && (
+              <button type="button" onClick={() => onSaveOccurrences('')} disabled={saving} className="rounded bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50">
+                Excluir
+              </button>
+            )}
+            {row.ocorrenciasEditadas && row.ocorrenciasDiario && (
+              <button type="button" onClick={onRestoreDiary} disabled={saving} className="rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50">
+                Restaurar do diário
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      <div className="mt-1">
+        <div className="mb-0.5 text-[10px] font-semibold uppercase text-slate-400">Observação adicional</div>
+        <InlineCell value={row.observacaoManual ?? ''} onSave={onSaveComplement} />
+      </div>
+    </div>
+  )
+}
+
 function MedicaoDetalhePageInner() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -93,12 +227,21 @@ function MedicaoDetalhePageInner() {
   const medicaoId = Number(id)
 
   const [headerEdit, setHeaderEdit] = useState(false)
-  const [headerDraft, setHeaderDraft] = useState({ responsavelMedicao: '', conferidoPor: '', issqnPct: '', pctNf: '', pctLocacao: '', issqnCobradoCliente: false })
+  const [headerDraft, setHeaderDraft] = useState({
+    tipoMedicao: 'parcial' as 'adiantamento' | 'inicial' | 'parcial' | 'final',
+    responsavelMedicao: '',
+    conferidoPor: '',
+    issqnPct: '',
+    pctNf: '',
+    pctLocacao: '',
+    issqnCobradoCliente: false,
+  })
   const [headerError, setHeaderError] = useState('')
-  const [extraDraft, setExtraDraft] = useState<{ descricao: string; valor: string }[]>([])
+  const [extraDraft, setExtraDraft] = useState<ExtraDraftItem[]>([])
   const [extraError, setExtraError] = useState('')
   const [editingExtras, setEditingExtras] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [signatureNotice, setSignatureNotice] = useState('')
   const [deletingEstacaId, setDeletingEstacaId] = useState<number | null>(null)
 
   const query = useQuery({
@@ -117,18 +260,47 @@ function MedicaoDetalhePageInner() {
   const medicao = data?.medicao
   const isFechada = medicao?.status === 'fechada'
 
+  const assinaturaQuery = useQuery({
+    queryKey: ['medicao-assinatura', medicaoId],
+    queryFn: () => medicoesApi.assinaturaStatus(medicaoId),
+    enabled: Boolean(medicaoId),
+  })
+  const assinatura = assinaturaQuery.data
+  const assinaturaStatus = assinatura?.status ?? medicao?.assinatura_status ?? 'nao_gerado'
+  const assinaturaProtegida = assinaturaStatus === 'assinado'
+
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ['medicao-detalhe', medicaoId] })
   }
 
   const statusMutation = useMutation({
     mutationFn: (s: 'rascunho' | 'fechada') => medicoesApi.setStatus(medicaoId, s),
-    onSuccess: () => { setActionError(''); void invalidate() },
+    onSuccess: () => { setActionError(''); void invalidate(); void assinaturaQuery.refetch() },
     onError: e => setActionError(extractApiErrorMessage(e)),
   })
 
+  const gerarAssinaturaMutation = useMutation({
+    mutationFn: () => medicoesApi.gerarLinkAssinatura(medicaoId),
+    onSuccess: async (result) => {
+      setActionError('')
+      setSignatureNotice('Link de assinatura gerado. Ele expira em 24 horas.')
+      await queryClient.invalidateQueries({ queryKey: ['medicao-assinatura', medicaoId] })
+      if (navigator.clipboard && result.publicUrl) {
+        await navigator.clipboard.writeText(result.publicUrl).catch(() => undefined)
+      }
+    },
+    onError: e => setActionError(extractApiErrorMessage(e)),
+  })
+
+  async function copySignatureLink() {
+    if (!assinatura?.publicUrl) return
+    await navigator.clipboard.writeText(assinatura.publicUrl).catch(() => undefined)
+    setSignatureNotice('Link copiado para enviar ao cliente.')
+  }
+
   const headerMutation = useMutation({
     mutationFn: () => medicoesApi.update(medicaoId, {
+      tipoMedicao: headerDraft.tipoMedicao,
       responsavelMedicao: headerDraft.responsavelMedicao,
       conferidoPor: headerDraft.conferidoPor,
       issqnPct: headerDraft.issqnPct !== '' ? parseFloat(headerDraft.issqnPct.replace(',', '.')) || 0 : null,
@@ -151,6 +323,13 @@ function MedicaoDetalhePageInner() {
     mutationFn: ({ data, observacao }: { data: string; observacao: string }) =>
       medicoesApi.salvarObservacaoDia(medicaoId, data, observacao),
     onSuccess: () => invalidate(),
+  })
+
+  const ocorrenciasDiaMutation = useMutation({
+    mutationFn: ({ data, ocorrencias, restaurarDiario = false }: { data: string; ocorrencias: string; restaurarDiario?: boolean }) =>
+      medicoesApi.salvarOcorrenciasDia(medicaoId, data, ocorrencias, restaurarDiario),
+    onSuccess: () => invalidate(),
+    onError: e => setActionError(extractApiErrorMessage(e)),
   })
 
   const estacaMutation = useMutation({
@@ -198,7 +377,7 @@ function MedicaoDetalhePageInner() {
   }
 
   function openEditExtras() {
-    setExtraDraft(extras.map(e => ({ descricao: e.descricao, valor: String(e.valor) })))
+    setExtraDraft(extras.map(e => buildExtraDraftItem(e.descricao, String(e.valor))))
     setEditingExtras(true)
   }
 
@@ -232,11 +411,23 @@ function MedicaoDetalhePageInner() {
             <Download size={14} />
             PDF
           </a>
+          {isFechada && assinaturaStatus !== 'assinado' && (
+            <button
+              type="button"
+              onClick={() => gerarAssinaturaMutation.mutate()}
+              disabled={gerarAssinaturaMutation.isPending}
+              className="btn btn-primary"
+            >
+              <Link2 size={14} />
+              {assinaturaStatus === 'aguardando_assinatura' ? 'Gerar novo link' : 'Enviar para assinatura'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => statusMutation.mutate(isFechada ? 'rascunho' : 'fechada')}
-            disabled={statusMutation.isPending}
+            disabled={statusMutation.isPending || (isFechada && assinaturaProtegida)}
             className={isFechada ? 'btn btn-secondary' : 'btn btn-primary'}
+            title={isFechada && assinaturaProtegida ? 'A medição já foi assinada.' : undefined}
           >
             {isFechada ? <><LockOpen size={14} /> Reabrir</> : <><Lock size={14} /> Fechar medição</>}
           </button>
@@ -249,7 +440,45 @@ function MedicaoDetalhePageInner() {
 
       {isFechada && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-          <Lock size={14} /> Medição fechada — edição bloqueada. Clique em "Reabrir" para editar.
+          <Lock size={14} /> {assinaturaProtegida ? 'Medição assinada pelo cliente — edição bloqueada.' : 'Medição fechada — edição bloqueada. Ao reabrir, qualquer link pendente será cancelado.'}
+        </div>
+      )}
+
+      {isFechada && (
+        <div className="app-panel mb-6 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                {assinaturaStatus === 'assinado' ? <CheckCircle2 size={16} className="text-emerald-600" /> : <Link2 size={16} className="text-slate-500" />}
+                Assinatura do cliente
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                {assinaturaStatus === 'assinado'
+                  ? `Assinada por ${assinatura?.clientName || medicao.assinatura_cliente_nome || 'cliente'} em ${fmtDateTime(assinatura?.signedAt || medicao.assinatura_assinada_em)}.`
+                  : assinaturaStatus === 'aguardando_assinatura'
+                    ? `Aguardando assinatura. Link valido ate ${fmtDateTime(assinatura?.expiresAt)}.`
+                    : assinaturaStatus === 'expirado'
+                      ? 'O link anterior expirou. Gere um novo link para reenviar.'
+                      : 'Feche e envie a medição para o cliente assinar por um link.'}
+              </p>
+            </div>
+            {assinatura?.publicUrl && assinaturaStatus === 'aguardando_assinatura' && (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void copySignatureLink()} className="btn btn-secondary text-xs">
+                  <Copy size={12} /> Copiar link
+                </button>
+                <a
+                  className="btn btn-secondary text-xs"
+                  target="_blank"
+                  rel="noreferrer"
+                  href={`https://wa.me/?text=${encodeURIComponent(assinatura.whatsappText || `Segue o link para assinatura da medição: ${assinatura.publicUrl}`)}`}
+                >
+                  Enviar no WhatsApp
+                </a>
+              </div>
+            )}
+          </div>
+          {signatureNotice && <div className="mt-3 text-xs font-semibold text-emerald-700">{signatureNotice}</div>}
         </div>
       )}
 
@@ -266,13 +495,22 @@ function MedicaoDetalhePageInner() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div className="text-sm font-bold text-slate-800">Informações da medição</div>
           {!isFechada && !headerEdit && (
-            <button type="button" onClick={() => { setHeaderDraft({ responsavelMedicao: medicao.responsavel_medicao ?? '', conferidoPor: medicao.conferido_por ?? '', issqnPct: medicao.issqn_pct != null ? String(medicao.issqn_pct) : '', pctNf: medicao.pct_nf != null ? String(medicao.pct_nf) : '', pctLocacao: medicao.pct_locacao != null ? String(medicao.pct_locacao) : '', issqnCobradoCliente: Number(medicao.issqn_cobrado_cliente) === 1 }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
+            <button type="button" onClick={() => { setHeaderDraft({ tipoMedicao: medicao.tipo_medicao ?? 'parcial', responsavelMedicao: medicao.responsavel_medicao ?? '', conferidoPor: medicao.conferido_por ?? '', issqnPct: medicao.issqn_pct != null ? String(medicao.issqn_pct) : '', pctNf: medicao.pct_nf != null ? String(medicao.pct_nf) : '', pctLocacao: medicao.pct_locacao != null ? String(medicao.pct_locacao) : '', issqnCobradoCliente: Number(medicao.issqn_cobrado_cliente) === 1 }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
               <Pencil size={12} /> Editar
             </button>
           )}
         </div>
         {headerEdit ? (
           <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <div>
+              <label className="field-label">Tipo da medição</label>
+              <select value={headerDraft.tipoMedicao} onChange={e => setHeaderDraft(d => ({ ...d, tipoMedicao: e.target.value as typeof headerDraft.tipoMedicao }))} className="field-select">
+                <option value="adiantamento">Adiantamento</option>
+                <option value="inicial">Inicial</option>
+                <option value="parcial">Parcial</option>
+                <option value="final">Final</option>
+              </select>
+            </div>
             <div>
               <label className="field-label">Responsável pela medição</label>
               <select value={headerDraft.responsavelMedicao} onChange={e => setHeaderDraft(d => ({ ...d, responsavelMedicao: e.target.value }))} className="field-select">
@@ -318,6 +556,7 @@ function MedicaoDetalhePageInner() {
         ) : (
           <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4 text-sm">
             <InfoItem label="Período" value={`${fmtDate(medicao.data_inicio)} — ${fmtDate(medicao.data_fim)}`} />
+            <InfoItem label="Tipo" value={medicao.tipo_medicao || 'parcial'} />
             <InfoItem label="Responsável" value={medicao.responsavel_medicao || '—'} />
             <InfoItem label="Conferido por" value={medicao.conferido_por || '—'} />
             <InfoItem label="Fat. mínimo/dia" value={medicao.fat_minimo_valor != null ? `R$ ${fmtBRL(medicao.fat_minimo_valor)}` : '—'} />
@@ -459,29 +698,14 @@ function MedicaoDetalhePageInner() {
                       {row.saldo > 0 ? `R$ ${fmtBRL(row.saldo)}` : '—'}
                     </td>
                     <td className="px-4 py-2 text-slate-600 max-w-xs min-w-[160px]">
-                      {row.ocorrenciasDiario && (
-                        <div className="mb-1.5">
-                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
-                            Diário de obra
-                          </span>
-                          <div className="mt-1 whitespace-normal text-slate-700">{row.ocorrenciasDiario}</div>
-                        </div>
-                      )}
-                      {isFechada ? (
-                        row.observacaoManual
-                          ? <div className={row.ocorrenciasDiario ? 'mt-1 text-slate-500' : ''}>
-                              {row.ocorrenciasDiario ? `Complemento: ${row.observacaoManual}` : row.observacaoManual}
-                            </div>
-                          : (!row.ocorrenciasDiario && '—')
-                      ) : (
-                        <div className={row.ocorrenciasDiario ? 'mt-1' : ''}>
-                          {row.ocorrenciasDiario && <div className="mb-0.5 text-[10px] font-semibold uppercase text-slate-400">Complemento da medição</div>}
-                          <InlineCell
-                            value={row.observacaoManual ?? ''}
-                            onSave={v => obsDiaMutation.mutate({ data: row.data, observacao: v })}
-                          />
-                        </div>
-                      )}
+                      <MedicaoOccurrencesCell
+                        row={row}
+                        disabled={isFechada}
+                        saving={ocorrenciasDiaMutation.isPending}
+                        onSaveOccurrences={v => ocorrenciasDiaMutation.mutate({ data: row.data, ocorrencias: v })}
+                        onRestoreDiary={() => ocorrenciasDiaMutation.mutate({ data: row.data, ocorrencias: '', restaurarDiario: true })}
+                        onSaveComplement={v => obsDiaMutation.mutate({ data: row.data, observacao: v })}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -512,13 +736,32 @@ function MedicaoDetalhePageInner() {
             <div className="flex flex-col gap-2">
               {extraDraft.map((item, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={item.descricao}
-                    onChange={e => setExtraDraft(d => d.map((x, j) => j === i ? { ...x, descricao: e.target.value } : x))}
-                    placeholder="Descrição do item"
-                    className="field-input flex-1 text-sm"
-                  />
+                  <div className="flex-1">
+                    <select
+                      value={item.tipo}
+                      onChange={e => setExtraDraft(d => d.map((x, j) => j === i ? {
+                        ...x,
+                        tipo: e.target.value,
+                        descricao: e.target.value === CUSTOM_DESCONTO_VALUE ? '' : e.target.value,
+                      } : x))}
+                      className="field-select text-sm"
+                    >
+                      <option value="">Selecione o motivo do desconto</option>
+                      {MEDICAO_DESCONTO_OPTIONS.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value={CUSTOM_DESCONTO_VALUE}>Outros (personalizar)</option>
+                    </select>
+                    {item.tipo === CUSTOM_DESCONTO_VALUE && (
+                      <input
+                        type="text"
+                        value={item.descricao}
+                        onChange={e => setExtraDraft(d => d.map((x, j) => j === i ? { ...x, descricao: e.target.value } : x))}
+                        placeholder="Descreva o desconto"
+                        className="field-input mt-2 text-sm"
+                      />
+                    )}
+                  </div>
                   <input
                     type="number"
                     value={item.valor}
@@ -532,7 +775,7 @@ function MedicaoDetalhePageInner() {
                   </button>
                 </div>
               ))}
-              <button type="button" onClick={() => setExtraDraft(d => [...d, { descricao: '', valor: '' }])} className="btn btn-secondary text-xs w-fit">
+              <button type="button" onClick={() => setExtraDraft(d => [...d, buildExtraDraftItem('', '')])} className="btn btn-secondary text-xs w-fit">
                 <Plus size={12} /> Adicionar item
               </button>
             </div>
@@ -574,8 +817,6 @@ function MedicaoDetalhePageInner() {
           {totais.valorFatMinimo > 0 && <SummaryRow label="Saldo Faturamento Mínimo Diário" value={totais.valorFatMinimo} />}
           {extras.map(e => <SummaryRow key={e.id} label={e.descricao} value={Number(e.valor)} />)}
           <SummaryRow label="TOTAL" value={totais.valorTotal} bold />
-          {totais.pctNf > 0 && <SummaryRow label={`Fatura NF (${fmtBRL(totais.pctNf)}%)`} value={totais.valorNf} />}
-          {totais.pctLocacao > 0 && <SummaryRow label={`Fatura de Locação (${fmtBRL(totais.pctLocacao)}%)`} value={totais.valorLocacao} />}
           {totais.issqnPct > 0 && (
             <SummaryRow
               label={totais.issqnCobradoCliente ? `ISSQN (${fmtBRL(totais.issqnPct)}% sobre NF) — cobrado do cliente` : `ISSQN (${fmtBRL(totais.issqnPct)}% sobre NF) — incluso nos preços`}
@@ -589,10 +830,11 @@ function MedicaoDetalhePageInner() {
             const liquidoNf = totais.pctNf > 0
               ? (totais.issqnCobradoCliente ? totais.valorNf : totais.valorNf - totais.valorIssqn)
               : (totais.issqnCobradoCliente ? totais.valorTotal : totais.valorTotal - totais.valorIssqn)
+            const nfLabel = totais.pctNf > 0 ? `NF (${fmtBRL(totais.pctNf)}%)` : 'NF'
             return <>
-              <SummaryRow label="VALOR BRUTO (R$) — NF" value={brutoNf} bold />
-              <SummaryRow label="VALOR LÍQUIDO (R$) — NF" value={liquidoNf} bold />
-              {totais.pctLocacao > 0 && <SummaryRow label="VALOR (R$) — LOCAÇÃO" value={totais.valorLocacao} bold />}
+              <SummaryRow label={`VALOR BRUTO (R$) — ${nfLabel}`} value={brutoNf} bold />
+              <SummaryRow label={`VALOR LÍQUIDO (R$) — ${nfLabel}`} value={liquidoNf} bold />
+              {totais.pctLocacao > 0 && <SummaryRow label={`VALOR (R$) — FATURA DE LOCAÇÃO (${fmtBRL(totais.pctLocacao)}%)`} value={totais.valorLocacao} bold />}
             </>
           })()}
         </div>

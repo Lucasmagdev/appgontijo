@@ -32,6 +32,8 @@ export default function OperadorConfiguracoesPage() {
 
   useEffect(() => {
     if (!profileQuery.data) return
+    // Populate the drawing form once the saved profile is loaded.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm({
       assinatura: profileQuery.data.assinatura,
     })

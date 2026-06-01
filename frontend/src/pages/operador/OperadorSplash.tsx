@@ -1,17 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 
 export default function OperadorSplash() {
   const navigate = useNavigate()
   const { isAuthenticated, isReady, user } = useOperadorAuth()
-  const startRef = useRef(Date.now())
+  const [startedAt] = useState(() => Date.now())
   const authAtMountRef = useRef(isAuthenticated)
 
   useEffect(() => {
     if (!isReady) return
 
-    const elapsed = Date.now() - startRef.current
+    const elapsed = Date.now() - startedAt
     const remaining = Math.max(0, 1000 - elapsed)
 
     const timer = setTimeout(() => {
@@ -19,7 +19,7 @@ export default function OperadorSplash() {
     }, remaining)
 
     return () => clearTimeout(timer)
-  }, [isReady, navigate])
+  }, [isReady, navigate, startedAt])
 
   const firstName = user?.nome?.split(' ')[0] ?? 'Operador'
 

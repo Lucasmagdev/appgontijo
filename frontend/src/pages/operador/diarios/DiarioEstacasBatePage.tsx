@@ -162,6 +162,8 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
       json.stakesBEInfo && typeof json.stakesBEInfo === 'object'
         ? (json.stakesBEInfo as Record<string, unknown>)
         : {}
+    // Populate hammer settings from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInfo({
       alturaQuedaNega: toText(source.alturaQuedaNega || source.altura_queda_nega),
       pesoMartelo: toText(source.pesoMartelo || source.peso_martelo),

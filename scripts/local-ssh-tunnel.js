@@ -38,22 +38,25 @@ ssh.on('ready', () => {
   write(logPath, `SSH ready: ${host}. Listening 127.0.0.1:${localPort} -> ${remoteHost}:${remotePort}`)
 
   const server = net.createServer((socket) => {
+    let stream = null
+    socket.on('error', (socketError) => {
+      write(errPath, `socket error: ${socketError.message}`)
+      if (stream) stream.destroy()
+    })
+
     ssh.forwardOut(
       socket.remoteAddress || '127.0.0.1',
       socket.remotePort || 0,
       remoteHost,
       remotePort,
-      (error, stream) => {
+      (error, forwardedStream) => {
         if (error) {
           write(errPath, `forwardOut error: ${error.message}`)
           socket.destroy()
           return
         }
 
-        socket.on('error', (socketError) => {
-          write(errPath, `socket error: ${socketError.message}`)
-          stream.destroy()
-        })
+        stream = forwardedStream
 
         stream.on('error', (streamError) => {
           write(errPath, `stream error: ${streamError.message}`)

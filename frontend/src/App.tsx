@@ -54,6 +54,7 @@ const IndiqueUmaObraPage = lazy(() => import('@/pages/operador/IndiqueUmaObraPag
 
 // Portal público
 const AssinaturaClientePage = lazy(() => import('@/pages/public/AssinaturaClientePage'))
+const AssinaturaMedicaoPage = lazy(() => import('@/pages/public/AssinaturaMedicaoPage'))
 const ClientePortalLoginPage = lazy(() => import('@/pages/public/ClientePortalLoginPage'))
 const ClientePortalDashboardPage = lazy(() => import('@/pages/public/ClientePortalDashboardPage'))
 
@@ -94,6 +95,8 @@ function OperadorOfflineBanner() {
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
     if (online) {
+      // This transient state mirrors a browser connectivity transition.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setJustReconnected(true)
       const t = setTimeout(() => setJustReconnected(false), 3000)
       return () => clearTimeout(t)
@@ -279,6 +282,7 @@ export default function App() {
           <Route path="/operador/login" element={<OperadorLoginRoute />} />
           <Route path="/operador/carregando" element={<OperadorSplashPage />} />
           <Route path="/assinatura/diario/:token" element={<AssinaturaClientePage />} />
+          <Route path="/assinatura/medicao/:token" element={<AssinaturaMedicaoPage />} />
           <Route path="/portal-cliente/login" element={<ClientePortalLoginRoute />} />
           <Route path="/portal-cliente" element={<ClientePortalPrivateRoute><ClientePortalDashboardPage /></ClientePortalPrivateRoute>} />
           <Route

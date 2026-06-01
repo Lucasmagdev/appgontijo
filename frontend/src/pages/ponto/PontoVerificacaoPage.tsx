@@ -183,6 +183,8 @@ export default function PontoVerificacaoPage() {
   }, [pointAudienceFilter, showOnlyLinked, verificationQuery.data?.items])
 
   useEffect(() => {
+    // Selections are scoped to the currently displayed audience/date.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedUserIds([])
   }, [pointAudienceFilter, verificationQuery.data?.date, showOnlyLinked])
 
@@ -208,6 +210,8 @@ export default function PontoVerificacaoPage() {
 
   useEffect(() => {
     if (sendRemindersMutation.isPending) {
+      // Reset visual progress when a new asynchronous send starts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSendProgress(0)
       const total = Math.max(1, sendModalUserIds.length)
       const estimatedMs = Math.max(2000, total * 1800)
@@ -220,7 +224,7 @@ export default function PontoVerificacaoPage() {
       if (sendRemindersMutation.isSuccess) setSendProgress(100)
     }
     return () => { if (sendProgressRef.current) clearInterval(sendProgressRef.current) }
-  }, [sendRemindersMutation.isPending, sendRemindersMutation.isSuccess])
+  }, [sendModalUserIds.length, sendRemindersMutation.isPending, sendRemindersMutation.isSuccess])
 
   function updateField<K extends keyof FiltersState>(key: K, value: FiltersState[K]) {
     setFilters((current) => ({ ...current, [key]: value }))

@@ -84,6 +84,13 @@ export type ClientPortalTimelineItem = {
   pdfUrl: string
 }
 
+export type ClientPortalPendingSignature = {
+  id: number
+  dataDiario: string
+  equipamento: string
+  expiresAt: string
+}
+
 export type PortalClienteDocumento = {
   id: number
   tipo: string
@@ -116,11 +123,15 @@ export type ClientPortalDashboard = {
     mediaDiaria: number
     ultimaAtualizacao: string
     valorProducao: number | null
+    valorFatMinimoCobrado: number
+    medicoesComFatMinimo: number
+    diariosPendentesAssinatura: number
   }
   progressoPorDiametro: ClientPortalProgressRow[]
   fotos: ClientPortalPhoto[]
   timeline: ClientPortalTimelineItem[]
   diarios: ClientPortalDiarySummary[]
+  assinaturasPendentes: ClientPortalPendingSignature[]
 }
 
 function toStringValue(value: unknown) {
@@ -154,6 +165,7 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
   const progressoPorDiametro = Array.isArray(row.progressoPorDiametro) ? row.progressoPorDiametro : []
   const fotos = Array.isArray(row.fotos) ? row.fotos : []
   const timeline = Array.isArray(row.timeline) ? row.timeline : []
+  const assinaturasPendentes = Array.isArray(row.assinaturasPendentes) ? row.assinaturasPendentes : []
 
   return {
     filtros: {
@@ -181,6 +193,9 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
       mediaDiaria: toNumberValue(resumo.mediaDiaria),
       ultimaAtualizacao: toStringValue(resumo.ultimaAtualizacao),
       valorProducao: resumo.valorProducao != null ? toNumberValue(resumo.valorProducao) : null,
+      valorFatMinimoCobrado: toNumberValue(resumo.valorFatMinimoCobrado),
+      medicoesComFatMinimo: toNumberValue(resumo.medicoesComFatMinimo),
+      diariosPendentesAssinatura: toNumberValue(resumo.diariosPendentesAssinatura),
     },
     progressoPorDiametro: progressoPorDiametro.map((item) => {
       const rowItem = item as Record<string, unknown>
@@ -214,6 +229,15 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
         descricao: toStringValue(rowItem.descricao),
         detalhe: toStringValue(rowItem.detalhe),
         pdfUrl: resolveApiUrl(toStringValue(rowItem.pdfUrl)),
+      }
+    }),
+    assinaturasPendentes: assinaturasPendentes.map((item) => {
+      const rowItem = item as Record<string, unknown>
+      return {
+        id: toNumberValue(rowItem.id),
+        dataDiario: toStringValue(rowItem.dataDiario),
+        equipamento: toStringValue(rowItem.equipamento),
+        expiresAt: toStringValue(rowItem.expiresAt),
       }
     }),
     diarios: diarios.map((item) => {

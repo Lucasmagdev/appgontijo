@@ -85,6 +85,8 @@ export default function DiarioAbastecimentoPage({ diarioId, equipamentoId }: Pro
 
   useEffect(() => {
     const currentSupply = readSupply((diarioQuery.data?.dadosJson as Record<string, unknown> | null)?.supply)
+    // Populate this module form from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm(currentSupply)
   }, [diarioQuery.data?.dadosJson])
 

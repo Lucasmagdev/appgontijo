@@ -87,7 +87,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
   function toggleGroup(label: string) {
     setOpenGroups((prev) => {
       const next = { ...prev, [label]: !prev[label] }
-      try { localStorage.setItem('sidebar-groups', JSON.stringify(next)) } catch {}
+      try { localStorage.setItem('sidebar-groups', JSON.stringify(next)) } catch { /* Storage can be unavailable in private browsing. */ }
       return next
     })
   }

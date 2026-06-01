@@ -70,63 +70,6 @@ export default function DiarioModuloPage() {
     Number.isFinite(diarioId) && diarioId > 0 ? `?diario=${diarioId}` : ''
   }`
 
-  if (isEquipeModule) {
-    return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isEquipamentoModule) {
-    return <DiarioEquipamentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isEstacasModule) {
-    return <DiarioEstacasPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isOcorrenciasModule) {
-    return <DiarioOcorrenciasPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isAbastecimentoModule) {
-    return <DiarioAbastecimentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isHorimetroModule) {
-    return <DiarioHorimetroPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isPlanejamentoDiarioModule) {
-    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="planning" />
-  }
-
-  if (isPlanejamentoFinalModule) {
-    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="endConstruction" />
-  }
-
-  if (isClimaModule) {
-    return <DiarioClimaPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isRevisaoModule) {
-    return <DiarioRevisaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isAssinaturaModule) {
-    if (!user?.podeGerarLinkAssinatura) {
-      return (
-        <OperadorPlaceholder
-          titulo="Assinatura bloqueada"
-          voltarPara={backUrl}
-          mensagem="A geracao do link de assinatura deve ser feita pelo administrativo ou por um usuario autorizado."
-        />
-      )
-    }
-    return <DiarioAssinaturaClientePage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
-  if (isFinalizarModule) {
-    return <DiarioFinalizacaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
-  }
-
   const diarioQuery = useQuery({
     queryKey: ['operador-diario', diarioId],
     enabled: supportedModule && Number.isFinite(diarioId) && diarioId > 0,
@@ -147,6 +90,8 @@ export default function DiarioModuloPage() {
           ? String(dados.date || '')
           : ''
         : String(dados[config.jsonKey] || '')
+    // Populate a scalar module field from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setValue(current)
   }, [config, diarioQuery.data, moduloParam, supportedModule])
 
@@ -160,7 +105,7 @@ export default function DiarioModuloPage() {
       return value.slice(0, 5)
     }
     return value
-  }, [value])
+  }, [moduloParam, value])
 
   useEffect(() => {
     autoOpenedRef.current = false
@@ -240,6 +185,63 @@ export default function DiarioModuloPage() {
       setSubmitError(extractApiErrorMessage(error))
     },
   })
+
+  if (isEquipeModule) {
+    return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isEquipamentoModule) {
+    return <DiarioEquipamentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isEstacasModule) {
+    return <DiarioEstacasPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isOcorrenciasModule) {
+    return <DiarioOcorrenciasPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isAbastecimentoModule) {
+    return <DiarioAbastecimentoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isHorimetroModule) {
+    return <DiarioHorimetroPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isPlanejamentoDiarioModule) {
+    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="planning" />
+  }
+
+  if (isPlanejamentoFinalModule) {
+    return <DiarioPlanejamentoPage diarioId={diarioId} equipamentoId={equipamentoId} kind="endConstruction" />
+  }
+
+  if (isClimaModule) {
+    return <DiarioClimaPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isRevisaoModule) {
+    return <DiarioRevisaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isAssinaturaModule) {
+    if (!user?.podeGerarLinkAssinatura) {
+      return (
+        <OperadorPlaceholder
+          titulo="Assinatura bloqueada"
+          voltarPara={backUrl}
+          mensagem="A geracao do link de assinatura deve ser feita pelo administrativo ou por um usuario autorizado."
+        />
+      )
+    }
+    return <DiarioAssinaturaClientePage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
+
+  if (isFinalizarModule) {
+    return <DiarioFinalizacaoPage diarioId={diarioId} equipamentoId={equipamentoId} />
+  }
 
   if (!supportedModule || !config) {
     return (

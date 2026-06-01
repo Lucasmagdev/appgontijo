@@ -48,6 +48,8 @@ export default function CursosPontosPage() {
 
   useEffect(() => {
     if (!configQuery.data) return
+    // Synchronize form fields with the configuration selected by month.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setConfigForm({
       points_course_completion: configQuery.data.settings.points_course_completion,
       points_proof_approved: configQuery.data.settings.points_proof_approved,

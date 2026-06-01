@@ -16,7 +16,7 @@ npm run dev
 
 ## Túnel MySQL (rodar antes do backend)
 ```bash
-VPS_PASSWORD=SENHA_VPS node scripts/local-ssh-tunnel.js
+VPS_PASSWORD=Picole@2222@ node scripts/local-ssh-tunnel.js
 # VPS: root@129.212.189.135 porta 3306 → localhost:3307
 ```
 

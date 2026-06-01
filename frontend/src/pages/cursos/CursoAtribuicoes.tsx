@@ -89,6 +89,8 @@ export default function CursoAtribuicoesPage() {
 
   useEffect(() => {
     if (!hasActiveProof && tipoAcesso !== 'so_curso') {
+      // Access choices depend on the proof loaded for this course.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTipoAcesso('so_curso')
     }
   }, [hasActiveProof, tipoAcesso])
@@ -152,6 +154,8 @@ export default function CursoAtribuicoesPage() {
 
   useEffect(() => {
     if (notifyMutation.isPending) {
+      // Reset visual progress when a new asynchronous send starts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSendProgress(0)
       setSendFeedback('')
       const total = Math.max(1, selectedAssignmentIds.length || (atribuicoes?.length ?? 1))
@@ -165,7 +169,7 @@ export default function CursoAtribuicoesPage() {
       if (notifyMutation.isSuccess) setSendProgress(100)
     }
     return () => { if (sendProgressRef.current) clearInterval(sendProgressRef.current) }
-  }, [notifyMutation.isPending, notifyMutation.isSuccess])
+  }, [atribuicoes.length, notifyMutation.isPending, notifyMutation.isSuccess, selectedAssignmentIds.length])
 
   const handleAdd = () => {
     setError('')

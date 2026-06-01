@@ -49,6 +49,8 @@ export default function IntroScreen({ onDone }: IntroScreenProps) {
 
     const visualUnits = 13
     let unit = 0
+    // Reset the clipping animation when the logo phase starts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLogoClip(100)
 
     const timer = window.setInterval(() => {

@@ -9,13 +9,14 @@ import { cn, formatDate } from '@/lib/utils'
 type CreateForm = {
   obraId: string
   obraSearch: string
+  tipoMedicao: 'adiantamento' | 'inicial' | 'parcial' | 'final'
   dataInicio: string
   dataFim: string
   responsavelMedicao: string
   conferidoPor: string
 }
 
-const EMPTY_FORM: CreateForm = { obraId: '', obraSearch: '', dataInicio: '', dataFim: '', responsavelMedicao: '', conferidoPor: '' }
+const EMPTY_FORM: CreateForm = { obraId: '', obraSearch: '', tipoMedicao: 'parcial', dataInicio: '', dataFim: '', responsavelMedicao: '', conferidoPor: '' }
 
 
 export default function MedicoesPage() {
@@ -54,6 +55,7 @@ export default function MedicoesPage() {
       if (form.dataFim < form.dataInicio) throw new Error('Data fim deve ser após data início.')
       return medicoesApi.create({
         obraId: Number(form.obraId),
+        tipoMedicao: form.tipoMedicao,
         dataInicio: form.dataInicio,
         dataFim: form.dataFim,
         responsavelMedicao: form.responsavelMedicao || undefined,
@@ -161,6 +163,15 @@ export default function MedicoesPage() {
               )}
             </div>
             <div>
+              <label className="field-label">Tipo da medição</label>
+              <select value={form.tipoMedicao} onChange={e => setForm(f => ({ ...f, tipoMedicao: e.target.value as CreateForm['tipoMedicao'] }))} className="field-select">
+                <option value="adiantamento">Adiantamento</option>
+                <option value="inicial">Inicial</option>
+                <option value="parcial">Parcial</option>
+                <option value="final">Final</option>
+              </select>
+            </div>
+            <div>
               <label className="field-label">Data início</label>
               <input type="date" value={form.dataInicio} onChange={e => { setForm(f => ({ ...f, dataInicio: e.target.value })); setFormError('') }} className="field-input" />
             </div>
@@ -235,6 +246,7 @@ export default function MedicoesPage() {
                   <th className="px-4 py-3 text-left">Nº</th>
                   <th className="px-4 py-3 text-left">Obra / Cliente</th>
                   <th className="px-4 py-3 text-left">Período</th>
+                  <th className="px-4 py-3 text-left">Tipo</th>
                   <th className="px-4 py-3 text-left">Responsável</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">Criado</th>
@@ -282,6 +294,7 @@ function MedicaoRow({ m, confirmingDelete, isDeleting, onOpen, onDeleteRequest, 
       <td className="px-4 py-3 text-xs text-slate-600">
         {formatDate(m.data_inicio)} — {formatDate(m.data_fim)}
       </td>
+      <td className="px-4 py-3 text-xs font-semibold capitalize text-slate-600">{m.tipo_medicao || 'parcial'}</td>
       <td className="px-4 py-3 text-xs text-slate-600">{m.responsavel_medicao || '—'}</td>
       <td className="px-4 py-3">
         <span className={cn(

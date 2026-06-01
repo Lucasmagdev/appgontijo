@@ -2829,7 +2829,7 @@ export const conferenciaEstacasApi = {
 
 export type PortalDocumento = {
   id: number
-  tipo: 'projeto' | 'sondagem' | 'outro'
+  tipo: 'pre_obra' | 'visita_primeiro_dia' | 'visita_tecnica' | 'projeto' | 'sondagem' | 'medicao' | 'outro'
   nome_original: string
   tamanho: number | null
   mime_type: string | null
@@ -2842,6 +2842,7 @@ export const TIPO_DOCUMENTO_LABELS: Record<string, string> = {
   visita_tecnica: 'Visita técnica',
   projeto: 'Projeto',
   sondagem: 'Sondagem',
+  medicao: 'Medição (PDF)',
   outro: 'Outro',
 }
 
@@ -2968,6 +2969,8 @@ export type MedicaoFatMinimoRow = {
   consideraFatMinimo: boolean
   observacao: string | null
   ocorrenciasDiario: string | null
+  ocorrenciasMedicao: string | null
+  ocorrenciasEditadas: boolean
   observacaoManual: string | null
   dayType: string | null
 }
@@ -2987,11 +2990,51 @@ export type MedicaoTotais = {
   valorLiquido: number
 }
 
+export type MedicaoSignatureStatus = {
+  medicaoId: number
+  status: 'nao_gerado' | 'aguardando_assinatura' | 'assinado' | 'expirado'
+  publicUrl: string
+  expiresAt: string | null
+  sentAt: string | null
+  signedAt: string | null
+  clientName: string
+  clientDocument: string
+  obraNumero: string
+  cliente: string
+  numero: number
+  tipoMedicao: 'adiantamento' | 'inicial' | 'parcial' | 'final'
+  dataInicio: string
+  dataFim: string
+  npsUrl?: string
+  npsRespondido?: boolean
+  whatsappText?: string
+}
+
+export type PublicMedicaoSignature = {
+  tokenStatus: 'active' | 'signed' | 'expired' | 'revoked'
+  medicaoId: number
+  numero: number
+  tipoMedicao: 'adiantamento' | 'inicial' | 'parcial' | 'final'
+  obraNumero: string
+  cliente: string
+  dataInicio: string
+  dataFim: string
+  expiresAt: string | null
+  signedAt: string | null
+  clientName: string
+  clientDocument: string
+  clientSignature: string
+  npsUrl: string
+  npsRespondido: boolean
+  pdfUrl: string
+}
+
 export type MedicaoDetalhe = {
   medicao: {
     id: number
     construction_id: number
     numero: number
+    tipo_medicao: 'adiantamento' | 'inicial' | 'parcial' | 'final'
     data_medicao: string
     data_inicio: string
     data_fim: string
@@ -3007,6 +3050,11 @@ export type MedicaoDetalhe = {
     cliente: string
     endereco: string
     responsavel_comercial: string | null
+    assinatura_status?: MedicaoSignatureStatus['status']
+    assinatura_enviada_em?: string | null
+    assinatura_assinada_em?: string | null
+    assinatura_cliente_nome?: string | null
+    assinatura_cliente_documento?: string | null
   }
   estacas: MedicaoEstaca[]
   extras: MedicaoItemExtra[]
@@ -3018,6 +3066,7 @@ export type MedicaoListItem = {
   id: number
   construction_id: number
   numero: number
+  tipo_medicao: 'adiantamento' | 'inicial' | 'parcial' | 'final'
   data_medicao: string
   data_inicio: string
   data_fim: string
@@ -3039,6 +3088,7 @@ export const medicoesApi = {
   },
   async create(payload: {
     obraId: number
+    tipoMedicao?: 'adiantamento' | 'inicial' | 'parcial' | 'final'
     dataInicio: string
     dataFim: string
     responsavelMedicao?: string
@@ -3058,6 +3108,7 @@ export const medicoesApi = {
     dataMedicao?: string
     dataInicio?: string
     dataFim?: string
+    tipoMedicao?: 'adiantamento' | 'inicial' | 'parcial' | 'final'
     itensExtras?: { descricao: string; valor: number }[]
     issqnPct?: number | null
     pctNf?: number | null
@@ -3089,8 +3140,33 @@ export const medicoesApi = {
   async salvarObservacaoDia(id: number, data: string, observacao: string): Promise<void> {
     await api.patch(`/gontijo/medicoes/${id}/dias/${data}/observacao`, { observacao })
   },
+  async salvarOcorrenciasDia(id: number, data: string, ocorrencias: string, restaurarDiario = false): Promise<void> {
+    await api.patch(`/gontijo/medicoes/${id}/dias/${data}/ocorrencias`, { ocorrencias, restaurarDiario })
+  },
+  async assinaturaStatus(id: number): Promise<MedicaoSignatureStatus> {
+    const res = await api.get<{ ok: boolean; data: MedicaoSignatureStatus }>(`/gontijo/medicoes/${id}/assinatura-link`)
+    return res.data.data
+  },
+  async gerarLinkAssinatura(id: number): Promise<MedicaoSignatureStatus> {
+    const res = await api.post<{ ok: boolean; data: MedicaoSignatureStatus }>(`/gontijo/medicoes/${id}/assinatura-link`)
+    return res.data.data
+  },
   pdfUrl(id: number): string {
     return `${api.defaults.baseURL ?? ''}/gontijo/medicoes/${id}/pdf`
+  },
+}
+
+export const medicaoSignaturePublicApi = {
+  async get(token: string): Promise<PublicMedicaoSignature> {
+    const res = await api.get<{ ok: boolean; data: PublicMedicaoSignature }>(`/gontijo/medicoes/assinatura/${encodeURIComponent(token)}`)
+    return res.data.data
+  },
+  async submit(token: string, payload: { nome: string; documento: string; assinatura: string }): Promise<{ medicaoId: number; signedAt: string }> {
+    const res = await api.post<{ ok: boolean; data: { medicaoId: number; signedAt: string } }>(`/gontijo/medicoes/assinatura/${encodeURIComponent(token)}`, payload)
+    return res.data.data
+  },
+  async submitNps(token: string, payload: { nota: number; comentario?: string }): Promise<void> {
+    await api.post(`/gontijo/medicoes/assinatura/${encodeURIComponent(token)}/nps`, payload)
   },
 }
 

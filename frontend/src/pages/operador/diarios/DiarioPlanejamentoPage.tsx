@@ -91,6 +91,8 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
 
   useEffect(() => {
     const json = (diarioQuery.data?.dadosJson as Record<string, unknown> | null) || {}
+    // Populate the final-planning date from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEndDate(String(json.endDate || ''))
   }, [diarioQuery.data?.dadosJson])
 

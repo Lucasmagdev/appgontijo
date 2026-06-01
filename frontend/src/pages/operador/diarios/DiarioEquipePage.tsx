@@ -63,6 +63,8 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
   useEffect(() => {
     if (!diarioQuery.data) return
     const dados = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
+    // Populate team editing rows from the loaded diary draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMembers(normalizeTeamRows(dados.staff))
   }, [diarioQuery.data])
 

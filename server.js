@@ -3963,9 +3963,21 @@ app.post("/api/admin/client-portals/:id/documentos", requireAdmin, portalDocsUpl
   try {
     await ensurePortalDocumentsTable()
     const access = await fetchClientPortalAccessById(accessId)
-    if (!access) return res.status(404).json({ ok: false, message: "Acesso nao encontrado." })
+    if (!access) {
+      if (req.file) { try { fs.unlinkSync(req.file.path) } catch { /* Ignore cleanup failure after invalid access. */ } }
+      return res.status(404).json({ ok: false, message: "Acesso nao encontrado." })
+    }
     if (!req.file) return res.status(400).json({ ok: false, message: "Nenhum arquivo enviado." })
-    const tipo = String(req.body?.tipo || "outro")
+    const allowedTypes = new Set(["pre_obra", "visita_primeiro_dia", "visita_tecnica", "projeto", "sondagem", "medicao", "outro"])
+    const requestedType = String(req.body?.tipo || "outro")
+    const tipo = allowedTypes.has(requestedType) ? requestedType : "outro"
+    if (tipo === "medicao") {
+      const pdfHeader = fs.readFileSync(req.file.path).subarray(0, 5).toString("ascii")
+      if (pdfHeader !== "%PDF-") {
+        try { fs.unlinkSync(req.file.path) } catch { /* Ignore cleanup failure after invalid upload. */ }
+        return res.status(400).json({ ok: false, message: "A medicao deve ser enviada em arquivo PDF." })
+      }
+    }
     await db.query(
       `INSERT INTO portal_documents (construction_id, tipo, nome_original, nome_arquivo, tamanho, mime_type)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -5194,6 +5206,44 @@ async function fetchClientPortalDashboard(constructionId, filters = {}) {
     [constructionId, String(construction.construction_number || ""), ...dateParams]
   );
 
+  let assinaturasPendentes = [];
+  if (await tableExists("diary_signature_links")) {
+    const [pendingRows] = await db.query(
+      `SELECT d.id,
+              ${dateExpr} AS data_diario,
+              COALESCE(
+                e.name,
+                JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')),
+                JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))
+              ) AS equipment_name,
+              l.expires_at
+       FROM diaries d
+       INNER JOIN diary_signature_links l
+         ON l.id = (
+           SELECT MAX(latest.id)
+           FROM diary_signature_links latest
+           WHERE latest.diary_id = d.id
+         )
+       LEFT JOIN equipments e
+         ON e.id = CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_id')), '') AS UNSIGNED)
+       WHERE (
+         CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) = ?
+         OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')), '') = ?
+       )
+       AND l.status = 'active'
+       AND l.expires_at > NOW()
+       ${dateWhere}
+       ORDER BY data_diario DESC, d.id DESC`,
+      [constructionId, String(construction.construction_number || ""), ...dateParams]
+    );
+    assinaturasPendentes = pendingRows.map((row) => ({
+      id: Number(row.id),
+      dataDiario: firstFilledText(row.data_diario),
+      equipamento: firstFilledText(row.equipment_name),
+      expiresAt: row.expires_at ? String(row.expires_at) : "",
+    }));
+  }
+
   let estacasExecutadas = 0;
   let estacasPlanejadas = 0;
   let valorProducaoTotal = 0;
@@ -5255,6 +5305,28 @@ async function fetchClientPortalDashboard(constructionId, filters = {}) {
   const diasSemProducao = diarios.filter((item) => item.estacasNoDia === 0).length;
   const mediaDiaria = diasTrabalhados > 0 ? Number((estacasExecutadas / diasTrabalhados).toFixed(1)) : 0;
   const ultimaAtualizacao = diarios[0]?.dataDiario || "";
+  let valorFatMinimoCobrado = 0;
+  let medicoesComFatMinimo = 0;
+  if (await tableExists("medicoes") && typeof gontijoRoutes.calcularTotaisMedicao === "function") {
+    let medicaoWhere = "WHERE construction_id = ? AND status = 'fechada'";
+    const medicaoParams = [constructionId];
+    if (dataInicio) { medicaoWhere += " AND data_fim >= ?"; medicaoParams.push(dataInicio); }
+    if (dataFim) { medicaoWhere += " AND data_inicio <= ?"; medicaoParams.push(dataFim); }
+    const [medicoesRows] = await db.query(
+      `SELECT id FROM medicoes ${medicaoWhere} ORDER BY data_medicao DESC, numero DESC`,
+      medicaoParams
+    );
+    for (const row of medicoesRows) {
+      const detalhe = await gontijoRoutes.calcularTotaisMedicao(Number(row.id));
+      const valorFatMinimo = Array.isArray(detalhe?.fatMinimoTable)
+        ? detalhe.fatMinimoTable
+          .filter((dia) => (!dataInicio || dia.data >= dataInicio) && (!dataFim || dia.data <= dataFim))
+          .reduce((total, dia) => total + Number(dia.saldo || 0), 0)
+        : 0;
+      if (valorFatMinimo > 0) medicoesComFatMinimo += 1;
+      valorFatMinimoCobrado += valorFatMinimo;
+    }
+  }
   const timeline = diarios.slice(0, 12).flatMap((diario) => {
     const items = [
       {
@@ -5301,12 +5373,16 @@ async function fetchClientPortalDashboard(constructionId, filters = {}) {
       diasSemProducao,
       mediaDiaria,
       valorProducao: valorProducaoTotal > 0 ? valorProducaoTotal : null,
+      valorFatMinimoCobrado,
+      medicoesComFatMinimo,
+      diariosPendentesAssinatura: assinaturasPendentes.length,
       ultimaAtualizacao,
     },
     progressoPorDiametro: progressByDiameter,
     fotos: allPhotos.slice(0, 18),
     timeline,
     diarios: publicDiarios,
+    assinaturasPendentes,
   };
 }
 
@@ -6141,11 +6217,24 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
     }
 
     if (isSignatureLinkExpired(row)) {
+      const diaryData = safeParseJsonObject(row.data);
+      const nextData = {
+        ...diaryData,
+        signature_request: {
+          ...(diaryData.signature_request && typeof diaryData.signature_request === "object" ? diaryData.signature_request : {}),
+          status: "expirado",
+          expiresAt: row.expires_at,
+        },
+      };
       await conn.query(
         "UPDATE diary_signature_links SET status = 'expired', updated_at = NOW() WHERE id = ?",
         [row.link_id]
       );
-      await conn.rollback();
+      await conn.query("UPDATE diaries SET data = ?, updated_at = NOW() WHERE id = ?", [
+        JSON.stringify(nextData),
+        row.diary_id,
+      ]);
+      await conn.commit();
       return res.status(400).json({ ok: false, message: "Este link de assinatura expirou." });
     }
 

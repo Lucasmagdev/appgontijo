@@ -25,6 +25,8 @@ export default function CursoFormPage() {
 
   useEffect(() => {
     if (curso) {
+      // Populate the editing form after loading the selected course.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitulo(curso.titulo)
       setDescricao(curso.descricao ?? '')
       setThumbnailUrl(curso.thumbnail_url ?? '')
