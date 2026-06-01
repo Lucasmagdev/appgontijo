@@ -7183,6 +7183,12 @@ app.get("/api/estacas/detail", async (req, res) => {
   }
 });
 
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) return next();
+  if (path.extname(req.path)) return next();
+  return res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 if (!process.env.VERCEL) {
   bootstrapWhatsAppScheduler();
   app.listen(port, () => {
