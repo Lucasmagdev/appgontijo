@@ -7183,7 +7183,8 @@ app.get("/api/estacas/detail", async (req, res) => {
   }
 });
 
-app.get("*", (req, res, next) => {
+app.use((req, res, next) => {
+  if (req.method !== "GET") return next();
   if (req.path.startsWith("/api/")) return next();
   if (path.extname(req.path)) return next();
   return res.sendFile(path.join(__dirname, "public", "index.html"));
