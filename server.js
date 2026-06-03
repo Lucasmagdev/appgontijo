@@ -5672,7 +5672,7 @@ app.post("/api/operador/session", async (req, res) => {
   try {
     await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
-      "SELECT id, name, document, phone, password, active, pode_gerar_link_assinatura FROM users WHERE REPLACE(REPLACE(document, '.', ''), '-', '') = ? AND active = 'S'",
+      "SELECT id, name, document, phone, password, active, cargo, pode_gerar_link_assinatura FROM users WHERE REPLACE(REPLACE(document, '.', ''), '-', '') = ? AND active = 'S'",
       [cpf]
     );
 
@@ -5685,10 +5685,15 @@ app.post("/api/operador/session", async (req, res) => {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
 
+    if ((user.cargo || "").toLowerCase() !== "operador") {
+      return res.status(403).json({ ok: false, message: "Acesso restrito a operadores." });
+    }
+
     const token = crypto.randomUUID();
     operadorSessions.set(token, {
       userId: user.id,
       cpf: user.document,
+      cargo: user.cargo,
       createdAt: new Date().toISOString(),
     });
     setCookie(res, "operador_session", token, cookieOptionsForRequest(req));
@@ -5699,6 +5704,7 @@ app.post("/api/operador/session", async (req, res) => {
         id: user.id,
         nome: user.name,
         cpf: user.document,
+        cargo: user.cargo,
         perfil: "operador",
         podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
       },
@@ -5722,10 +5728,10 @@ app.get("/api/operador/status", async (req, res) => {
   try {
     await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
-      "SELECT id, name, document, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
+      "SELECT id, name, document, cargo, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
       [session.userId]
     );
-    if (!user) {
+    if (!user || (user.cargo || "").toLowerCase() !== "operador") {
       operadorSessions.delete(session.token);
       clearCookie(res, "operador_session");
       return res.json({ ok: true, authenticated: false });
@@ -5737,6 +5743,7 @@ app.get("/api/operador/status", async (req, res) => {
         id: user.id,
         nome: user.name,
         cpf: user.document,
+        cargo: user.cargo,
         perfil: "operador",
         podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
       },

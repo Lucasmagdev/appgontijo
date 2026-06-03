@@ -230,7 +230,6 @@ function MedicaoDetalhePageInner() {
   const [headerDraft, setHeaderDraft] = useState({
     tipoMedicao: 'parcial' as 'adiantamento' | 'inicial' | 'parcial' | 'final',
     responsavelMedicao: '',
-    conferidoPor: '',
     issqnPct: '',
     pctNf: '',
     pctLocacao: '',
@@ -268,6 +267,15 @@ function MedicaoDetalhePageInner() {
   const assinatura = assinaturaQuery.data
   const assinaturaStatus = assinatura?.status ?? medicao?.assinatura_status ?? 'nao_gerado'
   const assinaturaProtegida = assinaturaStatus === 'assinado'
+  const assinaturaClienteNome = assinatura?.clientName || medicao?.assinatura_cliente_nome || ''
+  const assinaturaClienteData = assinatura?.signedAt || medicao?.assinatura_assinada_em || medicao?.assinatura_enviada_em || ''
+  const assinaturaClienteResumo = assinaturaStatus === 'assinado'
+    ? `Assinada por ${assinaturaClienteNome || 'cliente'} em ${fmtDateTime(assinaturaClienteData)}`
+    : assinaturaStatus === 'aguardando_assinatura'
+      ? `Aguardando assinatura do cliente${assinaturaClienteData ? ` desde ${fmtDateTime(assinaturaClienteData)}` : ''}`
+      : assinaturaStatus === 'expirado'
+        ? 'Link de assinatura expirado'
+        : 'Ainda sem link de assinatura'
 
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ['medicao-detalhe', medicaoId] })
@@ -302,7 +310,6 @@ function MedicaoDetalhePageInner() {
     mutationFn: () => medicoesApi.update(medicaoId, {
       tipoMedicao: headerDraft.tipoMedicao,
       responsavelMedicao: headerDraft.responsavelMedicao,
-      conferidoPor: headerDraft.conferidoPor,
       issqnPct: headerDraft.issqnPct !== '' ? parseFloat(headerDraft.issqnPct.replace(',', '.')) || 0 : null,
       pctNf: headerDraft.pctNf !== '' ? parseFloat(headerDraft.pctNf.replace(',', '.')) || 0 : null,
       pctLocacao: headerDraft.pctLocacao !== '' ? parseFloat(headerDraft.pctLocacao.replace(',', '.')) || 0 : null,
@@ -495,7 +502,7 @@ function MedicaoDetalhePageInner() {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
           <div className="text-sm font-bold text-slate-800">Informações da medição</div>
           {!isFechada && !headerEdit && (
-            <button type="button" onClick={() => { setHeaderDraft({ tipoMedicao: medicao.tipo_medicao ?? 'parcial', responsavelMedicao: medicao.responsavel_medicao ?? '', conferidoPor: medicao.conferido_por ?? '', issqnPct: medicao.issqn_pct != null ? String(medicao.issqn_pct) : '', pctNf: medicao.pct_nf != null ? String(medicao.pct_nf) : '', pctLocacao: medicao.pct_locacao != null ? String(medicao.pct_locacao) : '', issqnCobradoCliente: Number(medicao.issqn_cobrado_cliente) === 1 }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
+            <button type="button" onClick={() => { setHeaderDraft({ tipoMedicao: medicao.tipo_medicao ?? 'parcial', responsavelMedicao: medicao.responsavel_medicao ?? '', issqnPct: medicao.issqn_pct != null ? String(medicao.issqn_pct) : '', pctNf: medicao.pct_nf != null ? String(medicao.pct_nf) : '', pctLocacao: medicao.pct_locacao != null ? String(medicao.pct_locacao) : '', issqnCobradoCliente: Number(medicao.issqn_cobrado_cliente) === 1 }); setHeaderEdit(true) }} className="btn btn-secondary text-xs">
               <Pencil size={12} /> Editar
             </button>
           )}
@@ -524,8 +531,10 @@ function MedicaoDetalhePageInner() {
               </select>
             </div>
             <div>
-              <label className="field-label">Conferido por</label>
-              <input type="text" value={headerDraft.conferidoPor} onChange={e => setHeaderDraft(d => ({ ...d, conferidoPor: e.target.value }))} className="field-input" />
+              <label className="field-label">Assinatura do cliente</label>
+              <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                {assinaturaClienteResumo}
+              </div>
             </div>
             <div>
               <label className="field-label">% NF (Nota Fiscal)</label>
@@ -558,7 +567,7 @@ function MedicaoDetalhePageInner() {
             <InfoItem label="Período" value={`${fmtDate(medicao.data_inicio)} — ${fmtDate(medicao.data_fim)}`} />
             <InfoItem label="Tipo" value={medicao.tipo_medicao || 'parcial'} />
             <InfoItem label="Responsável" value={medicao.responsavel_medicao || '—'} />
-            <InfoItem label="Conferido por" value={medicao.conferido_por || '—'} />
+            <InfoItem label="Assinatura do cliente" value={assinaturaClienteResumo} />
             <InfoItem label="Fat. mínimo/dia" value={medicao.fat_minimo_valor != null ? `R$ ${fmtBRL(medicao.fat_minimo_valor)}` : '—'} />
             <InfoItem label="% NF" value={medicao.pct_nf != null && medicao.pct_nf > 0 ? `${fmtBRL(medicao.pct_nf)}%` : '—'} />
             <InfoItem label="% Locação" value={medicao.pct_locacao != null && medicao.pct_locacao > 0 ? `${fmtBRL(medicao.pct_locacao)}%` : '—'} />
