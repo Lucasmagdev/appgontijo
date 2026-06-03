@@ -312,4 +312,8 @@ export const clientPortalService = {
   getDocumentoDownloadUrl(docId: number): string {
     return resolveApiUrl(`/client-portal/documentos/${docId}/download`)
   },
+  async solicitarAssinatura(diarioId: number): Promise<string> {
+    const { data } = await clientPortalApi.post<{ ok: boolean; data: { signingUrl: string } }>(`/client-portal/diarios/${diarioId}/solicitar-assinatura`)
+    return data.data.signingUrl
+  },
 }

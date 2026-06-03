@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import {
   CalendarDays,
@@ -534,6 +534,45 @@ function DiariosSection({ diarios, pendingSignatures }: { diarios: ClientPortalD
   )
 }
 
+function SignButton({ diarioId, signingUrl }: { diarioId: number; signingUrl?: string }) {
+  const [url, setUrl] = useState(signingUrl || '')
+  const mutation = useMutation({
+    mutationFn: () => clientPortalService.solicitarAssinatura(diarioId),
+    onSuccess: (newUrl) => {
+      setUrl(newUrl)
+      window.open(newUrl, '_blank', 'noreferrer')
+    },
+  })
+
+  if (url) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white"
+      >
+        <Pen size={12} /> Assinar
+      </a>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      className="inline-flex items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white disabled:opacity-50"
+    >
+      <Pen size={12} /> {mutation.isPending ? '...' : 'Assinar'}
+    </button>
+  )
+}
+
+function canSign(status: string) {
+  return status === 'pendente' || status === 'aprovado'
+}
+
 function DiaryRow({ diario, signingUrl }: { diario: ClientPortalDiarySummary, signingUrl?: string }) {
   return (
     <tr>
@@ -565,19 +604,10 @@ function DiaryRow({ diario, signingUrl }: { diario: ClientPortalDiarySummary, si
         </a>
       </td>
       <td>
-        {signingUrl ? (
-          <a
-            href={signingUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white"
-          >
-            <Pen size={13} />
-            Assinar
-          </a>
-        ) : (
-          <span className="text-xs text-slate-400">—</span>
-        )}
+        {canSign(diario.status)
+          ? <SignButton diarioId={diario.id} signingUrl={signingUrl} />
+          : <span className="text-xs text-slate-400">—</span>
+        }
       </td>
     </tr>
   )
@@ -618,16 +648,10 @@ function DiaryMobileCard({ diario, signingUrl }: { diario: ClientPortalDiarySumm
           Ver PDF
           <ExternalLink size={13} />
         </a>
-        {signingUrl && (
-          <a
-            href={signingUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white"
-          >
-            <Pen size={14} />
-            Assinar
-          </a>
+        {canSign(diario.status) && (
+          <div className="flex-1">
+            <SignButton diarioId={diario.id} signingUrl={signingUrl} />
+          </div>
         )}
       </div>
     </article>

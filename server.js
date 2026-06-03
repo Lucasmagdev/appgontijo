@@ -4200,6 +4200,44 @@ app.get("/api/client-portal/diarios/:id/pdf", requireClientPortal, async (req, r
   }
 });
 
+app.post("/api/client-portal/diarios/:id/solicitar-assinatura", requireClientPortal, async (req, res) => {
+  const diaryId = parsePositiveInteger(req.params.id);
+  if (!diaryId) return res.status(400).json({ ok: false, message: "Diario invalido." });
+
+  try {
+    const dashboard = await fetchClientPortalDashboard(req.clientPortalSession.constructionId);
+    const diario = dashboard?.diarios?.find((item) => Number(item.id) === diaryId);
+    if (!diario) return res.status(404).json({ ok: false, message: "Diario nao encontrado para esta obra." });
+    if (diario.status === 'assinado') return res.status(400).json({ ok: false, message: "Diario ja assinado." });
+    if (diario.status === 'rascunho') return res.status(400).json({ ok: false, message: "Diario ainda em rascunho." });
+
+    if (!(await tableExists("diary_signature_links"))) {
+      return res.status(503).json({ ok: false, message: "Funcionalidade de assinatura nao disponivel." });
+    }
+
+    await db.query(
+      "UPDATE diary_signature_links SET status = 'revoked', updated_at = NOW() WHERE diary_id = ? AND status = 'active'",
+      [diaryId]
+    );
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const now = new Date();
+    const expiresAtSql = formatSqlDateTime(addHours(now, 72));
+    const sentAtSql = formatSqlDateTime(now);
+    const publicUrl = `${buildDiarySignatureBaseUrl(req)}/assinatura/diario/${token}`;
+
+    await db.query(
+      `INSERT INTO diary_signature_links (diary_id, token, status, expires_at, sent_at, created_at, updated_at)
+       VALUES (?, ?, 'active', ?, ?, NOW(), NOW())`,
+      [diaryId, token, expiresAtSql, sentAtSql]
+    );
+
+    return res.json({ ok: true, data: { signingUrl: publicUrl } });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "Erro ao gerar link de assinatura.", details: error.message });
+  }
+});
+
 function getOperadorSession(req) {
   const token = parseCookies(req).operador_session;
   if (!token) return null;
