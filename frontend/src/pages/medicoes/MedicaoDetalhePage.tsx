@@ -134,6 +134,8 @@ function MedicaoOccurrencesCell({ row, disabled, saving, onSaveOccurrences, onRe
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [complementEditing, setComplementEditing] = useState(false)
+  const [complementDraft, setComplementDraft] = useState('')
   const occurrenceText = row.ocorrenciasMedicao ?? ''
   const badgeLabel = row.ocorrenciasEditadas ? 'Ocorrências da medição' : 'Diário de obra'
 
@@ -145,6 +147,16 @@ function MedicaoOccurrencesCell({ row, disabled, saving, onSaveOccurrences, onRe
   function saveEditor() {
     onSaveOccurrences(draft)
     setEditing(false)
+  }
+
+  function openComplementEditor() {
+    setComplementDraft(row.observacaoManual ?? '')
+    setComplementEditing(true)
+  }
+
+  function saveComplement() {
+    onSaveComplement(complementDraft)
+    setComplementEditing(false)
   }
 
   if (disabled) {
@@ -214,7 +226,58 @@ function MedicaoOccurrencesCell({ row, disabled, saving, onSaveOccurrences, onRe
       )}
       <div className="mt-1">
         <div className="mb-0.5 text-[10px] font-semibold uppercase text-slate-400">Observação adicional</div>
-        <InlineCell value={row.observacaoManual ?? ''} onSave={onSaveComplement} />
+        {complementEditing ? (
+          <div className="space-y-1.5">
+            <textarea
+              value={complementDraft}
+              onChange={event => setComplementDraft(event.target.value)}
+              rows={2}
+              className="w-full min-w-[260px] rounded border border-blue-400 px-2 py-1 text-xs text-slate-700 focus:outline-none"
+              placeholder="Adicione uma observação adicional"
+            />
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={saveComplement}
+                disabled={saving}
+                className="rounded bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
+              >
+                Salvar
+              </button>
+              <button
+                type="button"
+                onClick={() => setComplementEditing(false)}
+                className="rounded px-2 py-1 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 min-w-[120px]">
+              {row.observacaoManual?.trim() ? row.observacaoManual : '—'}
+            </div>
+            <button
+              type="button"
+              onClick={openComplementEditor}
+              disabled={saving}
+              className="rounded bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            >
+              {row.observacaoManual?.trim() ? 'Editar' : 'Adicionar'}
+            </button>
+            {row.observacaoManual?.trim() ? (
+              <button
+                type="button"
+                onClick={() => onSaveComplement('')}
+                disabled={saving}
+                className="rounded bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+              >
+                Excluir
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -330,6 +393,7 @@ function MedicaoDetalhePageInner() {
     mutationFn: ({ data, observacao }: { data: string; observacao: string }) =>
       medicoesApi.salvarObservacaoDia(medicaoId, data, observacao),
     onSuccess: () => invalidate(),
+    onError: e => setActionError(extractApiErrorMessage(e)),
   })
 
   const ocorrenciasDiaMutation = useMutation({
@@ -568,7 +632,6 @@ function MedicaoDetalhePageInner() {
             <InfoItem label="Tipo" value={medicao.tipo_medicao || 'parcial'} />
             <InfoItem label="Responsável" value={medicao.responsavel_medicao || '—'} />
             <InfoItem label="Assinatura do cliente" value={assinaturaClienteResumo} />
-            <InfoItem label="Fat. mínimo/dia" value={medicao.fat_minimo_valor != null ? `R$ ${fmtBRL(medicao.fat_minimo_valor)}` : '—'} />
             <InfoItem label="% NF" value={medicao.pct_nf != null && medicao.pct_nf > 0 ? `${fmtBRL(medicao.pct_nf)}%` : '—'} />
             <InfoItem label="% Locação" value={medicao.pct_locacao != null && medicao.pct_locacao > 0 ? `${fmtBRL(medicao.pct_locacao)}%` : '—'} />
             <InfoItem label="ISSQN" value={medicao.issqn_pct != null && medicao.issqn_pct > 0 ? `${fmtBRL(medicao.issqn_pct)}% ${Number(medicao.issqn_cobrado_cliente) === 1 ? '(cobrado do cliente)' : '(incluso)'}` : '—'} />
