@@ -4157,7 +4157,7 @@ app.get("/api/client-portal/dashboard", requireClientPortal, async (req, res) =>
   try {
     const dataInicio = textOrNull(req.query.data_inicio) || null
     const dataFim = textOrNull(req.query.data_fim) || null
-    const payload = await fetchClientPortalDashboard(req.clientPortalSession.constructionId, { dataInicio, dataFim });
+    const payload = await fetchClientPortalDashboard(req.clientPortalSession.constructionId, { dataInicio, dataFim }, buildDiarySignatureBaseUrl(req));
     if (!payload) {
       clientPortalSessions.delete(req.clientPortalSession.token);
       clearCookie(res, "client_portal_session");
@@ -5150,7 +5150,7 @@ async function fetchClientPortalAccessByLogin(login) {
   return rows[0] || null;
 }
 
-async function fetchClientPortalDashboard(constructionId, filters = {}) {
+async function fetchClientPortalDashboard(constructionId, filters = {}, baseUrl = '') {
   const construction = await fetchActiveConstructionById(constructionId);
   if (!construction) return null;
   let constructionPhotos = [];
@@ -5216,7 +5216,8 @@ async function fetchClientPortalDashboard(constructionId, filters = {}) {
                 JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment_name')),
                 JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.equipment'))
               ) AS equipment_name,
-              l.expires_at
+              l.expires_at,
+              l.token
        FROM diaries d
        INNER JOIN diary_signature_links l
          ON l.id = (
@@ -5241,6 +5242,7 @@ async function fetchClientPortalDashboard(constructionId, filters = {}) {
       dataDiario: firstFilledText(row.data_diario),
       equipamento: firstFilledText(row.equipment_name),
       expiresAt: row.expires_at ? String(row.expires_at) : "",
+      signingUrl: row.token ? `${baseUrl}/assinatura/diario/${row.token}` : '',
     }));
   }
 

@@ -12,6 +12,7 @@ import {
   LogOut,
   MapPin,
   Paperclip,
+  Pen,
   TrendingUp,
 } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
@@ -177,6 +178,21 @@ export default function ClientePortalDashboardPage() {
                   </div>
                 </div>
 
+                <div className="relative mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <MetricCard icon={FileText} label="Diarios disponiveis" value={String(data.resumo.totalDiarios)} detail={latestDiary ? `Ultimo: ${formatSafeDate(latestDiary.dataDiario)}` : 'Aguardando diarios'} />
+                  <MetricCard icon={TrendingUp} label="Estacas executadas" value={String(data.resumo.estacasExecutadas)} detail={`${data.resumo.estacasRestantes} restantes`} tone="success" />
+                  {data.resumo.valorProducao != null && (
+                    <MetricCard icon={TrendingUp} label="Valor de producao" value={`R$ ${formatBRL(data.resumo.valorProducao)}`} detail="Diarios aprovados no periodo" tone="success" />
+                  )}
+                  <MetricCard
+                    icon={FileText}
+                    label="Fat. minimo cobrado"
+                    value={`R$ ${formatBRL(data.resumo.valorFatMinimoCobrado)}`}
+                    detail={`${data.resumo.medicoesComFatMinimo} medicao${data.resumo.medicoesComFatMinimo === 1 ? '' : 'oes'} com cobranca`}
+                    tone={data.resumo.valorFatMinimoCobrado > 0 ? 'warning' : 'neutral'}
+                  />
+                </div>
+
               </>
             ) : null}
           </div>
@@ -241,49 +257,45 @@ export default function ClientePortalDashboardPage() {
                 </section>
 
                 {data.resumo.diariosPendentesAssinatura > 0 && (
-                  <section className="rounded-xl border border-red-300 bg-red-50 p-4 shadow-sm sm:rounded-[24px] sm:p-5">
+                  <section className="rounded-xl border-2 border-red-400 bg-red-50 p-4 shadow-sm sm:rounded-[24px] sm:p-5">
                     <div className="flex items-start gap-3 text-red-800">
                       <AlertTriangle size={22} className="mt-0.5 shrink-0" />
                       <div>
                         <h2 className="text-base font-black">
-                          {data.resumo.diariosPendentesAssinatura} diário{data.resumo.diariosPendentesAssinatura === 1 ? '' : 's'} pendente{data.resumo.diariosPendentesAssinatura === 1 ? '' : 's'} de assinatura
+                          {data.resumo.diariosPendentesAssinatura} diário{data.resumo.diariosPendentesAssinatura === 1 ? '' : 's'} aguardando sua assinatura
                         </h2>
                         <p className="mt-1 text-sm text-red-700">
-                          Há diário de obra enviado para assinatura do cliente aguardando conclusão.
+                          Clique em "Assinar agora" para revisar e assinar cada diário.
                         </p>
                       </div>
                     </div>
                     <div className="mt-4 grid gap-2">
                       {data.assinaturasPendentes.map((diario) => (
-                        <div key={diario.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-sm">
+                        <div key={diario.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-white px-3 py-3 text-sm">
                           <span className="font-semibold text-red-900">
-                            {formatSafeDate(diario.dataDiario)} - {diario.equipamento || 'Equipamento'}
+                            {formatSafeDate(diario.dataDiario)} — {diario.equipamento || 'Equipamento'}
                           </span>
-                          <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold uppercase text-red-700">
-                            Aguardando assinatura
-                          </span>
+                          {diario.signingUrl ? (
+                            <a
+                              href={diario.signingUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-800"
+                            >
+                              <Pen size={13} /> Assinar agora
+                            </a>
+                          ) : (
+                            <span className="rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-bold uppercase text-red-700">
+                              Aguardando assinatura
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
                   </section>
                 )}
 
-                <DiariosSection diarios={data.diarios} />
-
-                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <MetricCard icon={FileText} label="Diarios disponiveis" value={String(data.resumo.totalDiarios)} detail={latestDiary ? `Ultimo: ${formatSafeDate(latestDiary.dataDiario)}` : 'Aguardando diarios'} />
-                  <MetricCard icon={TrendingUp} label="Estacas executadas" value={String(data.resumo.estacasExecutadas)} detail={`${data.resumo.estacasRestantes} restantes`} tone="success" />
-                  {data.resumo.valorProducao != null && (
-                    <MetricCard icon={TrendingUp} label="Valor de produção" value={`R$ ${formatBRL(data.resumo.valorProducao)}`} detail="Diários aprovados no período" tone="success" />
-                  )}
-                  <MetricCard
-                    icon={FileText}
-                    label="Fat. mínimo cobrado"
-                    value={`R$ ${formatBRL(data.resumo.valorFatMinimoCobrado)}`}
-                    detail={`${data.resumo.medicoesComFatMinimo} medição${data.resumo.medicoesComFatMinimo === 1 ? '' : 'ões'} com cobrança`}
-                    tone={data.resumo.valorFatMinimoCobrado > 0 ? 'warning' : 'neutral'}
-                  />
-                </section>
+                <DiariosSection diarios={data.diarios} pendingSignatures={data.assinaturasPendentes} />
 
                 {photoGroups.length > 0 && (
                   <section className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:rounded-[28px] sm:p-5">
@@ -473,7 +485,9 @@ export default function ClientePortalDashboardPage() {
   )
 }
 
-function DiariosSection({ diarios }: { diarios: ClientPortalDiarySummary[] }) {
+function DiariosSection({ diarios, pendingSignatures }: { diarios: ClientPortalDiarySummary[], pendingSignatures: import('@/lib/client-portal-api').ClientPortalPendingSignature[] }) {
+  const signingUrlById = new Map(pendingSignatures.filter(p => p.signingUrl).map(p => [p.id, p.signingUrl]))
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-5">
       <div>
@@ -483,7 +497,7 @@ function DiariosSection({ diarios }: { diarios: ClientPortalDiarySummary[] }) {
 
       <div className="mt-5 grid gap-3 sm:hidden">
         {diarios.length ? (
-          diarios.map((diario) => <DiaryMobileCard key={diario.id} diario={diario} />)
+          diarios.map((diario) => <DiaryMobileCard key={diario.id} diario={diario} signingUrl={signingUrlById.get(diario.id)} />)
         ) : (
           <QueryFeedback type="empty" title="Nenhum diario encontrado" description="Ainda nao existem diarios vinculados a esta obra ativa." />
         )}
@@ -500,14 +514,15 @@ function DiariosSection({ diarios }: { diarios: ClientPortalDiarySummary[] }) {
               <th>Estacas</th>
               <th>Clima</th>
               <th>PDF</th>
+              <th>Assinatura</th>
             </tr>
           </thead>
           <tbody>
             {diarios.length ? (
-              diarios.map((diario) => <DiaryRow key={diario.id} diario={diario} />)
+              diarios.map((diario) => <DiaryRow key={diario.id} diario={diario} signingUrl={signingUrlById.get(diario.id)} />)
             ) : (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <QueryFeedback type="empty" title="Nenhum diario encontrado" description="Ainda nao existem diarios vinculados a esta obra ativa." />
                 </td>
               </tr>
@@ -519,7 +534,7 @@ function DiariosSection({ diarios }: { diarios: ClientPortalDiarySummary[] }) {
   )
 }
 
-function DiaryRow({ diario }: { diario: ClientPortalDiarySummary }) {
+function DiaryRow({ diario, signingUrl }: { diario: ClientPortalDiarySummary, signingUrl?: string }) {
   return (
     <tr>
       <td className="font-semibold text-slate-700">{formatSafeDate(diario.dataDiario)}</td>
@@ -549,11 +564,26 @@ function DiaryRow({ diario }: { diario: ClientPortalDiarySummary }) {
           <ExternalLink size={13} />
         </a>
       </td>
+      <td>
+        {signingUrl ? (
+          <a
+            href={signingUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white"
+          >
+            <Pen size={13} />
+            Assinar
+          </a>
+        ) : (
+          <span className="text-xs text-slate-400">—</span>
+        )}
+      </td>
     </tr>
   )
 }
 
-function DiaryMobileCard({ diario }: { diario: ClientPortalDiarySummary }) {
+function DiaryMobileCard({ diario, signingUrl }: { diario: ClientPortalDiarySummary, signingUrl?: string }) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 shadow-sm">
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -577,16 +607,29 @@ function DiaryMobileCard({ diario }: { diario: ClientPortalDiarySummary }) {
         <InfoPill label="Estacas" value={String(diario.estacasNoDia)} />
       </div>
 
-      <a
-        href={diario.pdfUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-700 transition hover:border-[var(--brand-red)] hover:text-[var(--brand-red)]"
-      >
-        <FileText size={14} />
-        Ver PDF
-        <ExternalLink size={13} />
-      </a>
+      <div className="mt-3 flex gap-2">
+        <a
+          href={diario.pdfUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-700 transition hover:border-[var(--brand-red)] hover:text-[var(--brand-red)]"
+        >
+          <FileText size={14} />
+          Ver PDF
+          <ExternalLink size={13} />
+        </a>
+        {signingUrl && (
+          <a
+            href={signingUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-red-700 transition hover:bg-red-700 hover:text-white"
+          >
+            <Pen size={14} />
+            Assinar
+          </a>
+        )}
+      </div>
     </article>
   )
 }
@@ -624,19 +667,19 @@ function MetricCard({
 }) {
   const toneClasses =
     tone === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      ? 'border-white/25 bg-white/15 text-white'
       : tone === 'warning'
-        ? 'border-amber-200 bg-amber-50 text-amber-700'
-        : 'border-slate-200 bg-white text-slate-900'
+        ? 'border-amber-200/40 bg-amber-400/20 text-white'
+        : 'border-white/20 bg-white/10 text-white'
 
   return (
-    <div className={cn('rounded-xl border px-4 py-4 shadow-sm sm:rounded-[24px] sm:px-5 sm:py-5', toneClasses)}>
+    <div className={cn('rounded-xl border px-4 py-4 backdrop-blur-sm sm:rounded-[20px] sm:px-5 sm:py-5', toneClasses)}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-70">{label}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] opacity-75">{label}</div>
           <div className="mt-2 text-3xl font-black sm:text-4xl">{value}</div>
         </div>
-        <Icon size={24} className="opacity-75" />
+        <Icon size={24} className="opacity-60" />
       </div>
       <div className="mt-3 text-sm font-semibold opacity-70">{detail}</div>
     </div>

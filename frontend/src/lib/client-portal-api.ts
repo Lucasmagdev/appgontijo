@@ -89,6 +89,7 @@ export type ClientPortalPendingSignature = {
   dataDiario: string
   equipamento: string
   expiresAt: string
+  signingUrl: string
 }
 
 export type PortalClienteDocumento = {
@@ -238,6 +239,7 @@ function adaptDashboard(row: Record<string, unknown>): ClientPortalDashboard {
         dataDiario: toStringValue(rowItem.dataDiario),
         equipamento: toStringValue(rowItem.equipamento),
         expiresAt: toStringValue(rowItem.expiresAt),
+        signingUrl: toStringValue(rowItem.signingUrl),
       }
     }),
     diarios: diarios.map((item) => {
