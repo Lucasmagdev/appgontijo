@@ -5746,7 +5746,7 @@ app.post("/api/operador/session", async (req, res) => {
         cpf: user.document,
         cargo: user.cargo,
         perfil: "operador",
-        podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
+        podeGerarLinkAssinatura: String(user.pode_gerar_link_assinatura || "N") === "S",
       },
     });
   } catch (error) {
@@ -5785,12 +5785,48 @@ app.get("/api/operador/status", async (req, res) => {
         cpf: user.document,
         cargo: user.cargo,
         perfil: "operador",
-        podeGerarLinkAssinatura: user.document === "09653344650" || String(user.pode_gerar_link_assinatura || "N") === "S",
+        podeGerarLinkAssinatura: String(user.pode_gerar_link_assinatura || "N") === "S",
       },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
   }
+});
+
+function resolveUserPhotoUrl(filename, req) {
+  if (!filename || filename === "user.png") return "";
+  if (/^https?:\/\//i.test(filename) || filename.startsWith("data:image/")) return filename;
+  const configured = (process.env.USER_PHOTOS_BASE_URL || "").replace(/\/+$/, "");
+  if (configured) return `${configured}/${filename}`;
+  const protocol = req?.headers["x-forwarded-proto"] || req?.protocol || "http";
+  const host = req?.headers["x-forwarded-host"] || req?.get("host") || "localhost:3000";
+  return `${protocol}://${host}/api/operador/profile/photo/${encodeURIComponent(filename)}`;
+}
+
+app.get("/api/operador/profile/photo/:filename", async (req, res) => {
+  const session = getOperadorSession(req);
+  if (!session) return res.status(401).end();
+
+  const filename = req.params.filename;
+  if (!filename || /[/\\]/.test(filename)) return res.status(400).end();
+
+  const candidateDirs = [
+    process.env.USER_PHOTOS_DIR,
+    path.join(__dirname, "uploads", "photos"),
+    path.join(__dirname, "uploads", "users"),
+    path.join(__dirname, "uploads"),
+    path.join(__dirname, "public", "storage"),
+    path.join(__dirname, "public", "photos"),
+  ].filter(Boolean);
+
+  for (const dir of candidateDirs) {
+    const fullPath = path.join(dir, filename);
+    if (fullPath.startsWith(dir) && fs.existsSync(fullPath)) {
+      return res.sendFile(fullPath);
+    }
+  }
+
+  return res.status(404).end();
 });
 
 app.get("/api/operador/profile", async (req, res) => {
@@ -5811,15 +5847,18 @@ app.get("/api/operador/profile", async (req, res) => {
       return res.status(401).json({ ok: false, message: "Operador nao encontrado." });
     }
 
+    const emailRaw = user.email || "";
+    const emailPublic = emailRaw.endsWith("@internal.com") ? "" : emailRaw;
+
     return res.json({
       ok: true,
       data: {
         id: user.id,
         nome: user.name,
         apelido: user.alias || "",
-        email: user.email || "",
+        email: emailPublic,
         telefone: user.phone || "",
-        foto: user.photo || "",
+        foto: resolveUserPhotoUrl(user.photo, req),
         assinatura: user.signature || "",
         documento: user.document || "",
         perfil: "operador",
@@ -5934,6 +5973,15 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
       data: safeParseJsonObject(row.data),
     };
 
+    const diaryStatus = String(diary.data.status || "");
+    if (diaryStatus === "rascunho" || diaryStatus === "") {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "O diario precisa ser finalizado antes de enviar para assinatura do cliente.",
+      });
+    }
+
     if (!diary.operator_signature) {
       await conn.rollback();
       return res.status(400).json({
@@ -5942,7 +5990,7 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
       });
     }
 
-    if (String(diary.data.status || "") === "assinado") {
+    if (diaryStatus === "assinado") {
       await conn.rollback();
       return res.status(400).json({ ok: false, message: "Este diario ja foi assinado pelo cliente." });
     }

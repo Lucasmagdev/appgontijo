@@ -12,6 +12,10 @@ const remotePort = Number(process.env.REMOTE_PORT || 3306)
 const logPath = process.env.TUNNEL_LOG || 'ssh-tunnel.log'
 const errPath = process.env.TUNNEL_ERR || 'ssh-tunnel.err.log'
 
+const RECONNECT_DELAY_MS = 5000
+const KEEPALIVE_INTERVAL_MS = 10000
+const KEEPALIVE_COUNT_MAX = 3
+
 const os = require('os')
 const path = require('path')
 const defaultKeyPaths = [
@@ -32,62 +36,93 @@ if (!password && !privateKey) {
   process.exit(1)
 }
 
-const ssh = new Client()
+let tcpServer = null
+let reconnecting = false
 
-ssh.on('ready', () => {
-  write(logPath, `SSH ready: ${host}. Listening 127.0.0.1:${localPort} -> ${remoteHost}:${remotePort}`)
+function closeTcpServer(cb) {
+  if (!tcpServer) return cb && cb()
+  tcpServer.close(() => {
+    tcpServer = null
+    cb && cb()
+  })
+  // force-close existing connections so server.close resolves fast
+  tcpServer.closeAllConnections?.()
+}
 
-  const server = net.createServer((socket) => {
-    let stream = null
-    socket.on('error', (socketError) => {
-      write(errPath, `socket error: ${socketError.message}`)
-      if (stream) stream.destroy()
-    })
+function connect() {
+  reconnecting = false
+  const ssh = new Client()
 
-    ssh.forwardOut(
-      socket.remoteAddress || '127.0.0.1',
-      socket.remotePort || 0,
-      remoteHost,
-      remotePort,
-      (error, forwardedStream) => {
-        if (error) {
-          write(errPath, `forwardOut error: ${error.message}`)
-          socket.destroy()
-          return
-        }
+  ssh.on('ready', () => {
+    write(logPath, `SSH ready: ${host}. Listening 127.0.0.1:${localPort} -> ${remoteHost}:${remotePort}`)
 
-        stream = forwardedStream
-
-        stream.on('error', (streamError) => {
-          write(errPath, `stream error: ${streamError.message}`)
-          socket.destroy()
+    closeTcpServer(() => {
+      tcpServer = net.createServer((socket) => {
+        let stream = null
+        socket.on('error', (err) => {
+          write(errPath, `socket error: ${err.message}`)
+          if (stream) stream.destroy()
         })
 
-        socket.pipe(stream).pipe(socket)
-      }
-    )
+        ssh.forwardOut(
+          socket.remoteAddress || '127.0.0.1',
+          socket.remotePort || 0,
+          remoteHost,
+          remotePort,
+          (error, forwardedStream) => {
+            if (error) {
+              write(errPath, `forwardOut error: ${error.message}`)
+              socket.destroy()
+              return
+            }
+            stream = forwardedStream
+            stream.on('error', (err) => {
+              write(errPath, `stream error: ${err.message}`)
+              socket.destroy()
+            })
+            socket.pipe(stream).pipe(socket)
+          }
+        )
+      })
+
+      tcpServer.on('error', (err) => {
+        write(errPath, `server error: ${err.message}`)
+        // EADDRINUSE: previous server not closed yet, retry
+        if (err.code === 'EADDRINUSE') {
+          setTimeout(() => connect(), RECONNECT_DELAY_MS)
+        }
+      })
+
+      tcpServer.listen(localPort, '127.0.0.1', () => write(logPath, 'Tunnel listening'))
+    })
   })
 
-  server.on('error', (error) => {
-    write(errPath, `server error: ${error.message}`)
-    process.exit(2)
+  ssh.on('error', (error) => {
+    write(errPath, `ssh error: ${error.message}`)
+    scheduleReconnect(ssh)
   })
 
-  server.listen(localPort, '127.0.0.1', () => write(logPath, 'Tunnel listening'))
-})
+  ssh.on('close', () => {
+    write(logPath, `SSH closed. Reconnecting in ${RECONNECT_DELAY_MS / 1000}s...`)
+    scheduleReconnect(ssh)
+  })
 
-ssh.on('error', (error) => {
-  write(errPath, `ssh error: ${error.message}`)
-  process.exit(1)
-})
+  ssh.connect({
+    host,
+    port: 22,
+    username,
+    ...(privateKey ? { privateKey } : { password }),
+    keepaliveInterval: KEEPALIVE_INTERVAL_MS,
+    keepaliveCountMax: KEEPALIVE_COUNT_MAX,
+    readyTimeout: 12000,
+  })
+}
 
-ssh.on('close', () => write(logPath, 'SSH closed'))
+function scheduleReconnect(ssh) {
+  if (reconnecting) return
+  reconnecting = true
+  try { ssh.destroy() } catch {}
+  setTimeout(connect, RECONNECT_DELAY_MS)
+}
 
-ssh.connect({
-  host,
-  port: 22,
-  username,
-  ...(privateKey ? { privateKey } : { password }),
-  keepaliveInterval: 15000,
-  readyTimeout: 12000,
-})
+connect()
