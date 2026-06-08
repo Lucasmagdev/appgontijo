@@ -51,8 +51,14 @@ export default function EquipamentosPage() {
   })
 
   const operadoresQuery = useQuery({
-    queryKey: ['usuarios-options'],
-    queryFn: usuarioService.listOptions,
+    queryKey: ['operadores-options'],
+    queryFn: async () => {
+      const data = await usuarioService.list({ page: 1, limit: 500, status: 'ativo' })
+      // Only real operators (cargo === 'operador'), matching the operador login rule on the backend.
+      return data.items
+        .filter((item) => item.status === 'ativo' && item.cargo.trim().toLowerCase() === 'operador')
+        .map((item) => ({ id: item.id, nome: item.nome }))
+    },
     staleTime: 1000 * 60 * 15,
     placeholderData: keepPreviousData,
   })

@@ -77,6 +77,9 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
+  // Prefer the diameters registered for the obra; fall back to the generic list when none exist.
+  const diameterOptions = diarioQuery.data?.obraDiametros?.length ? diarioQuery.data.obraDiametros : DIAMETER_OPTIONS
+
   const title = kind === 'planning' ? 'Planejamento diario' : 'Planejamento final da obra'
   const helper = kind === 'planning' ? 'Nº de estacas planejadas para o dia seguinte' : 'Nº de estacas planejadas para o final da obra'
   const Icon = kind === 'planning' ? FileText : FileCheck2
@@ -266,7 +269,7 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
                   }}
                 >
                   <option value="">Selecione</option>
-                  {DIAMETER_OPTIONS.map((item) => (
+                  {diameterOptions.map((item) => (
                     <option key={item} value={item}>{item} cm</option>
                   ))}
                 </select>

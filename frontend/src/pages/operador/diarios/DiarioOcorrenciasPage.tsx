@@ -309,6 +309,13 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     setTimeStep('hour')
   }
 
+  function confirmTimePicker() {
+    // Commit the currently displayed value (including the untouched default like 07:00)
+    // so confirming without tapping a number still saves the visible time.
+    setActiveTimeValue(getActiveTimeValue())
+    closeTimePicker()
+  }
+
   function getActiveTimeValue() {
     if (activeTimeField === 'inicio') return horaInicial || '07:00'
     if (activeTimeField === 'fim') return horaFinal || horaInicial || '17:00'
@@ -787,7 +794,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
             setSubmitErr('')
           }}
           onCancel={closeTimePicker}
-          onConfirm={closeTimePicker}
+          onConfirm={confirmTimePicker}
         />
       ) : null}
     </div>

@@ -128,7 +128,8 @@ export default function ObraFormPage() {
     queryKey: ['operadores-obra'],
     queryFn: async () => {
       const data = await usuarioService.list({ page: 1, limit: 500, status: 'ativo' })
-      return data.items.filter((item) => item.status === 'ativo' && item.perfil === 'operador')
+      // Only real operators (cargo === 'operador'), matching the operador login rule on the backend.
+      return data.items.filter((item) => item.status === 'ativo' && item.cargo.trim().toLowerCase() === 'operador')
     },
   })
 

@@ -16,12 +16,12 @@ import {
   MapPin,
   PenTool,
   ShieldAlert,
-  Tractor,
   Users,
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { diarioService, equipamentoService, extractApiErrorMessage, obraService } from '@/lib/gontijo-api'
+import HeliceContinuaIcon from '@/components/operador/HeliceContinuaIcon'
 
 const TOP_BUTTONS = [
   { key: 'data', label: 'Data', icon: CalendarDays, required: true },
@@ -31,7 +31,7 @@ const TOP_BUTTONS = [
 
 const MODULE_BUTTONS = [
   { key: 'equipe', label: 'Equipe', icon: Users },
-  { key: 'equipamento', label: 'Equipamento', icon: Tractor },
+  { key: 'equipamento', label: 'Equipamento', icon: HeliceContinuaIcon },
   { key: 'estacas', label: 'Estacas', icon: HardHat },
   { key: 'ocorrencias', label: 'Ocorrencias', icon: ShieldAlert },
   { key: 'abastecimento', label: 'Abastecimento', icon: Droplets },

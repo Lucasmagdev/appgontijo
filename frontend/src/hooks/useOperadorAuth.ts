@@ -9,7 +9,6 @@ let operadorAuthRevision = 0
 interface OperadorUser {
   id: number
   nome: string
-  cpf: string
   perfil: string
   podeGerarLinkAssinatura?: boolean
 }

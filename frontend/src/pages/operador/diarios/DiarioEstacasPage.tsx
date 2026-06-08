@@ -222,6 +222,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   const routeEquipmentId = Number(equipamentoId || '') || null
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
   const equipment = equipamentosQuery.data?.find((e) => e.id === currentEquipmentId) ?? null
+  const obraDiametros = diarioQuery.data?.obraDiametros ?? []
   const isHC = equipment ? isHeliceContinua(equipment.modalidadeNome) : null
   const isBE = equipment ? isBateEstaca(equipment.modalidadeNome) : null
 
@@ -318,13 +319,19 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
     const pilar = form.pilar.trim()
     if (!pilar) { setSubmitErr('Informe o nome do pilar / estaca.'); return }
 
+    const diametro = form.diametro.trim()
+    if (obraDiametros.length > 0) {
+      if (!diametro) { setSubmitErr('Selecione o diametro cadastrado na obra.'); return }
+      if (!obraDiametros.includes(diametro)) { setSubmitErr('Diametro nao cadastrado para esta obra.'); return }
+    }
+
     const existing = editingId ? stakes.find((s) => s.id === editingId) : null
     const item: DiarioEstaca = {
       id: editingId || genId(),
       source: existing?.source || 'manual',
       s3Key: existing?.s3Key,
       pilar,
-      diametro: form.diametro.trim(),
+      diametro,
       realizado: form.realizado ? Number(form.realizado.replace(',', '.')) || null : null,
       usoBits: form.usoBits,
       icamentoArmacao: form.icamentoArmacao,
@@ -686,13 +693,26 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={labelStyle}>Diametro (cm)</label>
-                  <input
-                    value={form.diametro}
-                    onChange={(e) => setForm((prev) => ({ ...prev, diametro: e.target.value }))}
-                    placeholder="ex: 60"
-                    inputMode="decimal"
-                    style={inputStyle}
-                  />
+                  {obraDiametros.length > 0 ? (
+                    <select
+                      value={form.diametro}
+                      onChange={(e) => setForm((prev) => ({ ...prev, diametro: e.target.value }))}
+                      style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', paddingRight: '32px' }}
+                    >
+                      <option value="">Selecione</option>
+                      {obraDiametros.map((d) => (
+                        <option key={d} value={d}>{d} cm</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={form.diametro}
+                      onChange={(e) => setForm((prev) => ({ ...prev, diametro: e.target.value }))}
+                      placeholder="ex: 60"
+                      inputMode="decimal"
+                      style={inputStyle}
+                    />
+                  )}
                 </div>
                 <div>
                   <label style={labelStyle}>Realizado (m)</label>

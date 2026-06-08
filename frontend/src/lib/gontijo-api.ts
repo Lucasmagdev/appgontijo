@@ -448,6 +448,7 @@ export type DiarioDetail = DiarioRecord & {
   operadorNome: string
   clienteNome: string
   dadosJson: Record<string, unknown> | null
+  obraDiametros: string[]
 }
 
 export type DiarioPayload = {
@@ -1010,6 +1011,9 @@ function adaptDiarioDetail(row: Record<string, unknown>): DiarioDetail {
       row.dados_json && typeof row.dados_json === 'object'
         ? (row.dados_json as Record<string, unknown>)
         : null,
+    obraDiametros: Array.isArray(row.obra_diametros)
+      ? row.obra_diametros.map((item) => toStringValue(item)).filter(Boolean)
+      : [],
   }
 }
 

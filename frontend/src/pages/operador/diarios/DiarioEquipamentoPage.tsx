@@ -1,9 +1,10 @@
 import { useDeferredValue, useMemo, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Tractor } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { SkeletonBlock } from '@/components/ui/Skeleton'
+import HeliceContinuaIcon from '@/components/operador/HeliceContinuaIcon'
 
 type Props = {
   diarioId: number
@@ -265,7 +266,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
                   placeItems: 'center',
                 }}
               >
-                <Tractor size={24} color="#a72727" />
+                <HeliceContinuaIcon size={24} color="#a72727" />
               </div>
               <div>
                 <div style={{ fontSize: '24px', fontWeight: 900, color: '#a72727' }}>Selecionar equipamento</div>
@@ -410,7 +411,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
                           color: selected ? '#1f2937' : '#991b1b',
                         }}
                       >
-                        <Tractor size={18} />
+                        <HeliceContinuaIcon size={18} />
                         {item.nome}
                       </div>
 

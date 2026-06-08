@@ -174,6 +174,11 @@ const adminSessions = new Map();
 const operadorSessions = new Map();
 const clientPortalSessions = new Map();
 
+const ADMIN_GLOBAL_CPFS = (process.env.ADMIN_CPFS || "")
+  .split(",")
+  .map((s) => s.trim().replace(/\D/g, ""))
+  .filter(Boolean);
+
 const SOLIDES_EMPLOYER_BASE_URL = process.env.SOLIDES_EMPLOYER_BASE_URL || "https://employer.tangerino.com.br";
 const SOLIDES_PUNCH_BASE_URL = process.env.SOLIDES_PUNCH_BASE_URL || "https://api.tangerino.com.br/api/punch";
 const SOLIDES_PAGE_SIZE = 200;
@@ -1269,7 +1274,7 @@ async function userCanGenerateDiarySignatureLink(userId, conn = db) {
     "SELECT document, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
     [userId]
   );
-  if (row?.document === "09653344650") return true;
+  if (ADMIN_GLOBAL_CPFS.includes(row?.document)) return true;
   return String(row?.pode_gerar_link_assinatura || "N") === "S";
 }
 
@@ -2806,7 +2811,7 @@ app.post("/api/admin/session", async (req, res) => {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
 
-    const isAdmin = ["09653344650", "70062920693", "15155410614", "15705286678"].includes(user.document);
+    const isAdmin = ADMIN_GLOBAL_CPFS.includes(user.document);
     const token = crypto.randomUUID();
     adminSessions.set(token, {
       userId: user.id,
@@ -2823,7 +2828,7 @@ app.post("/api/admin/session", async (req, res) => {
     return res.json({
       ok: true,
       mode: adminStore.getMode(),
-      user: { id: user.id, nome: user.name, cpf: user.document, isAdmin },
+      user: { id: user.id, nome: user.name, isAdmin },
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "Erro interno.", details: error.message });
@@ -2842,7 +2847,7 @@ app.get("/api/admin/status", (req, res) => {
     authenticated: Boolean(session),
     mode: adminStore.getMode(),
     user: session
-      ? { id: session.userId, cpf: session.cpf, isAdmin: session.isAdmin ?? false }
+      ? { id: session.userId, isAdmin: session.isAdmin ?? false }
       : null,
   });
 });
@@ -4240,10 +4245,15 @@ app.post("/api/client-portal/diarios/:id/solicitar-assinatura", requireClientPor
 
 function getOperadorSession(req) {
   const token = parseCookies(req).operador_session;
-  if (!token) return null;
-  const session = operadorSessions.get(token);
-  if (!session) return null;
-  return { token, ...session };
+  if (token) {
+    const session = operadorSessions.get(token);
+    if (session) return { token, ...session };
+  }
+  const adminSession = getAdminSession(req);
+  if (adminSession?.isAdmin) {
+    return { token: null, userId: adminSession.userId, cpf: adminSession.cpf, isAdminSession: true };
+  }
+  return null;
 }
 
 app.get("/api/gontijo/operador/cursos/:id/certificado", async (req, res) => {
@@ -5725,7 +5735,8 @@ app.post("/api/operador/session", async (req, res) => {
       return res.status(401).json({ ok: false, message: "CPF ou senha invalidos." });
     }
 
-    if ((user.cargo || "").toLowerCase() !== "operador") {
+    const isAdminGlobal = ADMIN_GLOBAL_CPFS.includes(user.document.replace(/\D/g, ""));
+    if ((user.cargo || "").toLowerCase() !== "operador" && !isAdminGlobal) {
       return res.status(403).json({ ok: false, message: "Acesso restrito a operadores." });
     }
 
@@ -5734,6 +5745,7 @@ app.post("/api/operador/session", async (req, res) => {
       userId: user.id,
       cpf: user.document,
       cargo: user.cargo,
+      isAdminSession: isAdminGlobal,
       createdAt: new Date().toISOString(),
     });
     setCookie(res, "operador_session", token, cookieOptionsForRequest(req));
@@ -5743,10 +5755,9 @@ app.post("/api/operador/session", async (req, res) => {
       user: {
         id: user.id,
         nome: user.name,
-        cpf: user.document,
-        cargo: user.cargo,
-        perfil: "operador",
-        podeGerarLinkAssinatura: String(user.pode_gerar_link_assinatura || "N") === "S",
+        cargo: isAdminGlobal ? "admin" : user.cargo,
+        perfil: isAdminGlobal ? "admin" : "operador",
+        podeGerarLinkAssinatura: isAdminGlobal ? true : String(user.pode_gerar_link_assinatura || "N") === "S",
       },
     });
   } catch (error) {
@@ -5771,9 +5782,12 @@ app.get("/api/operador/status", async (req, res) => {
       "SELECT id, name, document, cargo, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
       [session.userId]
     );
-    if (!user || (user.cargo || "").toLowerCase() !== "operador") {
-      operadorSessions.delete(session.token);
-      clearCookie(res, "operador_session");
+    const cargoOk = user && (user.cargo || "").toLowerCase() === "operador";
+    if (!user || (!cargoOk && !session.isAdminSession)) {
+      if (!session.isAdminSession) {
+        operadorSessions.delete(session.token);
+        clearCookie(res, "operador_session");
+      }
       return res.json({ ok: true, authenticated: false });
     }
     return res.json({
@@ -5782,10 +5796,9 @@ app.get("/api/operador/status", async (req, res) => {
       user: {
         id: user.id,
         nome: user.name,
-        cpf: user.document,
-        cargo: user.cargo,
-        perfil: "operador",
-        podeGerarLinkAssinatura: String(user.pode_gerar_link_assinatura || "N") === "S",
+        cargo: session.isAdminSession ? "admin" : user.cargo,
+        perfil: session.isAdminSession ? "admin" : "operador",
+        podeGerarLinkAssinatura: session.isAdminSession ? true : String(user.pode_gerar_link_assinatura || "N") === "S",
       },
     });
   } catch (error) {

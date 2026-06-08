@@ -203,7 +203,7 @@ export default function OperadorHomePage() {
         }}
       />
 
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', flex: 1, paddingBottom: '112px' }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', flex: 1, paddingBottom: 'calc(140px + env(safe-area-inset-bottom, 0px))' }}>
         <header style={{ padding: '40px 20px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
             <div>
@@ -375,7 +375,7 @@ export default function OperadorHomePage() {
           </div>
         </main>
 
-        <footer style={{ marginTop: 'auto', padding: '4px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <footer style={{ marginTop: 'auto', padding: '4px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 50 }}>
           <button
             onClick={() => void logout()}
             style={{

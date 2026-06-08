@@ -58,6 +58,19 @@ export default function OperadorConfiguracoesPage() {
     image.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+
+      // Remove background: keep dark stroke pixels, make light/colored pixels transparent
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const { data } = imageData
+        for (let i = 0; i < data.length; i += 4) {
+          const luminance = 0.21 * data[i] + 0.72 * data[i + 1] + 0.07 * data[i + 2]
+          if (luminance > 100) data[i + 3] = 0
+        }
+        ctx.putImageData(imageData, 0, 0)
+      } catch {
+        // getImageData blocked (tainted canvas) — skip background removal
+      }
     }
     image.src = form.assinatura
   }, [form.assinatura])
@@ -169,7 +182,7 @@ export default function OperadorConfiguracoesPage() {
         <div style={{ position: 'absolute', top: 0, left: 0, width: '42%', height: '100%', background: '#b12222' }} />
       </div>
 
-      <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', paddingBottom: 'calc(110px + env(safe-area-inset-bottom, 0px))' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 8px' }}>
           <button onClick={() => navigate('/operador')} style={iconNavButtonStyle}>
             <Home size={22} color="#fff" />
