@@ -4773,6 +4773,8 @@ app.use("/api/gontijo", (req, _res, next) => {
     req.session.operador = {
       ...((req.session.operador) || {}),
       id: operadorSession.userId,
+      cpf: operadorSession.cpf,
+      isAdmin: operadorSession.isAdminSession === true,
     };
   }
 
