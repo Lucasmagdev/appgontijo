@@ -52,6 +52,9 @@ const OperadorProvaPage = lazy(() => import('@/pages/operador/cursos/OperadorPro
 const FatoObservadoPage = lazy(() => import('@/pages/operador/FatoObservadoPage'))
 const IndiqueUmaObraPage = lazy(() => import('@/pages/operador/IndiqueUmaObraPage'))
 
+// TV dashboard — sem auth
+const TvDashboardPage = lazy(() => import('@/pages/tv/TvDashboardPage'))
+
 // Portal público
 const AssinaturaClientePage = lazy(() => import('@/pages/public/AssinaturaClientePage'))
 const AssinaturaMedicaoPage = lazy(() => import('@/pages/public/AssinaturaMedicaoPage'))
@@ -283,6 +286,7 @@ export default function App() {
           <Route path="/operador/carregando" element={<OperadorSplashPage />} />
           <Route path="/assinatura/diario/:token" element={<AssinaturaClientePage />} />
           <Route path="/assinatura/medicao/:token" element={<AssinaturaMedicaoPage />} />
+          <Route path="/tv/:screen" element={<TvDashboardPage />} />
           <Route path="/portal-cliente/login" element={<ClientePortalLoginRoute />} />
           <Route path="/portal-cliente" element={<ClientePortalPrivateRoute><ClientePortalDashboardPage /></ClientePortalPrivateRoute>} />
           <Route

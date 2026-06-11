@@ -22,7 +22,6 @@ export default function LoginPage() {
     event.preventDefault()
     setError('')
     setLoading(true)
-
     try {
       await login(form.cpf, form.password, form.remember)
       navigate('/')
@@ -34,53 +33,47 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,#3f4751_0,#2f353d_45%,#23272d_100%)] p-4">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_80px_rgba(0,0,0,0.28)] lg:grid-cols-[1.05fr_0.95fr]">
-        {/* Brand panel */}
-        <section className="relative hidden overflow-hidden bg-[linear-gradient(155deg,#c60926_0%,#8f0a1d_55%,#2f353d_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
-          {/* decorative glows */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 -left-10 h-56 w-56 rounded-full bg-black/20 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0f1117] p-4">
+      {/* Background decoration */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-40 -top-40 h-[600px] w-[600px] rounded-full bg-[#c60926]/20 blur-[120px]" />
+        <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-[#8f0a1d]/15 blur-[100px]" />
+        <div className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.02] blur-[60px]" />
+        {/* subtle grid */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+          }}
+        />
+      </div>
 
-          <div className="relative flex justify-center">
-            <div className="inline-flex rounded-2xl bg-white px-7 py-5 shadow-lg shadow-black/20">
-              <img
-                src="/gontijo-logo-diarios.png"
-                alt="Gontijo Fundacoes"
-                className="h-16 w-auto object-contain"
-              />
-            </div>
-          </div>
+      {/* Card */}
+      <div className="relative w-full max-w-md">
+        {/* Logo */}
+        <div className="mb-8 flex justify-center">
+          <img
+            src="/gontijo-logo-transparente.png"
+            alt="Gontijo Fundacoes"
+            className="h-14 w-auto object-contain"
+            style={{ filter: 'invert(1) hue-rotate(180deg)' }}
+          />
+        </div>
 
-          <div className="relative">
-            <h2 className="text-2xl font-bold leading-tight">Diario de Obras</h2>
-            <p className="mt-2 max-w-sm text-sm text-white/80">
-              Gestao de medicoes, equipamentos e diarios de campo da Gontijo Fundacoes em um so lugar.
-            </p>
-          </div>
-
-          <p className="relative text-xs text-white/55">
-            &copy; {new Date().getFullYear()} Gontijo Fundacoes. Todos os direitos reservados.
-          </p>
-        </section>
-
-        {/* Form panel */}
-        <section className="bg-[#f5f6f8] p-8 lg:p-10">
-          {/* mobile logo */}
-          <div className="mb-6 flex justify-center lg:hidden">
-            <img src="/gontijo-logo-diarios.png" alt="Gontijo Fundacoes" className="h-12 w-auto object-contain" />
-          </div>
-
-          <div className="mb-8 border-l-4 border-[var(--brand-red)] pl-4">
-            <div className="app-title text-3xl text-slate-800">Acesso ao sistema</div>
-            <p className="mt-1 text-sm text-slate-500">
-              Entre com suas credenciais para abrir o painel administrativo.
-            </p>
+        {/* Form card */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-8 shadow-[0_24px_64px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+          <div className="mb-7 border-l-4 border-[#c60926] pl-4">
+            <h1 className="text-2xl font-bold text-white">Acesso ao sistema</h1>
+            <p className="mt-1 text-sm text-white/50">Entre com suas credenciais para continuar.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="field-label" htmlFor="login-cpf">CPF</label>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-white/60" htmlFor="login-cpf">
+                CPF
+              </label>
               <input
                 id="login-cpf"
                 type="text"
@@ -88,14 +81,16 @@ export default function LoginPage() {
                 autoComplete="username"
                 value={formatCpf(form.cpf)}
                 onChange={(e) => setForm({ ...form, cpf: e.target.value.replace(/\D/g, '').slice(0, 11) })}
-                className="field-input"
+                className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition focus:border-[#c60926] focus:bg-white/[0.14] focus:ring-0"
                 placeholder="000.000.000-00"
                 required
               />
             </div>
 
             <div>
-              <label className="field-label" htmlFor="login-password">Senha</label>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-white/60" htmlFor="login-password">
+                Senha
+              </label>
               <div className="relative">
                 <input
                   id="login-password"
@@ -103,7 +98,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="field-input pr-11"
+                  className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 pr-11 text-sm text-white placeholder-white/25 outline-none transition focus:border-[#c60926] focus:bg-white/[0.14] focus:ring-0"
                   placeholder="Sua senha"
                   required
                 />
@@ -111,17 +106,17 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 transition-colors hover:text-slate-600"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-white/30 transition-colors hover:text-white/60"
                 >
                   {showPassword ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
                       <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
                       <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
                       <line x1="2" y1="2" x2="22" y2="22" />
                     </svg>
                   ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                       <circle cx="12" cy="12" r="3" />
                     </svg>
@@ -130,31 +125,35 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex cursor-pointer items-center gap-2.5 text-sm text-white/50 select-none">
               <input
                 type="checkbox"
                 checked={form.remember}
                 onChange={(e) => setForm({ ...form, remember: e.target.checked })}
-                className="h-4 w-4 accent-[var(--brand-red)]"
+                className="h-4 w-4 accent-[#c60926]"
               />
               Manter conectado neste dispositivo
             </label>
 
             {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400">
                 {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="btn btn-primary w-full">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-[#c60926] py-3 text-sm font-semibold text-white shadow-[0_4px_24px_rgba(198,9,38,0.4)] transition hover:bg-[#a80820] active:scale-[0.98] disabled:opacity-60"
+            >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
-
-            <div className="rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
-              Entre com seu CPF e senha de operador cadastrados no sistema.
-            </div>
           </form>
-        </section>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-white/25">
+          &copy; {new Date().getFullYear()} Gontijo Fundacoes. Todos os direitos reservados.
+        </p>
       </div>
     </div>
   )
