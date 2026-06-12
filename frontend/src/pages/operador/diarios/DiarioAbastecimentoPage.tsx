@@ -3,6 +3,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Fuel } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
 import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
 
 type SupplyForm = {
@@ -109,21 +111,22 @@ export default function DiarioAbastecimentoPage({ diarioId, equipamentoId }: Pro
         chegouDiesel: form.chegouDiesel,
       }
 
+      const dadosJson = {
+        ...currentJson,
+        supply: nextSupply,
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          supply: nextSupply,
-        },
+        dadosJson,
       })
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       setSubmitError('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
       navigate(backUrl)
     },
     onError: (error) => {
@@ -137,6 +140,7 @@ export default function DiarioAbastecimentoPage({ diarioId, equipamentoId }: Pro
   }
 
   const canSave = hasSupplyContent(form)
+  useSavingGuard(saveMutation.isPending)
 
   return (
     <div

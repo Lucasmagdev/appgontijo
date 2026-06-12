@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, Clock3, Pencil, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage, predefinedOccurrencesService, textCorrectionService, type PredefinedOccurrence } from '@/lib/gontijo-api'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
+import DiarySaveStatus from '@/components/operador/DiarySaveStatus'
 
 const FALLBACK_PREDEFINIDAS = [
   { id: 'fallback-chuva-forte', title: 'Chuva forte - paralisacao da atividade', templateText: 'Chuva forte - paralisacao da atividade' },
@@ -172,24 +175,25 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
     mutationFn: async (next: DiarioOcorrencia[]) => {
       if (!diarioQuery.data) throw new Error('Diario nao carregado.')
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
+      const dadosJson = {
+        ...currentJson,
+        ocorrencias: next,
+        occurrences: next.map(buildLegacyOccurrence),
+        ocorrencias_confirmed: next.length > 0,
+        occurrences_confirmed: next.length > 0,
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          ocorrencias: next,
-          occurrences: next.map(buildLegacyOccurrence),
-          ocorrencias_confirmed: next.length > 0,
-          occurrences_confirmed: next.length > 0,
-        },
+        dadosJson,
       })
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       resetForm()
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
     },
     onError: (err) => setSubmitErr(extractApiErrorMessage(err)),
   })
@@ -333,6 +337,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
   }
 
   const isBusy = saveMutation.isPending || correctionMutation.isPending
+  useSavingGuard(isBusy)
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
   const selectedLabel = selectedPredefinida
     ? selectedPredefinida === OTHER_OCCURRENCE_ID
@@ -354,6 +359,7 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
         margin: '0 auto',
       }}
     >
+      <DiarySaveStatus isSaving={saveMutation.isPending} isError={saveMutation.isError} />
       <div
         style={{
           background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)',
@@ -366,7 +372,10 @@ export default function DiarioOcorrenciasPage({ diarioId, equipamentoId }: Props
         }}
       >
         <button
-          onClick={() => navigate(backUrl)}
+          onClick={() => {
+            if (!isBusy) navigate(backUrl)
+          }}
+          disabled={isBusy}
           style={{
             background: 'rgba(0,0,0,0.28)',
             border: '1px solid rgba(255,255,255,0.12)',

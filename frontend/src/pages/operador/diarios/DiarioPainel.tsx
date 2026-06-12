@@ -22,6 +22,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { diarioService, equipamentoService, extractApiErrorMessage, obraService } from '@/lib/gontijo-api'
 import HeliceContinuaIcon from '@/components/operador/HeliceContinuaIcon'
+import { PARAMETRIZED_EQUIPMENT_STALE_TIME } from '@/lib/operator-diary-cache'
 
 const TOP_BUTTONS = [
   { key: 'data', label: 'Data', icon: CalendarDays, required: true },
@@ -1038,6 +1039,7 @@ export default function DiarioPainel() {
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
+    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
   })
 
   const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
@@ -1112,7 +1114,7 @@ export default function DiarioPainel() {
         dadosJson: nextJson,
       })
     },
-    onSuccess: async (_data, variables) => {
+    onSuccess: (_data, variables) => {
       setTopModalError('')
       setActiveTopModal(null)
       queryClient.setQueryData(activeDiaryQueryKey, (current: typeof activeDiary) => {
@@ -1130,15 +1132,6 @@ export default function DiarioPainel() {
       })
       if (variables.key === 'data') {
         if (!hasRouteDiaryId) setConfirmedDraftDate(variables.value)
-        if (hasRouteDiaryId) {
-          await queryClient.invalidateQueries({ queryKey: ['operador-diario', routeDiaryId] })
-        }
-        await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
-      } else {
-        if (hasRouteDiaryId) {
-          await queryClient.invalidateQueries({ queryKey: ['operador-diario', routeDiaryId] })
-        }
-        await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
       }
     },
     onError: (error) => {

@@ -15,6 +15,8 @@ import DiarioFinalizacaoPage from '@/pages/operador/diarios/DiarioFinalizacaoPag
 import OperadorPlaceholder from '@/pages/operador/OperadorPlaceholder'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
 
 const FIELD_CONFIG = {
   data: {
@@ -174,17 +176,22 @@ export default function DiarioModuloPage() {
         assinadoEm: diarioQuery.data.assinadoEm,
         dadosJson: nextJson,
       })
+      return {
+        dadosJson: nextJson,
+        dataDiario: moduloParam === 'data' ? value : diarioQuery.data.dataDiario,
+      }
     },
-    onSuccess: async () => {
+    onSuccess: (patch) => {
       setSubmitError('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      if (patch) updateOperatorDiaryCache(queryClient, diarioId, patch)
       navigate(backUrl)
     },
     onError: (error) => {
       setSubmitError(extractApiErrorMessage(error))
     },
   })
+
+  useSavingGuard(mutation.isPending)
 
   if (isEquipeModule) {
     return <DiarioEquipePage diarioId={diarioId} equipamentoId={equipamentoId} />

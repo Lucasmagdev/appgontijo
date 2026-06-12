@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, FileCheck2, FileText, Pencil, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
+import DiarySaveStatus from '@/components/operador/DiarySaveStatus'
 
 type PlanningKind = 'planning' | 'endConstruction'
 
@@ -103,26 +106,27 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
     mutationFn: async ({ rows: nextRows, endDate: nextEndDate }: SavePayload) => {
       if (!diarioQuery.data) throw new Error('Diario nao carregado.')
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
+      const dadosJson = {
+        ...currentJson,
+        [kind]: nextRows.map((item) => ({
+          numeroEstacas: item.numeroEstacas.trim(),
+          diametro: item.diametro.trim(),
+        })),
+        ...(kind === 'endConstruction' ? { endDate: nextEndDate ?? endDate } : {}),
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          [kind]: nextRows.map((item) => ({
-            numeroEstacas: item.numeroEstacas.trim(),
-            diametro: item.diametro.trim(),
-          })),
-          ...(kind === 'endConstruction' ? { endDate: nextEndDate ?? endDate } : {}),
-        },
+        dadosJson,
       })
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       resetForm()
       setSubmitError('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
     },
     onError: (error) => setSubmitError(extractApiErrorMessage(error)),
   })
@@ -171,6 +175,7 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
   }
 
   function handleBack() {
+    if (saveMutation.isPending) return
     if (kind === 'endConstruction') {
       saveMutation.mutate({ rows, endDate })
       return
@@ -178,6 +183,8 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
 
     navigate(backUrl)
   }
+
+  useSavingGuard(saveMutation.isPending)
 
   function handleSaveDate(value: string) {
     setEndDate(value)
@@ -188,7 +195,8 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
 
   return (
     <div style={pageStyle}>
-      <Header onBack={() => navigate(backUrl)} />
+      <DiarySaveStatus isSaving={saveMutation.isPending} isError={saveMutation.isError} />
+      <Header onBack={handleBack} />
 
       <div style={{ padding: '22px 18px 28px', display: 'grid', gap: '18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { PARAMETRIZED_EQUIPMENT_STALE_TIME, updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
+import DiarySaveStatus from '@/components/operador/DiarySaveStatus'
 
 type BateInfo = {
   alturaQuedaNega: string
@@ -140,6 +143,7 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
+    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
   })
 
   const routeEquipmentId = Number(equipamentoId || '') || null
@@ -180,29 +184,29 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
           ? (currentJson.stakesBEInfo as Record<string, unknown>)
           : {}
 
+      const dadosJson = {
+        ...currentJson,
+        stakesBEInfo: {
+          ...currentInfo,
+          alturaQuedaNega: info.alturaQuedaNega.trim(),
+          pesoMartelo: info.pesoMartelo.trim(),
+          modalidade: info.modalidade.trim(),
+        },
+        stakesBE: nextStakes.map(compactStake),
+        estacas_confirmed: nextStakes.length > 0,
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          stakesBEInfo: {
-            ...currentInfo,
-            alturaQuedaNega: info.alturaQuedaNega.trim(),
-            pesoMartelo: info.pesoMartelo.trim(),
-            modalidade: info.modalidade.trim(),
-          },
-          stakesBE: nextStakes.map(compactStake),
-          estacas_confirmed: nextStakes.length > 0,
-        },
+        dadosJson,
       })
-      return nextStakes
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       setSubmitErr('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
     },
     onError: (error) => setSubmitErr(extractApiErrorMessage(error)),
   })
@@ -251,6 +255,8 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
     })
   }
 
+  useSavingGuard(saveMutation.isPending)
+
   return (
     <div
       style={{
@@ -262,6 +268,7 @@ export default function DiarioEstacasBatePage({ diarioId, equipamentoId }: Props
         margin: '0 auto',
       }}
     >
+      <DiarySaveStatus isSaving={saveMutation.isPending} isError={saveMutation.isError} />
       <div
         style={{
           background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)',

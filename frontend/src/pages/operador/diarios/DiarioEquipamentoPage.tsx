@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { SkeletonBlock } from '@/components/ui/Skeleton'
 import HeliceContinuaIcon from '@/components/operador/HeliceContinuaIcon'
+import { PARAMETRIZED_EQUIPMENT_STALE_TIME } from '@/lib/operator-diary-cache'
 
 type Props = {
   diarioId: number
@@ -121,7 +122,7 @@ export default function DiarioEquipamentoPage({ diarioId, equipamentoId }: Props
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados-operador'],
     queryFn: equipamentoService.listParametrizados,
-    staleTime: 1000 * 60 * 15,
+    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
     placeholderData: keepPreviousData,
   })
 

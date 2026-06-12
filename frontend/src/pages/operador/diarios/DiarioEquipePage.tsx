@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, UserPlus, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage, usuarioService } from '@/lib/gontijo-api'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
 
 type Props = {
   diarioId: number
@@ -131,34 +133,37 @@ export default function DiarioEquipePage({ diarioId, equipamentoId }: Props) {
         throw new Error(`Informe uma nota de 1 a 10 para ${invalidMember.nome}.`)
       }
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
+      const dadosJson = {
+        ...currentJson,
+        staff: members.map((item) => ({
+          usuario_id: item.userId,
+          userId: item.userId,
+          nome: item.nome,
+          item: item.nome,
+          cargo: item.cargo || null,
+          nota: parseMemberScore(item.nota),
+        })),
+      }
       await diarioService.update(diarioQuery.data.id, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          staff: members.map((item) => ({
-            usuario_id: item.userId,
-            userId: item.userId,
-            nome: item.nome,
-            item: item.nome,
-            cargo: item.cargo || null,
-            nota: parseMemberScore(item.nota),
-          })),
-        },
+        dadosJson,
       })
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       setSubmitError('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
       navigate(backUrl)
     },
     onError: (error) => {
       setSubmitError(extractApiErrorMessage(error))
     },
   })
+
+  useSavingGuard(mutation.isPending)
 
   return (
     <div

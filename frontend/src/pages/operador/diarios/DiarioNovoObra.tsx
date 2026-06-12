@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { PARAMETRIZED_EQUIPMENT_STALE_TIME } from '@/lib/operator-diary-cache'
 
 function OperadorHeader() {
   const navigate = useNavigate()
@@ -48,6 +49,7 @@ export default function DiarioNovoObra() {
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
+    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
   })
 
   return (

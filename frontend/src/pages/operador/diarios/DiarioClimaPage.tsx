@@ -3,6 +3,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Cloud, CloudDrizzle, CloudRain, CloudSun } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, extractApiErrorMessage } from '@/lib/gontijo-api'
+import { updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
 import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
 
 type Props = {
@@ -74,25 +76,28 @@ export default function DiarioClimaPage({ diarioId, equipamentoId }: Props) {
       if (!diarioQuery.data) throw new Error('Diario nao carregado.')
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
       const nextClima = toLegacyClima(clima)
+      const dadosJson = {
+        ...currentJson,
+        clima: nextClima,
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          clima: nextClima,
-        },
+        dadosJson,
       })
+      return dadosJson
     },
-    onSuccess: async () => {
+    onSuccess: (dadosJson) => {
       setSubmitError('')
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
       navigate(backUrl)
     },
     onError: (error) => setSubmitError(extractApiErrorMessage(error)),
   })
+
+  useSavingGuard(saveMutation.isPending)
 
   return (
     <div style={pageStyle}>

@@ -197,9 +197,8 @@ function isOperadorPath() {
   return window.location.pathname.startsWith('/operador')
 }
 
-function getTodayKey() {
-  return new Date().toISOString().slice(0, 10)
-}
+const OPERATOR_INTRO_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+const OPERATOR_INTRO_LAST_SEEN_KEY = 'gontijo-intro-operador-last-seen'
 
 function shouldShowIntro() {
   const forceIntro = new URLSearchParams(window.location.search).get('introPreview') === '1'
@@ -207,7 +206,8 @@ function shouldShowIntro() {
 
   try {
     if (isOperadorPath()) {
-      return localStorage.getItem('gontijo-intro-operador-last-seen') !== getTodayKey()
+      const lastSeen = Number(localStorage.getItem(OPERATOR_INTRO_LAST_SEEN_KEY) || 0)
+      return !Number.isFinite(lastSeen) || Date.now() - lastSeen >= OPERATOR_INTRO_INTERVAL_MS
     }
 
     return sessionStorage.getItem('gontijo-intro-seen') !== '1'
@@ -222,7 +222,7 @@ export default function App() {
   function handleIntroDone() {
     try {
       if (isOperadorPath()) {
-        localStorage.setItem('gontijo-intro-operador-last-seen', getTodayKey())
+        localStorage.setItem(OPERATOR_INTRO_LAST_SEEN_KEY, String(Date.now()))
       } else {
         sessionStorage.setItem('gontijo-intro-seen', '1')
       }

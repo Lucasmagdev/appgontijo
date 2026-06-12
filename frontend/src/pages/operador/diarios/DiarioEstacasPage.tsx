@@ -5,6 +5,9 @@ import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, estacaService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
 import DiarioEstacasBatePage from '@/pages/operador/diarios/DiarioEstacasBatePage'
+import { PARAMETRIZED_EQUIPMENT_STALE_TIME, updateOperatorDiaryCache } from '@/lib/operator-diary-cache'
+import { useSavingGuard } from '@/hooks/useSavingGuard'
+import DiarySaveStatus from '@/components/operador/DiarySaveStatus'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 type DiarioEstaca = {
@@ -215,7 +218,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   const equipamentosQuery = useQuery({
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
-    staleTime: 1000 * 60 * 15,
+    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
     placeholderData: keepPreviousData,
   })
 
@@ -239,22 +242,22 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
     mutationFn: async (nextStakes: DiarioEstaca[]) => {
       if (!diarioQuery.data) throw new Error('Diario nao carregado.')
       const currentJson = (diarioQuery.data.dadosJson as Record<string, unknown> | null) || {}
+      const dadosJson = {
+        ...currentJson,
+        stakes: nextStakes,
+        estacas_confirmed: nextStakes.length > 0,
+      }
       await diarioService.update(diarioId, {
         dataDiario: diarioQuery.data.dataDiario,
         status: diarioQuery.data.status,
         equipamentoId: diarioQuery.data.equipamentoId,
         assinadoEm: diarioQuery.data.assinadoEm,
-        dadosJson: {
-          ...currentJson,
-          stakes: nextStakes,
-          estacas_confirmed: nextStakes.length > 0,
-        },
+        dadosJson,
       })
-      return nextStakes
+      return dadosJson
     },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario', diarioId] })
-      await queryClient.invalidateQueries({ queryKey: ['operador-diario-draft'] })
+    onSuccess: (dadosJson) => {
+      updateOperatorDiaryCache(queryClient, diarioId, { dadosJson })
     },
     onError: (err) => setSubmitErr(extractApiErrorMessage(err)),
   })
@@ -395,6 +398,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   }
 
   const isBusy = saveMutation.isPending || syncMutation.isPending
+  useSavingGuard(isBusy)
   const backUrl = `/operador/diario-de-obras/novo/${currentEquipmentId || equipamentoId || ''}?diario=${diarioId}`
 
   if (!diarioQuery.isLoading && !equipamentosQuery.isLoading && isBE) {
@@ -411,6 +415,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
       maxWidth: '430px',
       margin: '0 auto',
     }}>
+      <DiarySaveStatus isSaving={saveMutation.isPending} isError={saveMutation.isError} />
       {/* Header */}
       <div style={{
         background: 'linear-gradient(180deg, #a72727 0%, #981f1f 100%)',
@@ -422,7 +427,10 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
         flexShrink: 0,
       }}>
         <button
-          onClick={() => navigate(backUrl)}
+          onClick={() => {
+            if (!isBusy) navigate(backUrl)
+          }}
+          disabled={isBusy}
           style={{
             background: 'rgba(0,0,0,0.28)',
             border: '1px solid rgba(255,255,255,0.12)',
