@@ -62,6 +62,26 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
   const isCompletionLate = operatorCompletedLate || completionResult?.late
   const isCompletionSuccess = isOperatorCompleted && !isCompletionLate
 
+  const missingRequired = (() => {
+    if (isOperatorCompleted) return [] as string[]
+    const list: string[] = []
+    if (!String(diaryJson.date || '').trim()) list.push('Data')
+    if (!String(diaryJson.start || '').trim()) list.push('Entrada')
+    if (!String(diaryJson.end || '').trim()) list.push('Saida')
+    const staff = Array.isArray(diaryJson.staff) ? diaryJson.staff : []
+    const hasStaff = staff.some((item) => {
+      if (typeof item === 'string') return Boolean(item.trim())
+      if (item && typeof item === 'object') {
+        const row = item as Record<string, unknown>
+        return Boolean(String(row.item || row.name || '').trim())
+      }
+      return false
+    })
+    if (!hasStaff) list.push('Equipe')
+    return list
+  })()
+  const hasPendencias = missingRequired.length > 0
+
   const concludeMutation = useMutation({
     mutationFn: () => diarioService.conclude(diarioId),
     onSuccess: async (result) => {
@@ -115,10 +135,16 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
             </div>
 
             <div style={panelStyle}>
+              {hasPendencias ? (
+                <ErrorBox>
+                  Preencha antes de concluir: {missingRequired.join(', ')}.
+                </ErrorBox>
+              ) : null}
+
               <button
                 onClick={() => concludeMutation.mutate()}
-                disabled={concludeMutation.isPending || isOperatorCompleted}
-                style={completeButtonStyle(concludeMutation.isPending || isOperatorCompleted, isCompletionSuccess)}
+                disabled={concludeMutation.isPending || isOperatorCompleted || hasPendencias}
+                style={completeButtonStyle(concludeMutation.isPending || isOperatorCompleted || hasPendencias, isCompletionSuccess)}
               >
                 {isOperatorCompleted ? <CheckCircle2 size={19} /> : <Trophy size={19} />}
                 {concludeMutation.isPending

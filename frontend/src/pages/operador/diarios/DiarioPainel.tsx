@@ -849,8 +849,9 @@ function TimePickerModal(_props: {
   onCancel: () => void
   onConfirm: () => void
   isSaving: boolean
+  error?: string
 }) {
-  const { title, value, step, onStepChange, onPickHour, onPickMinute, onAdjustMinute, onCancel, onConfirm, isSaving } =
+  const { title, value, step, onStepChange, onPickHour, onPickMinute, onAdjustMinute, onCancel, onConfirm, isSaving, error } =
     _props
   const { hour, minute } = getTimeParts(value || '07:00')
 
@@ -975,6 +976,24 @@ function TimePickerModal(_props: {
           </button>
         </div>
       </div>
+
+      {error ? (
+        <div
+          style={{
+            margin: '0 18px',
+            border: '1px solid #fecaca',
+            borderRadius: '12px',
+            padding: '10px 12px',
+            background: '#fef2f2',
+            color: '#b91c1c',
+            fontSize: '13px',
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -1641,7 +1660,7 @@ export default function DiarioPainel() {
               ))}
           </div>
 
-          {topModalError ? (
+          {topModalError && !activeTopModal ? (
             <div
               style={{
                 border: '1px solid #fecaca',
@@ -1774,6 +1793,7 @@ export default function DiarioPainel() {
           onCancel={closeTopModal}
           onConfirm={saveTopModal}
           isSaving={topSaveMutation.isPending}
+          error={topModalError}
         />
       ) : null}
         {helpOpen ? (

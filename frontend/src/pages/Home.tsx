@@ -7,7 +7,7 @@ export default function HomePage() {
       <div>
         <h1 className="page-heading">Painel Operacional</h1>
         <p className="page-subtitle">
-          Visao consolidada para {user?.name?.split(' ')[0] ?? 'Usuario'} acompanhar o dia.
+          Bem-vindo, {user?.name?.split(' ')[0] ?? 'Usuario'}! Bom trabalho hoje.
         </p>
       </div>
     </div>

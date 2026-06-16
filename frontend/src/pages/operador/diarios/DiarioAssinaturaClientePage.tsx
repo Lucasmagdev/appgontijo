@@ -1,6 +1,6 @@
 import { type CSSProperties, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, MessageCircle, RefreshCcw, Send, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Copy, MessageCircle, RefreshCcw, Send, ShieldCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioSignatureService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
@@ -45,6 +45,7 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
   const queryClient = useQueryClient()
   const [feedback, setFeedback] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [errorModal, setErrorModal] = useState('')
 
   const statusQuery = useQuery({
     queryKey: ['operador-diario-signature-link', diarioId],
@@ -65,7 +66,7 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
       queryClient.removeQueries({ queryKey: ['operador-diario-draft'] })
       copyToClipboard(result.publicUrl, 'Link copiado para a area de transferencia.')
     },
-    onError: (error) => setErrorMessage(extractApiErrorMessage(error)),
+    onError: (error) => setErrorModal(extractApiErrorMessage(error)),
   })
 
   const shareText = useMemo(() => {
@@ -237,6 +238,71 @@ export default function DiarioAssinaturaClientePage({ diarioId, equipamentoId }:
           </>
         ) : null}
       </div>
+
+      {errorModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setErrorModal('')}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1000,
+            background: 'rgba(15,23,42,0.55)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: '24px',
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '340px',
+              borderRadius: '24px',
+              background: '#fff',
+              padding: '24px 22px',
+              textAlign: 'center',
+              boxShadow: '0 24px 48px rgba(15,23,42,0.28)',
+              display: 'grid',
+              gap: '14px',
+            }}
+          >
+            <div
+              style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '50%',
+                background: '#fef2f2',
+                display: 'grid',
+                placeItems: 'center',
+                margin: '0 auto',
+                color: '#b91c1c',
+              }}
+            >
+              <AlertTriangle size={28} />
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: '#111827' }}>Diario nao finalizado</div>
+            <div style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>{errorModal}</div>
+            <button
+              onClick={() => setErrorModal('')}
+              style={{
+                marginTop: '4px',
+                border: 'none',
+                borderRadius: '16px',
+                background: 'linear-gradient(180deg, #b42b2b 0%, #9b2121 100%)',
+                color: '#fff',
+                minHeight: '50px',
+                fontSize: '15px',
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
