@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Moeda Gontijo">
+  <defs>
+    <radialGradient id="gc-red" cx="50%" cy="34%" r="78%">
+      <stop offset="0%" stop-color="#ff5a5d"/>
+      <stop offset="55%" stop-color="#e53235"/>
+      <stop offset="100%" stop-color="#a31114"/>
+    </radialGradient>
+    <radialGradient id="gc-red-rim" cx="50%" cy="36%" r="75%">
+      <stop offset="0%" stop-color="#ff7d7f"/>
+      <stop offset="100%" stop-color="#8f0f12"/>
+    </radialGradient>
+  </defs>
+
+  <!-- coin rim -->
+  <circle cx="256" cy="256" r="248" fill="url(#gc-red-rim)"/>
+  <circle cx="256" cy="256" r="248" fill="none" stroke="#7d0d10" stroke-width="6"/>
+
+  <!-- coin face -->
+  <circle cx="256" cy="256" r="214" fill="url(#gc-red)" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6"/>
+
+  <!-- G -->
+  <text x="256" y="368" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="300" font-weight="800" text-anchor="middle">G</text>
+
+  <!-- top gloss -->
+  <ellipse cx="200" cy="160" rx="120" ry="58" fill="#ffffff" fill-opacity="0.10"/>
+</svg>

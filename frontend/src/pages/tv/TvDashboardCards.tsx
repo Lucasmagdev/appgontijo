@@ -20,73 +20,37 @@ export function fmt(n: number, decimals = 0) {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
-export function toneColor(percent: number | null) {
-  if (percent == null) return '#64748b'
-  if (percent >= 100) return '#22c55e'
-  if (percent >= 70) return '#f59e0b'
-  return '#ef4444'
-}
-
-export function toneBg(percent: number | null) {
-  if (percent == null) return 'rgba(100,116,139,0.15)'
-  if (percent >= 100) return 'rgba(34,197,94,0.15)'
-  if (percent >= 70) return 'rgba(245,158,11,0.15)'
-  return 'rgba(239,68,68,0.15)'
-}
-
 // ─── Card: Estacas realizadas no dia ─────────────────────────────────────────
 
 export function CardEstacasDia({ data }: { data: ProductionDailyDashboard }) {
-  const fill = data.totalProgressPercent == null ? 0 : Math.max(0, Math.min(data.totalProgressPercent, 100))
-
   return (
     <div style={{
       background: 'linear-gradient(145deg, rgba(198,9,38,0.18) 0%, rgba(255,255,255,0.04) 100%)',
       border: '1px solid rgba(198,9,38,0.25)',
-      borderRadius: 16, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14,
+      borderRadius: 16, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18,
+      justifyContent: 'space-between',
     }}>
       <div>
-        <div style={{ color: '#c60926', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Principal</div>
-        <div style={{ color: '#fff', fontSize: 15, fontWeight: 700, marginTop: 2 }}>Estacas realizadas no dia</div>
+        <div style={{ color: '#c60926', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Principal</div>
+        <div style={{ color: '#fff', fontSize: 17, fontWeight: 700, marginTop: 2 }}>Estacas realizadas no dia</div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-        <div style={{ color: '#fff', fontSize: 64, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em' }}>
-          {fmt(data.totalRealizedEstacas)}
-        </div>
-        <div style={{
-          marginBottom: 8, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-          background: toneBg(data.totalProgressPercent),
-          color: toneColor(data.totalProgressPercent),
-        }}>
-          {data.totalProgressPercent == null ? 'Sem meta' : `${fmt(data.totalProgressPercent, 1)}%`}
-        </div>
+      <div style={{ color: '#fff', fontSize: 96, fontWeight: 800, lineHeight: 0.9, letterSpacing: '-0.03em' }}>
+        {fmt(data.totalRealizedEstacas)}
       </div>
 
-      <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', width: `${fill}%`,
-          background: toneColor(data.totalProgressPercent),
-          borderRadius: 3, transition: 'width 1.2s ease',
-        }} />
-      </div>
-
-      <div style={{ display: 'flex', gap: 20 }}>
+      <div style={{ display: 'flex', gap: 28 }}>
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Meta dia</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{fmt(data.totalGoalEstacas)}</div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 26 }}>{fmt(data.totalRealizedLinearMeters, 1)} m</div>
         </div>
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{fmt(data.totalRealizedLinearMeters, 1)} m</div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>MEQ</div>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 26 }}>{fmt(data.totalRealizedMeq, 1)}</div>
         </div>
         <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>MEQ</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{fmt(data.totalRealizedMeq, 1)}</div>
-        </div>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Máquinas</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{data.machines.filter(m => m.active).length}</div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Máquinas</div>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 26 }}>{data.machines.filter(m => m.active).length}</div>
         </div>
       </div>
     </div>
@@ -104,53 +68,37 @@ export function CardMaquinaDestaque({ machine }: { machine: ProductionMachineRow
     )
   }
 
-  const fill = machine.progressPercent == null ? 0 : Math.min(machine.progressPercent, 100)
-
   return (
     <div style={{
       background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-      borderRadius: 16, padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14,
+      borderRadius: 16, padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 18,
+      justifyContent: 'space-between',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Máquina em destaque</div>
-          <div style={{ color: '#fff', fontSize: 28, fontWeight: 800, marginTop: 4 }}>{machine.machineName}</div>
-          <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 2 }}>{machine.obraName || 'Sem obra'}</div>
-        </div>
-        <div style={{
-          padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-          background: toneBg(machine.progressPercent),
-          color: toneColor(machine.progressPercent),
-        }}>
-          {machine.progressPercent == null ? 'Sem meta' : `${fmt(machine.progressPercent, 1)}%`}
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 24 }}>
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Estacas</div>
-          <div style={{ color: '#fff', fontWeight: 800, fontSize: 40, lineHeight: 1 }}>{machine.realizedEstacas}</div>
-        </div>
-        <div style={{ width: 1, background: 'rgba(255,255,255,0.07)' }} />
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 22 }}>{fmt(machine.realizedLinearMeters, 2)} m</div>
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 10 }}>Obra</div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{machine.obraCode || '—'}</div>
-        </div>
-      </div>
-
       <div>
-        <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${fill}%`, background: toneColor(machine.progressPercent), borderRadius: 3 }} />
+        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Máquina em destaque</div>
+        <div style={{ color: '#fff', fontSize: 34, fontWeight: 800, marginTop: 4 }}>{machine.machineName}</div>
+        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, marginTop: 2 }}>{machine.obraName || 'Sem obra'}</div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 28 }}>
+        <div>
+          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Estacas</div>
+          <div style={{ color: '#fff', fontWeight: 800, fontSize: 72, lineHeight: 0.9 }}>{machine.realizedEstacas}</div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-          <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>0</span>
-          <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>Meta {machine.dailyGoalEstacas || 0}</span>
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.07)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 28 }}>{fmt(machine.realizedLinearMeters, 2)} m</div>
+          </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Obra</div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>{machine.obraCode || '—'}</div>
+          </div>
         </div>
       </div>
 
-      <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, marginTop: -4 }}>{machine.imei}</div>
+      <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>{machine.imei}</div>
     </div>
   )
 }
@@ -222,7 +170,6 @@ export function GridMaquinas({ machines }: { machines: ProductionMachineRow[] })
         flex: 1,
       }}>
         {all.map((m) => {
-          const fill = m.progressPercent == null ? 0 : Math.min(m.progressPercent, 100)
           const hasProduction = m.realizedEstacas > 0
           return (
             <div
@@ -230,40 +177,23 @@ export function GridMaquinas({ machines }: { machines: ProductionMachineRow[] })
               style={{
                 background: hasProduction ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.02)',
                 border: `1px solid ${hasProduction ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'}`,
-                borderRadius: 12, padding: '12px 16px',
+                borderRadius: 12, padding: '14px 18px',
                 opacity: hasProduction ? 1 : 0.5,
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div>
-                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>{m.machineName}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 1 }}>{m.obraName || 'Sem obra'}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 1 }}>{m.workSource === 'admin' ? 'Admin' : m.workSource === 'api' ? 'Operação' : 'Sem fonte'}</div>
-                </div>
-                <div style={{
-                  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                  background: toneBg(m.progressPercent),
-                  color: toneColor(m.progressPercent),
-                  flexShrink: 0,
-                }}>
-                  {m.progressPercent == null ? 'Sem meta' : `${fmt(m.progressPercent, 0)}%`}
-                </div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 15 }}>{m.machineName}</div>
+                <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginTop: 1 }}>{m.obraName || 'Sem obra'}</div>
+                <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10, marginTop: 1 }}>{m.workSource === 'admin' ? 'Admin' : m.workSource === 'api' ? 'Operação' : 'Sem fonte'}</div>
               </div>
-              <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', marginBottom: 8 }}>
-                <div style={{ height: '100%', width: `${fill}%`, background: toneColor(m.progressPercent), borderRadius: 2 }} />
-              </div>
-              <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20 }}>
                 <div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dia</div>
-                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{m.realizedEstacas}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Estacas</div>
+                  <div style={{ color: '#fff', fontWeight: 800, fontSize: 34, lineHeight: 1 }}>{m.realizedEstacas}</div>
                 </div>
                 <div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Estacas</div>
-                  <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{m.realizedEstacas}</div>
-                </div>
-                <div>
-                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Meta</div>
-                  <div style={{ color: '#fff', fontWeight: 600, fontSize: 13 }}>{m.dailyGoalEstacas || 0}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Metros</div>
+                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{fmt(m.realizedLinearMeters, 1)} m</div>
                 </div>
               </div>
             </div>
@@ -401,10 +331,17 @@ export function TvTrendChart({ labels, primary, secondary }: {
 
 export function SecondaryView({ data }: { data: ProductionWeeklyDashboard }) {
   const machines = [...data.machines].sort((a, b) => b.realizedEstacas - a.realizedEstacas).slice(0, 10)
-  const lastDay = data.accumulatedByDay.at(-1)
-  const saldoVsEsperado = lastDay
-    ? (lastDay.accumulatedEstacas - lastDay.expectedAccumulatedEstacas)
-    : null
+
+  // Produção diária (delta do acumulado) — base para médias e ritmo, sem depender de meta.
+  const dailyValues = data.accumulatedByDay.map((d, i) => ({
+    date: d.date,
+    estacas: Math.max(0, d.accumulatedEstacas - (data.accumulatedByDay[i - 1]?.accumulatedEstacas || 0)),
+  }))
+  const activeDays = dailyValues.filter(d => d.estacas > 0)
+  const avgPerDay = activeDays.length ? data.totalRealizedEstacas / activeDays.length : 0
+  const bestDay = dailyValues.reduce<{ date: string; estacas: number } | null>(
+    (best, d) => (!best || d.estacas > best.estacas ? d : best), null)
+  const maxDaily = Math.max(...dailyValues.map(d => d.estacas), 1)
 
   const chartLabels = data.accumulatedByDay.map(d =>
     new Date(d.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
@@ -421,61 +358,52 @@ export function SecondaryView({ data }: { data: ProductionWeeklyDashboard }) {
           background: 'linear-gradient(145deg, rgba(198,9,38,0.18) 0%, rgba(255,255,255,0.04) 100%)',
           border: '1px solid rgba(198,9,38,0.25)', borderRadius: 14, padding: '18px 22px',
         }}>
-          <div style={{ color: '#c60926', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Principal</div>
-          <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginTop: 2, marginBottom: 10 }}>Estacas acumuladas na semana</div>
-          <div style={{ color: '#fff', fontSize: 60, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em' }}>
+          <div style={{ color: '#c60926', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Principal</div>
+          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginTop: 2, marginBottom: 12 }}>Estacas acumuladas na semana</div>
+          <div style={{ color: '#fff', fontSize: 84, fontWeight: 800, lineHeight: 0.9, letterSpacing: '-0.03em' }}>
             {fmt(data.totalRealizedEstacas)}
           </div>
-          <div style={{ display: 'flex', gap: 20, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 28, marginTop: 18 }}>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{fmt(data.totalRealizedLinearMeters, 1)} m</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metros</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 24 }}>{fmt(data.totalRealizedLinearMeters, 1)} m</div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>MEQ</div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{fmt(data.totalRealizedMeq, 1)}</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>MEQ</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 24 }}>{fmt(data.totalRealizedMeq, 1)}</div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Máquinas</div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{data.machines.length}</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Máquinas</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 24 }}>{data.machines.length}</div>
             </div>
           </div>
         </div>
 
-        {/* Meta semanal */}
+        {/* Médias da semana */}
         <div style={{
           background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: 14, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 10,
+          borderRadius: 14, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16,
+          justifyContent: 'space-between',
         }}>
           <div>
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Meta semanal</div>
-            <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginTop: 2 }}>Meta consolidada da semana</div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Médias</div>
+            <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginTop: 2 }}>Desempenho da semana</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
-            <div style={{ color: '#fff', fontSize: 52, fontWeight: 800, lineHeight: 1 }}>{fmt(data.totalGoalEstacas)}</div>
-            <div style={{
-              marginBottom: 6, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-              background: toneBg(data.totalProgressPercent),
-              color: toneColor(data.totalProgressPercent),
-            }}>
-              {data.totalProgressPercent == null ? 'Sem meta' : `${fmt(data.totalProgressPercent, 1)}%`}
-            </div>
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Média por dia</div>
+            <div style={{ color: '#fff', fontSize: 56, fontWeight: 800, lineHeight: 1 }}>{fmt(avgPerDay, 1)}</div>
           </div>
-          <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: `${data.totalProgressPercent == null ? 0 : Math.min(data.totalProgressPercent, 100)}%`,
-              background: toneColor(data.totalProgressPercent), borderRadius: 3,
-            }} />
-          </div>
-          <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 24 }}>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Realizado</div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{fmt(data.totalRealizedEstacas)}</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Melhor dia</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 22 }}>{fmt(bestDay?.estacas || 0)}</div>
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
+                {bestDay && bestDay.estacas > 0 ? new Date(bestDay.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }) : '—'}
+              </div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Faltam</div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{fmt(Math.max(data.totalGoalEstacas - data.totalRealizedEstacas, 0))}</div>
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Dias ativos</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 22 }}>{activeDays.length}</div>
             </div>
           </div>
         </div>
@@ -485,39 +413,23 @@ export function SecondaryView({ data }: { data: ProductionWeeklyDashboard }) {
           background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)',
           borderRadius: 14, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 10,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Consolidado</div>
-              <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginTop: 2 }}>Ritmo da semana</div>
-            </div>
-            {saldoVsEsperado !== null && (
-              <div style={{
-                padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700,
-                background: saldoVsEsperado >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
-                color: saldoVsEsperado >= 0 ? '#4ade80' : '#f87171',
-              }}>
-                {saldoVsEsperado >= 0 ? '+' : ''}{fmt(saldoVsEsperado, 1)} vs esperado
-              </div>
-            )}
+          <div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Consolidado</div>
+            <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, marginTop: 2 }}>Produção por dia</div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, overflowY: 'auto', flex: 1 }}>
-            {data.accumulatedByDay.map((day) => {
-              const ok = day.accumulatedEstacas >= day.expectedAccumulatedEstacas
-              const pct = day.expectedAccumulatedEstacas > 0
-                ? Math.min((day.accumulatedEstacas / day.expectedAccumulatedEstacas) * 100, 100) : 0
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', flex: 1 }}>
+            {dailyValues.map((day) => {
+              const pct = (day.estacas / maxDaily) * 100
               return (
                 <div key={day.date}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
                       {new Date(day.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
                     </span>
-                    <span style={{ color: ok ? '#4ade80' : '#f87171', fontSize: 12, fontWeight: 700 }}>
-                      {fmt(day.accumulatedEstacas)}
-                      <span style={{ color: 'rgba(255,255,255,0.2)', fontWeight: 400, fontSize: 10 }}> / {Math.round(day.expectedAccumulatedEstacas)}</span>
-                    </span>
+                    <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>{fmt(day.estacas)}</span>
                   </div>
-                  <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: ok ? '#22c55e' : '#ef4444', borderRadius: 2 }} />
+                  <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.06)' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: '#c60926', borderRadius: 3 }} />
                   </div>
                 </div>
               )
@@ -539,22 +451,15 @@ export function SecondaryView({ data }: { data: ProductionWeeklyDashboard }) {
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Evolução da semana</div>
               <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginTop: 2 }}>Série por dia</div>
             </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                <span style={{ width: 20, height: 2, background: '#c60926', display: 'inline-block', borderRadius: 1 }} />
-                Realizado acumulado
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                <span style={{ width: 20, height: 2, background: 'rgba(255,255,255,0.3)', display: 'inline-block', borderRadius: 1, borderTop: '2px dashed rgba(255,255,255,0.3)' }} />
-                Esperado acumulado
-              </span>
-            </div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+              <span style={{ width: 20, height: 2, background: '#c60926', display: 'inline-block', borderRadius: 1 }} />
+              Realizado acumulado
+            </span>
           </div>
           <div style={{ flex: 1, minHeight: 0 }}>
             <TvTrendChart
               labels={chartLabels}
               primary={data.accumulatedByDay.map(d => d.accumulatedEstacas)}
-              secondary={data.accumulatedByDay.map(d => d.expectedAccumulatedEstacas)}
             />
           </div>
         </div>
