@@ -21,7 +21,7 @@ function useClock() {
 
 // ─── Header ──────────────────────────────────────────────────────────────────
 
-function TvHeader({ screen, now, refreshIn }: { screen: string; now: Date; refreshIn: number }) {
+function TvHeader({ isPrimary, now, refreshIn }: { isPrimary: boolean; now: Date; refreshIn: number }) {
   const hh = String(now.getHours()).padStart(2, '0')
   const mm = String(now.getMinutes()).padStart(2, '0')
   const ss = String(now.getSeconds()).padStart(2, '0')
@@ -41,7 +41,7 @@ function TvHeader({ screen, now, refreshIn }: { screen: string; now: Date; refre
         />
         <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)' }} />
         <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          {screen === 'primary' ? 'Produção do Dia' : 'Acumulado Semanal'}
+          {isPrimary ? 'Produção do Dia' : 'Acumulado Semanal'}
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -66,7 +66,8 @@ function TvHeader({ screen, now, refreshIn }: { screen: string; now: Date; refre
 
 export default function TvDashboardPage() {
   const { screen } = useParams<{ screen: string }>()
-  const isPrimary = screen !== 'secondary'
+  // Aceita variantes (ex.: secondary1) para forçar URL nova e furar cache da TV.
+  const isPrimary = !(screen || '').toLowerCase().startsWith('secondary')
 
   const [daily, setDaily] = useState<ProductionDailyDashboard | null>(null)
   const [weekly, setWeekly] = useState<ProductionWeeklyDashboard | null>(null)
@@ -116,7 +117,7 @@ export default function TvDashboardPage() {
       </div>
 
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-        <TvHeader screen={screen || 'primary'} now={clock} refreshIn={refreshIn} />
+        <TvHeader isPrimary={isPrimary} now={clock} refreshIn={refreshIn} />
 
         {!hasData && !error && (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

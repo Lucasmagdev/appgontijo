@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gontijo-pwa-v1'
+const CACHE_NAME = 'gontijo-pwa-v2'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
 
 self.addEventListener('install', (event) => {
@@ -26,7 +26,17 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || url.pathname.startsWith('/api/')) return
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/')))
+    // Network-first: sempre busca o index fresco e atualiza o cache do shell.
+    // Evita servir um index velho que aponta para assets já removidos (tela branca).
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put('/', clone))
+          return response
+        })
+        .catch(() => caches.match('/'))
+    )
     return
   }
 
