@@ -4,6 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
 
+// Captura o prompt de instalacao do PWA antes do React montar (o evento
+// pode disparar muito cedo). O componente OperadorInstallPrompt consome isso.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  ;(window as unknown as { __deferredInstallPrompt?: Event }).__deferredInstallPrompt = e
+  window.dispatchEvent(new Event('pwa-installable'))
+})
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

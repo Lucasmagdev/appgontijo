@@ -5,6 +5,7 @@ import { useOperadorAuth } from '@/hooks/useOperadorAuth'
 import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 import AppLayout from '@/components/layout/AppLayout'
 import IntroScreen from '@/components/IntroScreen'
+import OperadorInstallPrompt from '@/components/OperadorInstallPrompt'
 
 // Admin pages — carregadas sob demanda
 const LoginPage = lazy(() => import('@/pages/Login'))
@@ -139,6 +140,7 @@ function OperadorPrivateRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? (
     <>
       <OperadorOfflineBanner />
+      <OperadorInstallPrompt />
       {children}
     </>
   ) : <Navigate to="/operador/login" replace />
