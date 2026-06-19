@@ -9,7 +9,6 @@ import {
   usuarioService,
   type EquipamentoPayload,
 } from '@/lib/gontijo-api'
-import { useAuth } from '@/hooks/useAuth'
 
 type DraftEquipamento = EquipamentoPayload & {
   localId: string
@@ -30,8 +29,6 @@ function createDraft(): DraftEquipamento {
 }
 
 export default function EquipamentosPage() {
-  const { user } = useAuth()
-  const isAdmin = user?.isAdmin ?? false
   const queryClient = useQueryClient()
   const [drafts, setDrafts] = useState<DraftEquipamento[]>([])
   const [saveError, setSaveError] = useState('')
@@ -130,12 +127,10 @@ export default function EquipamentosPage() {
           <p className="page-subtitle">Vinculo entre maquinas, identificador Geodigitus/IMEI e modalidades.</p>
         </div>
 
-        {isAdmin && (
-          <button type="button" onClick={() => setDrafts((prev) => [...prev, createDraft()])} className="btn btn-primary">
-            <Plus size={15} />
-            Adicionar
-          </button>
-        )}
+        <button type="button" onClick={() => setDrafts((prev) => [...prev, createDraft()])} className="btn btn-primary">
+          <Plus size={15} />
+          Adicionar
+        </button>
       </div>
 
       {saveError ? (
@@ -250,12 +245,10 @@ export default function EquipamentosPage() {
                   </select>
                 </div>
 
-                {isAdmin && (
-                  <button type="button" className="btn btn-neutral w-full" onClick={() => void handleSave(card)}>
-                    <Save size={15} />
-                    Salvar
-                  </button>
-                )}
+                <button type="button" className="btn btn-primary w-full" onClick={() => void handleSave(card)}>
+                  <Save size={15} />
+                  Salvar
+                </button>
               </div>
             </article>
           ))}
