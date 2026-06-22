@@ -42,6 +42,9 @@ const DRY_RUN = flag('dry-run')
 // --reuse-disk: arquivos ja estao no disco (ex: vieram por rsync).
 // Nao baixa do Pipefy; usa o arquivo local e so grava metadata no banco.
 const REUSE_DISK = flag('reuse-disk')
+// --fill-disk: banco ja tem os metadados, mas os arquivos faltam no disco.
+// Baixa do Pipefy SO o que nao existe no disco (ignora o check de row no banco).
+const FILL_DISK = flag('fill-disk')
 const LIMIT = valOf('limit') ? Number(valOf('limit')) : Infinity
 
 if (!TOKEN) {
@@ -260,8 +263,13 @@ async function main() {
           const relPath = path.join('uploads', 'sondagens', node.id, safeName).replace(/\\/g, '/')
           const destPath = path.join(__dirname, '..', relPath)
 
-          if (db && (await alreadyHave(db, node.id, pipefyPath))) { skipCount += 1; continue }
-          if (!db && fs.existsSync(destPath)) { skipCount += 1; continue }
+          if (FILL_DISK) {
+            // banco ja populado: pula so se o arquivo ja existe no disco
+            if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) { skipCount += 1; continue }
+          } else {
+            if (db && (await alreadyHave(db, node.id, pipefyPath))) { skipCount += 1; continue }
+            if (!db && fs.existsSync(destPath)) { skipCount += 1; continue }
+          }
 
           if (DRY_RUN) {
             console.log(`\n  [dry] card ${node.id} | ${af.name} | ${original}`)
