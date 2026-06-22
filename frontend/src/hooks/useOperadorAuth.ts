@@ -35,14 +35,26 @@ export const useOperadorAuth = create<OperadorAuthState>()(
           const { data } = await operadorApi.get('/operador/status')
           if (revisionAtStart !== operadorAuthRevision) return
           if (data?.authenticated && data.user) {
+            // Sessão válida confirmada pelo servidor.
             set({ user: data.user, isAuthenticated: true, isReady: true })
             return
           }
-        } catch {
-          // network error — keep unauthenticated
+          // Servidor respondeu OK e disse, explicitamente, que NÃO está
+          // autenticado (cookie ausente/expirado) → limpar de fato.
+          set({ user: null, isAuthenticated: false, isReady: true })
+        } catch (error) {
+          if (revisionAtStart !== operadorAuthRevision) return
+          const status = axios.isAxiosError(error) ? error.response?.status : undefined
+          if (status === 401 || status === 403) {
+            // Servidor rejeitou a sessão de forma explícita → limpar.
+            set({ user: null, isAuthenticated: false, isReady: true })
+            return
+          }
+          // Falha transitória (offline, timeout, 5xx, instabilidade do banco).
+          // NÃO deslogar o operador: preservar a sessão persistida e apenas
+          // liberar a UI. Isso evita o chute crônico pro login no campo.
+          set({ isReady: true })
         }
-        if (revisionAtStart !== operadorAuthRevision) return
-        set({ user: null, isAuthenticated: false, isReady: true })
       },
 
       login: async (cpf, senha) => {

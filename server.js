@@ -5928,7 +5928,13 @@ app.post("/api/operador/session", async (req, res) => {
       isAdminSession: isAdminGlobal,
       createdAt: new Date().toISOString(),
     });
-    setCookie(res, "operador_session", token, cookieOptionsForRequest(req));
+    // Cookie persistente (30 dias) — sem Max-Age o navegador trata como cookie
+    // de sessão e o descarta quando o PWA é fechado/morto pelo SO, deslogando o
+    // operador no campo. 30 dias alinha com a limpeza de app_sessions no banco.
+    setCookie(res, "operador_session", token, {
+      ...cookieOptionsForRequest(req),
+      maxAge: 60 * 60 * 24 * 30,
+    });
 
     return res.json({
       ok: true,

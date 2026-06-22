@@ -173,7 +173,7 @@ export default function OperadorHomePage() {
   })
 
   const pendencias = pendenciasData?.pendencias ?? 0
-  const points = pontosData?.points.month_points ?? 0
+  const points = pontosData?.points?.month_points ?? 0
   const raffle = pontosData?.raffle ?? null
   const firstName = user?.nome?.split(' ')[0] ?? 'Operador'
   const featured = ATALHOS.find((item) => item.featured) ?? ATALHOS[0]

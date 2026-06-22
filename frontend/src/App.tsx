@@ -6,6 +6,7 @@ import { useClientePortalAuth } from '@/hooks/useClientePortalAuth'
 import AppLayout from '@/components/layout/AppLayout'
 import IntroScreen from '@/components/IntroScreen'
 import OperadorInstallPrompt from '@/components/OperadorInstallPrompt'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // Admin pages — carregadas sob demanda
 const LoginPage = lazy(() => import('@/pages/Login'))
@@ -243,6 +244,7 @@ export default function App() {
       <BrowserRouter>
         <AppBootstrap />
 
+        <ErrorBoundary>
         <Suspense fallback={<AppLoading />}>
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
@@ -319,6 +321,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </>
   )
