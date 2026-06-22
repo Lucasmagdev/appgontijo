@@ -3278,3 +3278,35 @@ export const planejamentoDiarioApi = {
   },
 }
 
+// ── Sondagens (CRM Pipefy → crm_sondagens) ────────────────────────────────────
+export type SondagemArquivo = {
+  id: number
+  nome_original: string
+  tamanho: number
+  mime_type: string
+  criado_em: string
+}
+
+export type SondagemCard = {
+  card_id: string
+  card_title: string
+  cliente: string
+  contato: string
+  endereco_obra: string
+  cidade: string
+  estado: string
+  servico: string
+  fase: string
+  arquivos: SondagemArquivo[]
+}
+
+export const sondagemService = {
+  async list(params: { q?: string; limit?: number } = {}): Promise<SondagemCard[]> {
+    const { data } = await api.get<ApiEnvelope<SondagemCard[]>>('/admin/sondagens', { params })
+    return data.data || []
+  },
+  downloadUrl(arquivoId: number): string {
+    return resolveApiUrl(`/admin/sondagens/${arquivoId}/download`)
+  },
+}
+

@@ -4103,6 +4103,81 @@ app.delete("/api/admin/portal-documentos/:docId", requireAdmin, async (req, res)
   }
 })
 
+// ── Sondagens (CRM Pipefy) ────────────────────────────────────────────────────
+// Busca metadados em crm_sondagens (banco leve: so caminho + dados do card).
+// Arquivos moram no disco do VPS em uploads/sondagens/<card_id>/.
+
+app.get("/api/admin/sondagens", requireAdmin, async (req, res) => {
+  const q = String(req.query.q || "").trim()
+  const limit = Math.min(parsePositiveInteger(req.query.limit) || 200, 500)
+  try {
+    let rows
+    if (q) {
+      const like = `%${q}%`
+      ;[rows] = await db.query(
+        `SELECT id, card_id, card_title, cliente, contato, endereco_obra, cidade, estado,
+                servico, fase, nome_original, nome_arquivo, tamanho, mime_type, criado_em
+         FROM crm_sondagens
+         WHERE cliente LIKE ? OR endereco_obra LIKE ? OR cidade LIKE ?
+            OR card_title LIKE ? OR negociacao LIKE ? OR contato LIKE ?
+         ORDER BY card_id DESC, nome_arquivo ASC
+         LIMIT ?`,
+        [like, like, like, like, like, like, limit * 8]
+      )
+    } else {
+      ;[rows] = await db.query(
+        `SELECT id, card_id, card_title, cliente, contato, endereco_obra, cidade, estado,
+                servico, fase, nome_original, nome_arquivo, tamanho, mime_type, criado_em
+         FROM crm_sondagens
+         ORDER BY card_id DESC, nome_arquivo ASC
+         LIMIT ?`,
+        [limit * 8]
+      )
+    }
+    // agrupa arquivos por card
+    const cardsMap = new Map()
+    for (const r of rows) {
+      let card = cardsMap.get(r.card_id)
+      if (!card) {
+        card = {
+          card_id: r.card_id, card_title: r.card_title, cliente: r.cliente,
+          contato: r.contato, endereco_obra: r.endereco_obra, cidade: r.cidade,
+          estado: r.estado, servico: r.servico, fase: r.fase, arquivos: [],
+        }
+        cardsMap.set(r.card_id, card)
+      }
+      card.arquivos.push({
+        id: r.id, nome_original: r.nome_original, tamanho: r.tamanho,
+        mime_type: r.mime_type, criado_em: r.criado_em,
+      })
+    }
+    const cards = Array.from(cardsMap.values()).slice(0, limit)
+    return res.json({ ok: true, data: cards, total: cards.length })
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
+app.get("/api/admin/sondagens/:id/download", requireAdmin, async (req, res) => {
+  const id = parsePositiveInteger(req.params.id)
+  if (!id) return res.status(400).json({ ok: false, message: "Arquivo invalido." })
+  try {
+    const [[row]] = await db.query(
+      "SELECT caminho, nome_original FROM crm_sondagens WHERE id = ?",
+      [id]
+    )
+    if (!row) return res.status(404).json({ ok: false, message: "Registro nao encontrado." })
+    // guard path traversal: so dentro de uploads/sondagens
+    const baseDir = path.join(__dirname, "uploads", "sondagens")
+    const filePath = path.resolve(__dirname, row.caminho)
+    if (!filePath.startsWith(baseDir)) return res.status(400).json({ ok: false, message: "Caminho invalido." })
+    if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, message: "Arquivo nao encontrado no servidor." })
+    return res.download(filePath, row.nome_original || path.basename(filePath))
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
 // ── Portal documentos (cliente) ───────────────────────────────────────────────
 
 app.get("/api/client-portal/documentos", requireClientPortal, async (req, res) => {

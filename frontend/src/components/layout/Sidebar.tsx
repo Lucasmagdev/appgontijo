@@ -11,6 +11,7 @@ import {
   Receipt,
   ChevronLeft, ChevronRight, ChevronDown,
   Layers, ClipboardList, CalendarClock,
+  Drill,
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { label: 'Clientes', to: '/clientes', icon: Building2 },
   { label: 'Obras', to: '/obras', icon: HardHat },
   { label: 'Equipamentos', to: '/equipamentos', icon: Wrench },
+  { label: 'Sondagens', to: '/sondagens', icon: Drill },
   { type: 'divider', label: 'Operacional' },
   { label: 'Producao', to: '/producao', icon: BarChart3 },
   { label: 'Indicadores Operacionais', to: '/indicadores-operacionais', icon: Gauge },
