@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { Download, FileText, MapPin, Search, User } from 'lucide-react'
+import { Download, FileText, Map, MapPin, Search, User } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { extractApiErrorMessage, sondagemService } from '@/lib/gontijo-api'
@@ -18,7 +19,8 @@ function formatBytes(bytes: number): string {
 }
 
 export default function SondagensPage() {
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const debouncedSearch = useDebouncedValue(search)
 
   const sondagensQuery = useQuery({
@@ -37,6 +39,11 @@ export default function SondagensPage() {
           <h1 className="page-heading">Sondagens</h1>
           <p className="page-subtitle">Relatorios e anexos de sondagem importados do CRM (Pipefy).</p>
         </div>
+
+        <Link to="/sondagens/mapa" className="btn btn-primary">
+          <Map size={15} />
+          Ver no mapa
+        </Link>
       </div>
 
       <section className="app-panel toolbar-panel">

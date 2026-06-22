@@ -4158,6 +4158,34 @@ app.get("/api/admin/sondagens", requireAdmin, async (req, res) => {
   }
 })
 
+app.get("/api/admin/sondagens/mapa", requireAdmin, async (_req, res) => {
+  const { corDaFase } = require("./lib/sondagem-fases")
+  try {
+    const [rows] = await db.query(
+      `SELECT card_id, card_title, cliente, endereco_obra, cidade, estado, fase,
+              MAX(lat) AS lat, MAX(lng) AS lng, COUNT(*) AS arquivos
+       FROM crm_sondagens
+       WHERE lat IS NOT NULL AND lng IS NOT NULL
+       GROUP BY card_id, card_title, cliente, endereco_obra, cidade, estado, fase`
+    )
+    const pontos = rows.map((r) => ({
+      card_id: r.card_id,
+      cliente: r.cliente || r.card_title,
+      endereco_obra: r.endereco_obra,
+      cidade: r.cidade,
+      estado: r.estado,
+      fase: r.fase,
+      cor: corDaFase(r.fase),
+      arquivos: Number(r.arquivos),
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+    }))
+    return res.json({ ok: true, data: pontos, total: pontos.length })
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message })
+  }
+})
+
 app.get("/api/admin/sondagens/:id/download", requireAdmin, async (req, res) => {
   const id = parsePositiveInteger(req.params.id)
   if (!id) return res.status(400).json({ ok: false, message: "Arquivo invalido." })

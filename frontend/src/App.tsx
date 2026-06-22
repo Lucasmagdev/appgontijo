@@ -15,6 +15,7 @@ const UsuarioFormPage = lazy(() => import('@/pages/usuarios/UsuarioForm'))
 const ClientesPage = lazy(() => import('@/pages/clientes/Clientes'))
 const ClienteFormPage = lazy(() => import('@/pages/clientes/ClienteForm'))
 const SondagensPage = lazy(() => import('@/pages/sondagens/Sondagens'))
+const SondagensMapaPage = lazy(() => import('@/pages/sondagens/SondagensMapa'))
 const ObrasPage = lazy(() => import('@/pages/obras/Obras'))
 const ObraFormPage = lazy(() => import('@/pages/obras/ObraForm'))
 const EquipamentosPage = lazy(() => import('@/pages/equipamentos/Equipamentos'))
@@ -264,6 +265,7 @@ export default function App() {
             <Route path="obras/:id/editar" element={<ObraFormPage />} />
             <Route path="equipamentos" element={<EquipamentosPage />} />
             <Route path="sondagens" element={<SondagensPage />} />
+            <Route path="sondagens/mapa" element={<SondagensMapaPage />} />
             <Route path="producao" element={<ProducaoPage />} />
             <Route path="indicadores-operacionais" element={<IndicadoresOperacionaisPage />} />
             <Route path="pre-ocorrencias" element={<PreOcorrenciasPage />} />

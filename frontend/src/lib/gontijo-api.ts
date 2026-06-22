@@ -3300,9 +3300,26 @@ export type SondagemCard = {
   arquivos: SondagemArquivo[]
 }
 
+export type SondagemPonto = {
+  card_id: string
+  cliente: string
+  endereco_obra: string
+  cidade: string
+  estado: string
+  fase: string
+  cor: string
+  arquivos: number
+  lat: number
+  lng: number
+}
+
 export const sondagemService = {
   async list(params: { q?: string; limit?: number } = {}): Promise<SondagemCard[]> {
     const { data } = await api.get<ApiEnvelope<SondagemCard[]>>('/admin/sondagens', { params })
+    return data.data || []
+  },
+  async mapa(): Promise<SondagemPonto[]> {
+    const { data } = await api.get<ApiEnvelope<SondagemPonto[]>>('/admin/sondagens/mapa')
     return data.data || []
   },
   downloadUrl(arquivoId: number): string {
