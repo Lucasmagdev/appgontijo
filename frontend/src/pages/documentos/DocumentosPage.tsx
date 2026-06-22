@@ -28,8 +28,6 @@ type TipoForm = {
 type DocForm = {
   id: number | null
   tipoDocumentoId: string
-  url: string
-  nomeArquivo: string
   dataEmissao: string
   vencimento: string
   observacao: string
@@ -55,8 +53,6 @@ const emptyTipo: TipoForm = {
 const emptyDoc: DocForm = {
   id: null,
   tipoDocumentoId: '',
-  url: '',
-  nomeArquivo: '',
   dataEmissao: '',
   vencimento: '',
   observacao: '',
@@ -96,6 +92,7 @@ export default function DocumentosPage() {
   const [tipoForm, setTipoForm] = useState<TipoForm>(emptyTipo)
   const [selectedUserId, setSelectedUserId] = useState('')
   const [docForm, setDocForm] = useState<DocForm>(emptyDoc)
+  const [docFile, setDocFile] = useState<File | null>(null)
   const [envioForm, setEnvioForm] = useState<EnvioForm>(emptyEnvio)
   const [selectedEnvioId, setSelectedEnvioId] = useState('')
   const [selectedItemKeys, setSelectedItemKeys] = useState<Set<string>>(new Set())
@@ -190,19 +187,20 @@ export default function DocumentosPage() {
       if (!selectedUserId) throw new Error('Selecione um colaborador.')
       const payload = {
         tipoDocumentoId: Number(docForm.tipoDocumentoId),
-        url: docForm.url.trim(),
-        nomeArquivo: docForm.nomeArquivo.trim(),
+        arquivo: docFile,
         dataEmissao: docForm.dataEmissao,
         vencimento: docForm.vencimento,
         observacao: docForm.observacao.trim(),
         ativo: true,
       }
-      if (!payload.tipoDocumentoId || !payload.url) throw new Error('Informe tipo e link do documento.')
+      if (!payload.tipoDocumentoId) throw new Error('Informe o tipo do documento.')
+      if (!docForm.id && !payload.arquivo) throw new Error('Anexe o arquivo do documento.')
       if (docForm.id) return documentosService.updateColaboradorDocumento(Number(selectedUserId), docForm.id, payload)
       return documentosService.createColaboradorDocumento(Number(selectedUserId), payload)
     },
     onSuccess: async () => {
       setDocForm(emptyDoc)
+      setDocFile(null)
       setMessage('Documento do colaborador salvo.')
       await queryClient.invalidateQueries({ queryKey: ['documentos-colaborador', selectedUserId] })
     },
@@ -278,12 +276,11 @@ export default function DocumentosPage() {
     setDocForm({
       id: doc.id,
       tipoDocumentoId: String(doc.tipoDocumentoId),
-      url: doc.url,
-      nomeArquivo: doc.nomeArquivo,
       dataEmissao: doc.dataEmissao,
       vencimento: doc.vencimento,
       observacao: doc.observacao,
     })
+    setDocFile(null)
   }
 
   function toggleTipoCargo(cargoId: number) {
@@ -462,7 +459,7 @@ export default function DocumentosPage() {
         <div className="space-y-4">
           <section className="app-panel toolbar-panel">
             <label className="field-label">Colaborador</label>
-            <select className="field-select" value={selectedUserId} onChange={(event) => { setSelectedUserId(event.target.value); setDocForm(emptyDoc) }}>
+            <select className="field-select" value={selectedUserId} onChange={(event) => { setSelectedUserId(event.target.value); setDocForm(emptyDoc); setDocFile(null) }}>
               <option value="">Selecione</option>
               {(usuariosQuery.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.nome}</option>)}
             </select>
@@ -474,14 +471,17 @@ export default function DocumentosPage() {
                 <h2 className="section-heading">Documento de {colaboradorQuery.data.colaborador.nome}</h2>
                 <div className="form-grid">
                   <div className="span-4"><label className="field-label">Tipo</label><select className="field-select" value={docForm.tipoDocumentoId} onChange={(event) => setDocForm((f) => ({ ...f, tipoDocumentoId: event.target.value }))}><option value="">Selecione</option>{(tiposQuery.data ?? []).filter((tipo) => tipo.ativo).map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.secao} - {tipo.nome}</option>)}</select></div>
-                  <div className="span-4"><label className="field-label">Link baixavel</label><input className="field-input" value={docForm.url} onChange={(event) => setDocForm((f) => ({ ...f, url: event.target.value }))} placeholder="https://..." /></div>
-                  <div className="span-4"><label className="field-label">Nome do arquivo</label><input className="field-input" value={docForm.nomeArquivo} onChange={(event) => setDocForm((f) => ({ ...f, nomeArquivo: event.target.value }))} /></div>
+                  <div className="span-8">
+                    <label className="field-label">{docForm.id ? 'Substituir arquivo (opcional)' : 'Arquivo'}</label>
+                    <input className="field-input" type="file" onChange={(event) => setDocFile(event.target.files?.[0] ?? null)} />
+                    {docFile ? <p className="mt-1 text-xs text-slate-500">{docFile.name}</p> : null}
+                  </div>
                   <div className="span-3"><label className="field-label">Emissao</label><input type="date" className="field-input" value={docForm.dataEmissao} onChange={(event) => setDocForm((f) => ({ ...f, dataEmissao: event.target.value }))} /></div>
                   <div className="span-3"><label className="field-label">Vencimento</label><input type="date" className="field-input" value={docForm.vencimento} onChange={(event) => setDocForm((f) => ({ ...f, vencimento: event.target.value }))} /></div>
                   <div className="span-6"><label className="field-label">Observacao</label><input className="field-input" value={docForm.observacao} onChange={(event) => setDocForm((f) => ({ ...f, observacao: event.target.value }))} /></div>
                   <div className="span-12 inline-actions">
                     <button type="button" className="btn btn-primary" disabled={docMutation.isPending} onClick={() => docMutation.mutate()}><Save size={15} />Salvar documento</button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setDocForm(emptyDoc)}>Limpar</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => { setDocForm(emptyDoc); setDocFile(null) }}>Limpar</button>
                   </div>
                 </div>
               </section>
@@ -497,7 +497,7 @@ export default function DocumentosPage() {
                           <tr key={tipo.id}>
                             <td>{tipo.secao}</td>
                             <td className="font-semibold text-slate-800">{tipo.nome}</td>
-                            <td>{doc?.url ? <a className="text-[var(--brand-red)]" href={doc.url} target="_blank" rel="noreferrer">abrir</a> : '-'}</td>
+                            <td>{doc?.downloadUrl ? <a className="text-[var(--brand-red)]" href={doc.downloadUrl} target="_blank" rel="noreferrer">abrir arquivo</a> : doc?.url ? <a className="text-[var(--brand-red)]" href={doc.url} target="_blank" rel="noreferrer">abrir link</a> : '-'}</td>
                             <td>{doc?.vencimento ? formatDate(doc.vencimento) : '-'}</td>
                             <td><span className={cn('status-badge', statusClass(doc?.status || 'sem_vencimento'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
                             <td>{doc ? <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button> : null}</td>
@@ -562,7 +562,7 @@ export default function DocumentosPage() {
                             <td>{colaboradorQuery.data.colaborador.nome}</td>
                             <td>{tipo.secao} - {tipo.nome}</td>
                             <td><span className={cn('status-badge', statusClass(doc?.status || 'sem_vencimento'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
-                            <td>{doc?.url ? 'ok' : 'sem link'}</td>
+                            <td>{doc?.downloadUrl || doc?.url ? 'ok' : 'sem arquivo'}</td>
                           </tr>
                         )
                       })}

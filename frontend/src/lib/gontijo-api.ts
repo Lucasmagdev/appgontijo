@@ -258,8 +258,11 @@ export type DocumentoColaborador = {
   tipoDocumentoId: number
   tipoDocumento: string
   secao: string
+  origem: 'local' | 'external'
   url: string
+  downloadUrl: string
   nomeArquivo: string
+  tamanho: number | null
   dataEmissao: string
   vencimento: string
   status: 'vigente' | 'vence_em_breve' | 'vencido' | 'sem_vencimento'
@@ -269,8 +272,7 @@ export type DocumentoColaborador = {
 
 export type DocumentoColaboradorPayload = {
   tipoDocumentoId: number
-  url: string
-  nomeArquivo: string
+  arquivo?: File | null
   dataEmissao: string
   vencimento: string
   observacao: string
@@ -305,8 +307,11 @@ export type DocumentoEnvioItem = {
   tipoDocumento: string
   secao: string
   documentoUsuarioId: number | null
+  origem: 'local' | 'external'
   url: string
+  downloadUrl: string
   nomeArquivo: string
+  tamanho: number | null
   vencimento: string
   status: DocumentoColaborador['status']
 }
@@ -1509,8 +1514,11 @@ function adaptDocumentoColaborador(row: Record<string, unknown>): DocumentoColab
     tipoDocumentoId: Number(row.tipoDocumentoId || 0),
     tipoDocumento: toStringValue(row.tipoDocumento),
     secao: toStringValue(row.secao || 'Geral'),
+    origem: toStringValue(row.origem) === 'local' ? 'local' : 'external',
     url: toStringValue(row.url),
+    downloadUrl: toStringValue(row.downloadUrl),
     nomeArquivo: toStringValue(row.nomeArquivo),
+    tamanho: toNumberValue(row.tamanho),
     dataEmissao: toStringValue(row.dataEmissao),
     vencimento: toStringValue(row.vencimento),
     status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'sem_vencimento',
@@ -1550,8 +1558,11 @@ function adaptDocumentoEnvioDetalhe(row: Record<string, unknown>): DocumentoEnvi
         tipoDocumento: toStringValue(data.tipoDocumento),
         secao: toStringValue(data.secao || 'Geral'),
         documentoUsuarioId: toNumberValue(data.documentoUsuarioId),
+        origem: toStringValue(data.origem) === 'local' ? 'local' : 'external',
         url: toStringValue(data.url),
+        downloadUrl: toStringValue(data.downloadUrl),
         nomeArquivo: toStringValue(data.nomeArquivo),
+        tamanho: toNumberValue(data.tamanho),
         vencimento: toStringValue(data.vencimento),
         status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'sem_vencimento',
       }
@@ -1621,11 +1632,28 @@ export const documentosService = {
     }
   },
   async createColaboradorDocumento(userId: number, payload: DocumentoColaboradorPayload) {
-    const { data } = await api.post<{ id: number }>(`/gontijo/documentos/colaboradores/${userId}`, payload)
+    const form = new FormData()
+    form.append('tipoDocumentoId', String(payload.tipoDocumentoId))
+    form.append('dataEmissao', payload.dataEmissao || '')
+    form.append('vencimento', payload.vencimento || '')
+    form.append('observacao', payload.observacao || '')
+    if (payload.arquivo) form.append('arquivo', payload.arquivo)
+    const { data } = await api.post<{ id: number }>(`/gontijo/documentos/colaboradores/${userId}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
     return data.id
   },
   async updateColaboradorDocumento(userId: number, documentId: number, payload: DocumentoColaboradorPayload) {
-    await api.put(`/gontijo/documentos/colaboradores/${userId}/${documentId}`, payload)
+    const form = new FormData()
+    form.append('tipoDocumentoId', String(payload.tipoDocumentoId))
+    form.append('dataEmissao', payload.dataEmissao || '')
+    form.append('vencimento', payload.vencimento || '')
+    form.append('observacao', payload.observacao || '')
+    form.append('ativo', String(payload.ativo !== false))
+    if (payload.arquivo) form.append('arquivo', payload.arquivo)
+    await api.put(`/gontijo/documentos/colaboradores/${userId}/${documentId}`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
   },
   async removeColaboradorDocumento(userId: number, documentId: number) {
     await api.delete(`/gontijo/documentos/colaboradores/${userId}/${documentId}`)
