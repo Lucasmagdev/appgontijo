@@ -38,6 +38,7 @@ const CursosPontosPage = lazy(() => import('@/pages/cursos/CursosPontos'))
 const PontoVerificacaoPage = lazy(() => import('@/pages/ponto/PontoVerificacaoPage'))
 const AjudantesAvaliacaoPage = lazy(() => import('@/pages/ponto/AjudantesAvaliacaoPage'))
 const WhatsAppLogsPage = lazy(() => import('@/pages/whatsapp/WhatsAppLogsPage'))
+const DocumentosPage = lazy(() => import('@/pages/documentos/DocumentosPage'))
 
 // Operador PWA — chunk separado
 const OperadorLoginPage = lazy(() => import('@/pages/operador/OperadorLogin'))
@@ -271,6 +272,7 @@ export default function App() {
             <Route path="pre-ocorrencias" element={<PreOcorrenciasPage />} />
             <Route path="ponto-verificacao" element={<PontoVerificacaoPage />} />
             <Route path="whatsapp" element={<WhatsAppLogsPage />} />
+            <Route path="documentos" element={<DocumentosPage />} />
             <Route path="avaliacao-ajudantes" element={<AjudantesAvaliacaoPage />} />
             <Route path="diarios" element={<DiariosPage />} />
             <Route path="diarios/conferencia" element={<DiarioConferenciaPage />} />

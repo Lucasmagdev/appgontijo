@@ -5,6 +5,7 @@ import {
   FileText, BarChart3, KeyRound, BookOpen,
   Fingerprint,
   ClipboardCheck,
+  FolderArchive,
   MessageCircle,
   Gauge,
   ListChecks,
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { label: 'Indicadores Operacionais', to: '/indicadores-operacionais', icon: Gauge },
   { label: 'Pre-ocorrencias', to: '/pre-ocorrencias', icon: ListChecks },
   { label: 'Verificacao de Ponto', to: '/ponto-verificacao', icon: Fingerprint },
+  { label: 'Documentos', to: '/documentos', icon: FolderArchive },
   { label: 'WhatsApp', to: '/whatsapp', icon: MessageCircle },
   { label: 'Avaliacao de Ajudantes', to: '/avaliacao-ajudantes', icon: ClipboardCheck },
   {

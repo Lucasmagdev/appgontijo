@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import QueryFeedback from '@/components/ui/QueryFeedback'
-import { extractApiErrorMessage, type UsuarioPayload, usuarioService } from '@/lib/gontijo-api'
+import { documentosService, extractApiErrorMessage, type UsuarioPayload, usuarioService } from '@/lib/gontijo-api'
 import { useAuth } from '@/hooks/useAuth'
 
 const initialForm: UsuarioPayload = {
@@ -32,6 +32,12 @@ export default function UsuarioFormPage() {
     queryKey: ['usuario', id],
     queryFn: () => usuarioService.getById(Number(id)),
     enabled: isEditing,
+  })
+
+  const cargosQuery = useQuery({
+    queryKey: ['documentos-cargos'],
+    queryFn: documentosService.listCargos,
+    staleTime: 1000 * 60 * 10,
   })
 
   useEffect(() => {
@@ -194,13 +200,19 @@ export default function UsuarioFormPage() {
 
               <div className="span-6">
                 <label className="field-label">Cargo</label>
-                <input
-                  type="text"
+                <select
                   value={form.cargo}
                   onChange={(event) => setField('cargo', event.target.value)}
-                  className="field-input"
-                  placeholder="Ex: Operador, Caldeiraria, Geoteste..."
-                />
+                  className="field-select"
+                >
+                  <option value="">Selecione</option>
+                  {form.cargo && !cargosQuery.data?.some((cargo) => cargo.nome === form.cargo) ? (
+                    <option value={form.cargo}>{form.cargo}</option>
+                  ) : null}
+                  {(cargosQuery.data ?? []).filter((cargo) => cargo.ativo).map((cargo) => (
+                    <option key={cargo.id} value={cargo.nome}>{cargo.nome}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="span-6">

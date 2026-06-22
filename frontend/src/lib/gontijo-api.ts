@@ -235,6 +235,95 @@ export type UsuarioPayload = {
   senha?: string
 }
 
+export type DocumentoCargo = {
+  id: number
+  nome: string
+  ativo: boolean
+}
+
+export type DocumentoTipo = {
+  id: number
+  secao: string
+  nome: string
+  codigo: string
+  obrigatorio: boolean
+  validadePadraoDias: number | null
+  ativo: boolean
+  cargos: Array<{ id: number; nome: string; obrigatorio: boolean }>
+}
+
+export type DocumentoColaborador = {
+  id: number
+  usuarioId: number
+  tipoDocumentoId: number
+  tipoDocumento: string
+  secao: string
+  url: string
+  nomeArquivo: string
+  dataEmissao: string
+  vencimento: string
+  status: 'vigente' | 'vence_em_breve' | 'vencido' | 'sem_vencimento'
+  observacao: string
+  ativo: boolean
+}
+
+export type DocumentoColaboradorPayload = {
+  tipoDocumentoId: number
+  url: string
+  nomeArquivo: string
+  dataEmissao: string
+  vencimento: string
+  observacao: string
+  ativo?: boolean
+}
+
+export type DocumentoColaboradorResumo = {
+  colaborador: { id: number; nome: string; cargo: string }
+  esperados: DocumentoTipo[]
+  documentos: DocumentoColaborador[]
+}
+
+export type DocumentoEnvio = {
+  id: number
+  obraId: number
+  obraNumero: string
+  cliente: string
+  nome: string
+  status: 'rascunho' | 'pronto' | 'arquivado'
+  totalItens: number
+  totalExtras: number
+  criadoEm: string
+  atualizadoEm: string
+}
+
+export type DocumentoEnvioItem = {
+  id: number
+  usuarioId: number
+  usuarioNome: string
+  cargo: string
+  tipoDocumentoId: number
+  tipoDocumento: string
+  secao: string
+  documentoUsuarioId: number | null
+  url: string
+  nomeArquivo: string
+  vencimento: string
+  status: DocumentoColaborador['status']
+}
+
+export type DocumentoEnvioExtra = {
+  id: number
+  nome: string
+  url: string
+  observacao: string
+  criadoEm: string
+}
+
+export type DocumentoEnvioDetalhe = DocumentoEnvio & {
+  itens: DocumentoEnvioItem[]
+  extras: DocumentoEnvioExtra[]
+}
+
 export type ClienteRecord = {
   id: number
   razaoSocial: string
@@ -1384,6 +1473,192 @@ export const usuarioService = {
   async listOptions() {
     const result = await usuarioService.list({ status: 'ativo', page: 1, limit: 500 })
     return result.items.map((item) => ({ id: item.id, nome: item.nome }))
+  },
+}
+
+function adaptDocumentoCargo(row: Record<string, unknown>): DocumentoCargo {
+  return {
+    id: Number(row.id || 0),
+    nome: toStringValue(row.nome),
+    ativo: row.ativo !== false,
+  }
+}
+
+function adaptDocumentoTipo(row: Record<string, unknown>): DocumentoTipo {
+  const cargos = Array.isArray(row.cargos) ? row.cargos : []
+  return {
+    id: Number(row.id || 0),
+    secao: toStringValue(row.secao || 'Geral'),
+    nome: toStringValue(row.nome),
+    codigo: toStringValue(row.codigo),
+    obrigatorio: row.obrigatorio !== false,
+    validadePadraoDias: toNumberValue(row.validadePadraoDias),
+    ativo: row.ativo !== false,
+    cargos: cargos.map((cargo) => {
+      const item = cargo as Record<string, unknown>
+      return { id: Number(item.id || 0), nome: toStringValue(item.nome), obrigatorio: item.obrigatorio !== false }
+    }).filter((cargo) => cargo.id > 0),
+  }
+}
+
+function adaptDocumentoColaborador(row: Record<string, unknown>): DocumentoColaborador {
+  const status = toStringValue(row.status) as DocumentoColaborador['status']
+  return {
+    id: Number(row.id || 0),
+    usuarioId: Number(row.usuarioId || 0),
+    tipoDocumentoId: Number(row.tipoDocumentoId || 0),
+    tipoDocumento: toStringValue(row.tipoDocumento),
+    secao: toStringValue(row.secao || 'Geral'),
+    url: toStringValue(row.url),
+    nomeArquivo: toStringValue(row.nomeArquivo),
+    dataEmissao: toStringValue(row.dataEmissao),
+    vencimento: toStringValue(row.vencimento),
+    status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'sem_vencimento',
+    observacao: toStringValue(row.observacao),
+    ativo: row.ativo !== false,
+  }
+}
+
+function adaptDocumentoEnvio(row: Record<string, unknown>): DocumentoEnvio {
+  const status = toStringValue(row.status) as DocumentoEnvio['status']
+  return {
+    id: Number(row.id || 0),
+    obraId: Number(row.obraId || 0),
+    obraNumero: toStringValue(row.obraNumero),
+    cliente: toStringValue(row.cliente),
+    nome: toStringValue(row.nome),
+    status: ['rascunho', 'pronto', 'arquivado'].includes(status) ? status : 'rascunho',
+    totalItens: Number(row.totalItens || 0),
+    totalExtras: Number(row.totalExtras || 0),
+    criadoEm: toStringValue(row.criadoEm),
+    atualizadoEm: toStringValue(row.atualizadoEm),
+  }
+}
+
+function adaptDocumentoEnvioDetalhe(row: Record<string, unknown>): DocumentoEnvioDetalhe {
+  return {
+    ...adaptDocumentoEnvio(row),
+    itens: Array.isArray(row.itens) ? row.itens.map((item) => {
+      const data = item as Record<string, unknown>
+      const status = toStringValue(data.status) as DocumentoColaborador['status']
+      return {
+        id: Number(data.id || 0),
+        usuarioId: Number(data.usuarioId || 0),
+        usuarioNome: toStringValue(data.usuarioNome),
+        cargo: toStringValue(data.cargo),
+        tipoDocumentoId: Number(data.tipoDocumentoId || 0),
+        tipoDocumento: toStringValue(data.tipoDocumento),
+        secao: toStringValue(data.secao || 'Geral'),
+        documentoUsuarioId: toNumberValue(data.documentoUsuarioId),
+        url: toStringValue(data.url),
+        nomeArquivo: toStringValue(data.nomeArquivo),
+        vencimento: toStringValue(data.vencimento),
+        status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'sem_vencimento',
+      }
+    }) : [],
+    extras: Array.isArray(row.extras) ? row.extras.map((item) => {
+      const data = item as Record<string, unknown>
+      return {
+        id: Number(data.id || 0),
+        nome: toStringValue(data.nome),
+        url: toStringValue(data.url),
+        observacao: toStringValue(data.observacao),
+        criadoEm: toStringValue(data.criadoEm),
+      }
+    }) : [],
+  }
+}
+
+export const documentosService = {
+  async listCargos() {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/documentos/cargos')
+    return data.data.map(adaptDocumentoCargo)
+  },
+  async createCargo(payload: { nome: string; ativo?: boolean }) {
+    const { data } = await api.post<{ id: number }>('/gontijo/documentos/cargos', payload)
+    return data.id
+  },
+  async updateCargo(id: number, payload: { nome: string; ativo?: boolean }) {
+    await api.put(`/gontijo/documentos/cargos/${id}`, payload)
+  },
+  async removeCargo(id: number) {
+    await api.delete(`/gontijo/documentos/cargos/${id}`)
+  },
+  async listTipos() {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/documentos/tipos')
+    return data.data.map(adaptDocumentoTipo)
+  },
+  async createTipo(payload: { secao: string; nome: string; codigo: string; obrigatorio: boolean; validadePadraoDias: number | null; ativo?: boolean; cargoIds: number[] }) {
+    const { data } = await api.post<{ id: number }>('/gontijo/documentos/tipos', payload)
+    return data.id
+  },
+  async updateTipo(id: number, payload: { secao: string; nome: string; codigo: string; obrigatorio: boolean; validadePadraoDias: number | null; ativo?: boolean; cargoIds: number[] }) {
+    await api.put(`/gontijo/documentos/tipos/${id}`, payload)
+  },
+  async removeTipo(id: number) {
+    await api.delete(`/gontijo/documentos/tipos/${id}`)
+  },
+  async importarChecklist(file: File) {
+    const form = new FormData()
+    form.append('arquivo', file)
+    const { data } = await api.post<ApiEnvelope<{ total: number; criados: number; atualizados: number }>>('/gontijo/documentos/importar-checklist-xlsx', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data.data
+  },
+  async getColaborador(userId: number): Promise<DocumentoColaboradorResumo> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/documentos/colaboradores/${userId}`)
+    const payload = data.data
+    const colaborador = payload.colaborador as Record<string, unknown>
+    return {
+      colaborador: {
+        id: Number(colaborador?.id || 0),
+        nome: toStringValue(colaborador?.nome),
+        cargo: toStringValue(colaborador?.cargo),
+      },
+      esperados: Array.isArray(payload.esperados) ? payload.esperados.map((item) => adaptDocumentoTipo(item as Record<string, unknown>)) : [],
+      documentos: Array.isArray(payload.documentos) ? payload.documentos.map((item) => adaptDocumentoColaborador(item as Record<string, unknown>)) : [],
+    }
+  },
+  async createColaboradorDocumento(userId: number, payload: DocumentoColaboradorPayload) {
+    const { data } = await api.post<{ id: number }>(`/gontijo/documentos/colaboradores/${userId}`, payload)
+    return data.id
+  },
+  async updateColaboradorDocumento(userId: number, documentId: number, payload: DocumentoColaboradorPayload) {
+    await api.put(`/gontijo/documentos/colaboradores/${userId}/${documentId}`, payload)
+  },
+  async removeColaboradorDocumento(userId: number, documentId: number) {
+    await api.delete(`/gontijo/documentos/colaboradores/${userId}/${documentId}`)
+  },
+  async listEnvios() {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/documentos/envios')
+    return data.data.map(adaptDocumentoEnvio)
+  },
+  async createEnvio(payload: { obraId: number; nome: string; status: DocumentoEnvio['status'] }) {
+    const { data } = await api.post<{ id: number }>('/gontijo/documentos/envios', payload)
+    return data.id
+  },
+  async getEnvio(id: number) {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/documentos/envios/${id}`)
+    return adaptDocumentoEnvioDetalhe(data.data)
+  },
+  async updateEnvio(id: number, payload: { nome: string; status: DocumentoEnvio['status'] }) {
+    await api.put(`/gontijo/documentos/envios/${id}`, payload)
+  },
+  async removeEnvio(id: number) {
+    await api.delete(`/gontijo/documentos/envios/${id}`)
+  },
+  async replaceEnvioItens(id: number, itens: Array<{ usuarioId: number; tipoDocumentoId: number; documentoUsuarioId?: number | null }>) {
+    await api.post(`/gontijo/documentos/envios/${id}/itens`, { itens })
+  },
+  async createEnvioExtra(id: number, payload: { nome: string; url: string; observacao: string }) {
+    await api.post(`/gontijo/documentos/envios/${id}/extras`, payload)
+  },
+  async removeEnvioExtra(id: number, extraId: number) {
+    await api.delete(`/gontijo/documentos/envios/${id}/extras/${extraId}`)
+  },
+  buildExportUrl(id: number) {
+    return `${API_BASE_URL}/gontijo/documentos/envios/${id}/exportar.zip`
   },
 }
 
