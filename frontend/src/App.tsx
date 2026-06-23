@@ -185,10 +185,19 @@ function AppLoading() {
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isReady } = useAuth()
+  const operador = useOperadorAuth()
 
   if (!isReady) return <AppLoading />
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
+  if (isAuthenticated) return <>{children}</>
+
+  // Defesa: um operador que caiu na raiz admin (ex.: start_url antigo do PWA
+  // instalado) deve ir pro app dele, nao pra tela de login do admin.
+  if (operador.isReady && operador.isAuthenticated) {
+    return <Navigate to="/operador" replace />
+  }
+
+  return <Navigate to="/login" replace />
 }
 
 function LoginRoute() {

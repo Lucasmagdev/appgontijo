@@ -2,7 +2,7 @@
   "name": "Gontijo Fundações",
   "short_name": "Gontijo",
   "description": "Sistema operacional da Gontijo Fundações.",
-  "start_url": "/",
+  "start_url": "/operador",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
