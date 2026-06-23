@@ -3,7 +3,10 @@ import { persist } from 'zustand/middleware'
 import axios from 'axios'
 import { API_BASE_URL } from '@/lib/api'
 
-const operadorApi = axios.create({ baseURL: API_BASE_URL, withCredentials: true })
+// timeout obrigatorio: sem ele, uma VPS lenta/instavel faz o GET /operador/status
+// pendurar pra sempre, isReady nunca vira true e a tela fica em branco ("abriu,
+// demorou, fechou"). 12s e suficiente ate em rede movel ruim.
+const operadorApi = axios.create({ baseURL: API_BASE_URL, withCredentials: true, timeout: 12000 })
 let operadorAuthRevision = 0
 
 interface OperadorUser {
@@ -24,13 +27,19 @@ interface OperadorAuthState {
 
 export const useOperadorAuth = create<OperadorAuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       isReady: false,
 
       initialize: async () => {
         const revisionAtStart = operadorAuthRevision
+        // Render otimista: se ja existe sessao persistida (rehidratada do
+        // localStorage), libera a UI na hora e valida em segundo plano. Isso
+        // garante que a tela NUNCA fica em branco esperando a rede no boot.
+        if (get().isAuthenticated && get().user) {
+          set({ isReady: true })
+        }
         try {
           const { data } = await operadorApi.get('/operador/status')
           if (revisionAtStart !== operadorAuthRevision) return

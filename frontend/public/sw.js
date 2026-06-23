@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gontijo-pwa-v2'
+const CACHE_NAME = 'gontijo-pwa-v3'
 const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
 
 self.addEventListener('install', (event) => {
