@@ -1,5 +1,11 @@
-const CACHE_NAME = 'gontijo-pwa-v4'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
+const CACHE_NAME = 'gontijo-pwa-v5'
+const APP_SHELL = ['/', '/operador', '/operador/login?v=20260623', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
+})
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

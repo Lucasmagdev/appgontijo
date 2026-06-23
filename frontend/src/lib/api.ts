@@ -15,6 +15,9 @@ const AUTH_STORAGE_KEYS: Record<string, string> = {
 
 function resolveUnauthorizedRedirect(pathname: string, requestUrl: string): string | null {
   const isAdminRequest = requestUrl.includes('/admin/')
+  const isStatusRequest = requestUrl.includes('/admin/status')
+
+  if (isStatusRequest) return null
 
   if (pathname.startsWith('/operador')) {
     return isAdminRequest ? null : '/operador/login'

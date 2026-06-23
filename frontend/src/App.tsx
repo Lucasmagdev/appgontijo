@@ -197,6 +197,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/operador" replace />
   }
 
+  if (!operador.isReady) return <AppLoading />
+
   return <Navigate to="/login" replace />
 }
 
