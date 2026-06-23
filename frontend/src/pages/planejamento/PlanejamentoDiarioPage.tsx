@@ -8,6 +8,7 @@ import {
   Layers3,
   Pencil,
   Plus,
+  ShieldAlert,
   Target,
   Trash2,
   X,
@@ -25,6 +26,32 @@ import {
 
 const DIAMETROS = ['20', '25', '30', '35', '40', '50', '60', '70', '80', '100', '120']
 const DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
+
+function isForbiddenError(error: unknown): boolean {
+  return error instanceof AxiosError && error.response?.status === 403
+}
+
+function AccessDeniedScreen() {
+  return (
+    <div className="page-shell">
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="app-panel w-full max-w-md p-8 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+            <ShieldAlert size={32} strokeWidth={2.2} />
+          </div>
+          <h1 className="mt-5 text-xl font-bold text-slate-900">Acesso restrito</h1>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">
+            O Planejamento de Obras está disponível apenas para cargos de escritório e gestão.
+            Seu perfil não tem permissão para visualizar ou editar as metas de produção.
+          </p>
+          <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-400">
+            Precisa de acesso? Fale com a administração para revisar a liberação do seu cargo.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function getMonday(dateValue: Date) {
   const date = new Date(dateValue)
@@ -989,6 +1016,11 @@ export default function PlanejamentoDiarioPage() {
       setDeleteId(plan.id)
       deleteMutation.mutate(plan.id)
     }
+  }
+
+  // Sem permissao (403): tela dedicada, sem header nem acoes que tambem falhariam.
+  if (isForbiddenError(query.error)) {
+    return <AccessDeniedScreen />
   }
 
   return (
