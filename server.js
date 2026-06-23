@@ -170,6 +170,25 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: "15mb" }));
 
+// Telemetria de boot do cliente (enviada via sendBeacon como text/plain pela
+// rede de seguranca no index.html). Sem auth, so loga pro pm2 pra diagnostico
+// de "tela branca / abre e fecha" em dispositivos que nao conseguimos reproduzir.
+app.post("/api/clientlog", express.text({ type: "*/*", limit: "16kb" }), (req, res) => {
+  try {
+    let data = req.body;
+    if (typeof data === "string" && data) {
+      try { data = JSON.parse(data); } catch { /* mantem string */ }
+    }
+    const d = data && typeof data === "object" ? data : { raw: String(data || "") };
+    console.warn(
+      `[CLIENTLOG] ${d.kind || "?"} | ${d.message || ""} | extra=${d.extra || ""} | url=${d.url || ""} | ua=${d.ua || ""} | ts=${d.ts || ""}`
+    );
+  } catch (error) {
+    console.warn("[CLIENTLOG] falha ao processar:", error.message);
+  }
+  res.status(204).end();
+});
+
 // Sessoes persistidas no banco (tabela app_sessions) para sobreviver a restart/deploy.
 // Mantem um Map em memoria como cache; get/has sao sincronos, set/delete espelham no banco.
 class SessionStore {

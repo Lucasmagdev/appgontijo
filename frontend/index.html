@@ -12,6 +12,79 @@
     <meta name="apple-mobile-web-app-title" content="Gontijo" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Gontijo Fundações</title>
+    <!--
+      Rede de seguranca de boot (ES5 puro, roda mesmo em WebView antigo que nao
+      parseia o bundle moderno). Captura erro fatal no carregamento e, se o app
+      nao montar, mostra uma tela visivel em vez de tela branca ("abre e fecha"),
+      alem de enviar o erro pro servidor (aparece no pm2 logs) pra diagnostico.
+    -->
+    <script>
+      (function () {
+        var BEACON_URL = 'https://129-212-189-135.sslip.io/api/clientlog';
+        var firstError = null;
+
+        function report(kind, message, extra) {
+          try {
+            var payload = {
+              kind: kind,
+              message: String(message || '').slice(0, 800),
+              extra: extra ? String(extra).slice(0, 800) : '',
+              url: location.href,
+              ua: navigator.userAgent,
+              ts: new Date().toISOString()
+            };
+            var body = JSON.stringify(payload);
+            if (navigator.sendBeacon) {
+              navigator.sendBeacon(BEACON_URL, body);
+            } else if (window.fetch) {
+              fetch(BEACON_URL, { method: 'POST', body: body, mode: 'cors', keepalive: true }).catch(function () {});
+            }
+          } catch (e) {}
+        }
+
+        function showFallback(detail) {
+          if (document.getElementById('boot-fallback')) return;
+          var root = document.getElementById('root');
+          if (root && root.children && root.children.length > 0) return; // app montou, nao interfere
+          var div = document.createElement('div');
+          div.id = 'boot-fallback';
+          div.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0f1117;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;';
+          div.innerHTML =
+            '<div style="font-size:40px">&#9888;&#65039;</div>' +
+            '<h1 style="margin:0;font-size:19px;font-weight:800">Nao foi possivel abrir o aplicativo</h1>' +
+            '<p style="margin:0;max-width:320px;font-size:14px;line-height:1.5;color:rgba(255,255,255,0.65)">Toque em Recarregar. Se continuar, abra este link pelo <b>Google Chrome atualizado</b> (e nao pelo navegador interno do WhatsApp).</p>' +
+            '<button id="boot-reload" style="border:none;border-radius:12px;background:#c60926;color:#fff;padding:12px 24px;font-size:15px;font-weight:700">Recarregar</button>' +
+            '<p style="margin:8px 0 0;font-size:11px;color:rgba(255,255,255,0.3);max-width:320px;word-break:break-word">' + (detail ? String(detail).slice(0, 200) : '') + '</p>';
+          document.body.appendChild(div);
+          var btn = document.getElementById('boot-reload');
+          if (btn) btn.onclick = function () { location.reload(); };
+        }
+
+        window.addEventListener('error', function (e) {
+          var msg = e && e.message ? e.message : 'erro';
+          var src = e && e.filename ? (e.filename + ':' + (e.lineno || 0)) : '';
+          if (!firstError) firstError = msg + ' ' + src;
+          report('error', msg, src);
+        });
+
+        window.addEventListener('unhandledrejection', function (e) {
+          var reason = e && e.reason ? (e.reason.message || e.reason) : 'rejection';
+          if (!firstError) firstError = String(reason);
+          report('unhandledrejection', reason, '');
+        });
+
+        // Watchdog: se em 12s o app nao montou nada no #root, algo travou o boot.
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var root = document.getElementById('root');
+            if (!root || !root.children || root.children.length === 0) {
+              report('boot-timeout', firstError || 'root vazio apos 12s', '');
+              showFallback(firstError);
+            }
+          }, 12000);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
