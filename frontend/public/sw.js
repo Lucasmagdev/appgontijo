@@ -1,5 +1,5 @@
-const CACHE_NAME = 'gontijo-pwa-v6'
-const APP_SHELL = ['/', '/operador', '/operador/login?v=20260623b', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
+const CACHE_NAME = 'gontijo-pwa-v7'
+const APP_SHELL = ['/', '/operador', '/operador/login?v=20260623c', '/manifest.webmanifest', '/pwa-icon-192.png', '/pwa-icon-512.png', '/gontijo-logo-diarios.png']
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {

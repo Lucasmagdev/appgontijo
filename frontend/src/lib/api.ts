@@ -1,6 +1,14 @@
 import axios from 'axios'
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+function resolveApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location.hostname === 'appgontijo.netlify.app') {
+    return '/api'
+  }
+
+  return import.meta.env.VITE_API_URL || '/api'
+}
+
+export const API_BASE_URL = resolveApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
