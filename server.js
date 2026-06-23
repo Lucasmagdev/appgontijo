@@ -4209,12 +4209,55 @@ app.get("/api/admin/sondagens/mapa", requireAdmin, async (_req, res) => {
   }
 })
 
+const MIME_EXT_MAP = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "application/zip": ".zip",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+  "application/msword": ".doc",
+  "application/vnd.ms-excel": ".xls",
+};
+
+// Detecta extensao pelos magic bytes do arquivo (fallback final).
+function sniffExtension(filePath) {
+  try {
+    const fd = fs.openSync(filePath, "r");
+    const buf = Buffer.alloc(8);
+    fs.readSync(fd, buf, 0, 8, 0);
+    fs.closeSync(fd);
+    if (buf.slice(0, 4).toString("latin1") === "%PDF") return ".pdf";
+    if (buf[0] === 0xff && buf[1] === 0xd8) return ".jpg";
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return ".png";
+    if (buf[0] === 0x50 && buf[1] === 0x4b) return ".zip"; // tb xlsx/docx
+  } catch { /* ignora */ }
+  return "";
+}
+
+// Garante um nome de download com extensao. Ordem: nome_original (se ja tiver
+// ext) -> ext do caminho -> ext do mime_type -> sniff dos bytes -> .pdf.
+function resolveSondagemDownloadName(id, row, filePath) {
+  const original = String(row.nome_original || "").trim();
+  if (original && path.extname(original)) return original;
+
+  let ext = path.extname(row.caminho || "") || path.extname(filePath || "");
+  if (!ext) ext = MIME_EXT_MAP[String(row.mime_type || "").toLowerCase()] || "";
+  if (!ext) ext = sniffExtension(filePath);
+  if (!ext) ext = ".pdf";
+
+  // base amigavel: usa o nome_original sem ext se existir, senao sondagem-<id>
+  const base = original ? original.replace(/\.[^.]*$/, "") : `sondagem-${id}`;
+  return `${base}${ext}`;
+}
+
 app.get("/api/admin/sondagens/:id/download", requireAdmin, async (req, res) => {
   const id = parsePositiveInteger(req.params.id)
   if (!id) return res.status(400).json({ ok: false, message: "Arquivo invalido." })
   try {
     const [[row]] = await db.query(
-      "SELECT caminho, nome_original FROM crm_sondagens WHERE id = ?",
+      "SELECT caminho, nome_original, mime_type FROM crm_sondagens WHERE id = ?",
       [id]
     )
     if (!row) return res.status(404).json({ ok: false, message: "Registro nao encontrado." })
@@ -4223,7 +4266,10 @@ app.get("/api/admin/sondagens/:id/download", requireAdmin, async (req, res) => {
     const filePath = path.resolve(__dirname, row.caminho)
     if (!filePath.startsWith(baseDir)) return res.status(400).json({ ok: false, message: "Caminho invalido." })
     if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, message: "Arquivo nao encontrado no servidor." })
-    return res.download(filePath, row.nome_original || path.basename(filePath))
+    // Muitos registros vieram do Pipefy com nome_original = UUID sem extensao
+    // (download saia sem .pdf). Resolve uma extensao confiavel e um nome amigavel.
+    const downloadName = resolveSondagemDownloadName(id, row, filePath)
+    return res.download(filePath, downloadName)
   } catch (error) {
     return res.status(500).json({ ok: false, message: error.message })
   }
