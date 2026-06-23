@@ -72,9 +72,24 @@ function AppBootstrap() {
   const initClientePortal = useClientePortalAuth((state) => state.initialize)
 
   useEffect(() => {
+    const pathname = window.location.pathname || '/'
+
+    if (pathname.startsWith('/operador')) {
+      void initOperador()
+      return
+    }
+
+    if (pathname.startsWith('/portal-cliente')) {
+      void initClientePortal()
+      return
+    }
+
+    if (pathname.startsWith('/assinatura/') || pathname.startsWith('/tv/')) {
+      return
+    }
+
     void initAdmin()
     void initOperador()
-    void initClientePortal()
   }, [initAdmin, initOperador, initClientePortal])
 
   return null
@@ -177,7 +192,7 @@ function AppLoading() {
           alt="Gontijo Fundações"
           className="mx-auto h-16 w-auto object-contain"
         />
-        <p className="mt-3 text-sm text-slate-500">Validando sessao administrativa...</p>
+        <p className="mt-3 text-sm text-slate-500">Carregando aplicativo...</p>
       </div>
     </div>
   )

@@ -1850,8 +1850,12 @@ function setCookie(res, name, value, options = {}) {
 function cookieOptionsForRequest(req) {
   const isCrossOrigin = Boolean(process.env.CORS_ORIGIN);
   const forwardedProto = req ? String(req.headers["x-forwarded-proto"] || "") : "";
+  const host = req ? String(req.headers.host || "") : "";
+  const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
   const isHttps = forwardedProto === "https" || process.env.FORCE_HTTPS_COOKIES === "true";
-  const secure = (process.env.NODE_ENV === "production" || isCrossOrigin) && isHttps;
+  const secure =
+    isHttps ||
+    ((process.env.NODE_ENV === "production" || isCrossOrigin) && !isLocalHost);
   return {
     path: "/",
     sameSite: isCrossOrigin ? "None" : "Lax",
