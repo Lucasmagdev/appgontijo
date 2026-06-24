@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AxiosError } from 'axios'
 import {
@@ -237,6 +237,87 @@ function ItemRow({
   )
 }
 
+function EquipamentoCombobox({
+  equipamentos,
+  value,
+  onChange,
+  disabled,
+}: {
+  equipamentos: { id: number; nome: string }[]
+  value: string
+  onChange: (id: string) => void
+  disabled?: boolean
+}) {
+  const selected = equipamentos.find((equipamento) => String(equipamento.id) === value)
+  const [query, setQuery] = useState(selected?.nome ?? '')
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const current = equipamentos.find((equipamento) => String(equipamento.id) === value)
+    setQuery(current?.nome ?? '')
+  }, [value, equipamentos])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+        const current = equipamentos.find((equipamento) => String(equipamento.id) === value)
+        setQuery(current?.nome ?? '')
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, equipamentos, value])
+
+  const filtered = query.trim()
+    ? equipamentos.filter((equipamento) => equipamento.nome.toLowerCase().includes(query.trim().toLowerCase()))
+    : equipamentos
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        className="field-input"
+        value={query}
+        disabled={disabled}
+        placeholder="Digite para buscar a máquina"
+        onChange={(event) => {
+          setQuery(event.target.value)
+          setOpen(true)
+          if (value) onChange('')
+        }}
+        onFocus={() => setOpen(true)}
+        autoComplete="off"
+      />
+      {open && !disabled && (
+        <ul className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-slate-400">Nenhum equipamento encontrado</li>
+          ) : (
+            filtered.map((equipamento) => (
+              <li key={equipamento.id}>
+                <button
+                  type="button"
+                  className="flex w-full items-center px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    onChange(String(equipamento.id))
+                    setQuery(equipamento.nome)
+                    setOpen(false)
+                  }}
+                >
+                  {equipamento.nome}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function PlanModal({
   mode,
   equipamentos,
@@ -376,10 +457,7 @@ function PlanModal({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="field-label">Equipamento</label>
-              <select className="field-select" value={equipamentoId} onChange={(event) => setEquipamentoId(event.target.value)} disabled={isEdit}>
-                <option value="">Selecione uma máquina</option>
-                {equipamentos.map((equipamento) => <option key={equipamento.id} value={equipamento.id}>{equipamento.nome}</option>)}
-              </select>
+              <EquipamentoCombobox equipamentos={equipamentos} value={equipamentoId} onChange={setEquipamentoId} disabled={isEdit} />
             </div>
             <div>
               <label className="field-label">Número da obra</label>
@@ -643,10 +721,7 @@ function WeeklyPlanModal({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="field-label">Equipamento</label>
-              <select className="field-select" value={equipamentoId} onChange={(event) => setEquipamentoId(event.target.value)}>
-                <option value="">Selecione uma máquina</option>
-                {equipamentos.map((equipamento) => <option key={equipamento.id} value={equipamento.id}>{equipamento.nome}</option>)}
-              </select>
+              <EquipamentoCombobox equipamentos={equipamentos} value={equipamentoId} onChange={setEquipamentoId} />
             </div>
             <div>
               <label className="field-label">Número da obra</label>
