@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, Trash2 } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -39,6 +39,11 @@ export default function UsuarioFormPage() {
     queryFn: documentosService.listCargos,
     staleTime: 1000 * 60 * 10,
   })
+  const tiposQuery = useQuery({
+    queryKey: ['documentos-tipos'],
+    queryFn: documentosService.listTipos,
+    staleTime: 1000 * 60 * 10,
+  })
 
   useEffect(() => {
     if (usuarioQuery.data) {
@@ -68,8 +73,10 @@ export default function UsuarioFormPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
       if (isEditing) {
         await queryClient.invalidateQueries({ queryKey: ['usuario', id] })
+        await queryClient.invalidateQueries({ queryKey: ['documentos-colaborador', id] })
       }
       navigate('/usuarios')
     },
@@ -95,6 +102,22 @@ export default function UsuarioFormPage() {
   function setField<K extends keyof UsuarioPayload>(field: K, value: UsuarioPayload[K]) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
+
+  const documentosCargoAtual = useMemo(() => {
+    return (tiposQuery.data ?? []).filter((tipo) => tipo.ativo && tipo.cargos.some((cargo) => cargo.nome === form.cargo))
+  }, [form.cargo, tiposQuery.data])
+
+  const documentosCargoAnterior = useMemo(() => {
+    const cargoAnterior = usuarioQuery.data?.cargo || ''
+    return (tiposQuery.data ?? []).filter((tipo) => tipo.ativo && tipo.cargos.some((cargo) => cargo.nome === cargoAnterior))
+  }, [tiposQuery.data, usuarioQuery.data?.cargo])
+
+  const documentosNovosNoCargo = useMemo(() => {
+    const anteriores = new Set(documentosCargoAnterior.map((tipo) => tipo.id))
+    return documentosCargoAtual.filter((tipo) => !anteriores.has(tipo.id))
+  }, [documentosCargoAnterior, documentosCargoAtual])
+
+  const cargoFoiAlterado = Boolean(isEditing && usuarioQuery.data && form.cargo && form.cargo !== usuarioQuery.data.cargo)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -214,6 +237,22 @@ export default function UsuarioFormPage() {
                   ))}
                 </select>
               </div>
+
+              {form.cargo ? (
+                <div className="span-12 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <strong className="block text-amber-950">Impacto nos documentos</strong>
+                  <span>
+                    O cargo selecionado exige {documentosCargoAtual.length} documento(s) no checklist atual.
+                    {cargoFoiAlterado ? ' Como o cargo foi alterado, o painel de Documentos vai recalcular pendencias e vencimentos apos salvar.' : ''}
+                  </span>
+                  {cargoFoiAlterado && documentosNovosNoCargo.length ? (
+                    <div className="mt-2 text-xs text-amber-900">
+                      Novos documentos exigidos: {documentosNovosNoCargo.slice(0, 6).map((tipo) => tipo.nome).join(', ')}
+                      {documentosNovosNoCargo.length > 6 ? ` e mais ${documentosNovosNoCargo.length - 6}` : ''}.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="span-6">
                 <label className="field-label">Login</label>

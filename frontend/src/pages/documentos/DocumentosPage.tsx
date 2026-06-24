@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   documentosService,
   extractApiErrorMessage,
   obraService,
   usuarioService,
+  type DocumentoAlerta,
   type DocumentoColaborador,
   type DocumentoEnvio,
   type DocumentoTipo,
 } from '@/lib/gontijo-api'
 import { cn, formatDate } from '@/lib/utils'
 
-type TabKey = 'cargos' | 'tipos' | 'colaboradores' | 'envios'
+type TabKey = 'alertas' | 'cargos' | 'tipos' | 'colaboradores' | 'envios'
 
 type TipoForm = {
   id: number | null
@@ -42,13 +43,15 @@ type EnvioForm = {
 
 const emptyTipo: TipoForm = {
   id: null,
-  secao: 'Documentos Pessoais',
+  secao: 'DP',
   nome: '',
   codigo: '',
   obrigatorio: true,
   validadePadraoDias: '',
   cargoIds: [],
 }
+
+const secoesDocumento = ['DP', 'Seguranca', 'Geral', 'Documentos Pessoais', 'Documentos de Seguranca']
 
 const emptyDoc: DocForm = {
   id: null,
@@ -65,17 +68,18 @@ const emptyEnvio: EnvioForm = {
   status: 'rascunho',
 }
 
-const statusLabels: Record<DocumentoColaborador['status'], string> = {
+const statusLabels: Record<DocumentoColaborador['status'] | DocumentoAlerta['status'], string> = {
+  pendente: 'Pendente',
   vigente: 'Vigente',
   vence_em_breve: 'Vence em breve',
   vencido: 'Vencido',
   sem_vencimento: 'Sem vencimento',
 }
 
-function statusClass(status: DocumentoColaborador['status']) {
+function statusClass(status: DocumentoColaborador['status'] | DocumentoAlerta['status']) {
   if (status === 'vigente') return 'status-success'
   if (status === 'vence_em_breve') return 'status-warning'
-  if (status === 'vencido') return 'status-danger'
+  if (status === 'vencido' || status === 'pendente') return 'status-danger'
   return 'status-neutral'
 }
 
@@ -87,7 +91,7 @@ function toNumberOrNull(value: string) {
 export default function DocumentosPage() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [activeTab, setActiveTab] = useState<TabKey>('cargos')
+  const [activeTab, setActiveTab] = useState<TabKey>('alertas')
   const [cargoNome, setCargoNome] = useState('')
   const [tipoForm, setTipoForm] = useState<TipoForm>(emptyTipo)
   const [selectedUserId, setSelectedUserId] = useState('')
@@ -102,6 +106,7 @@ export default function DocumentosPage() {
 
   const cargosQuery = useQuery({ queryKey: ['documentos-cargos'], queryFn: documentosService.listCargos })
   const tiposQuery = useQuery({ queryKey: ['documentos-tipos'], queryFn: documentosService.listTipos })
+  const alertasQuery = useQuery({ queryKey: ['documentos-alertas'], queryFn: documentosService.listAlertas })
   const usuariosQuery = useQuery({ queryKey: ['documentos-usuarios-options'], queryFn: usuarioService.listOptions, staleTime: 1000 * 60 * 5 })
   const obrasQuery = useQuery({ queryKey: ['documentos-obras-options'], queryFn: () => obraService.list({ page: 1, limit: 500 }), staleTime: 1000 * 60 * 5 })
   const enviosQuery = useQuery({ queryKey: ['documentos-envios'], queryFn: documentosService.listEnvios })
@@ -124,6 +129,27 @@ export default function DocumentosPage() {
     return map
   }, [colaboradorQuery.data])
 
+  const colaboradorResumo = useMemo(() => {
+    const esperados = colaboradorQuery.data?.esperados ?? []
+    let pendente = 0
+    let vencido = 0
+    let venceEmBreve = 0
+    let vigente = 0
+    for (const tipo of esperados) {
+      const doc = userDocsByType.get(tipo.id)
+      if (!doc) {
+        pendente += 1
+      } else if (doc.status === 'vencido') {
+        vencido += 1
+      } else if (doc.status === 'vence_em_breve') {
+        venceEmBreve += 1
+      } else if (doc.status === 'vigente' || doc.status === 'sem_vencimento') {
+        vigente += 1
+      }
+    }
+    return { total: esperados.length, pendente, vencido, venceEmBreve, vigente }
+  }, [colaboradorQuery.data, userDocsByType])
+
   useEffect(() => {
     if (!envioDetalheQuery.data) return
     setSelectedItemKeys(new Set(envioDetalheQuery.data.itens.map((item) => `${item.usuarioId}:${item.tipoDocumentoId}:${item.documentoUsuarioId || 0}`)))
@@ -145,6 +171,7 @@ export default function DocumentosPage() {
       setCargoNome('')
       setMessage('Cargo salvo.')
       await queryClient.invalidateQueries({ queryKey: ['documentos-cargos'] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
     },
     onError: showError,
   })
@@ -168,6 +195,7 @@ export default function DocumentosPage() {
       setTipoForm(emptyTipo)
       setMessage('Tipo de documento salvo.')
       await queryClient.invalidateQueries({ queryKey: ['documentos-tipos'] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
     },
     onError: showError,
   })
@@ -178,6 +206,7 @@ export default function DocumentosPage() {
       setMessage(`Checklist importado: ${result.total} itens, ${result.criados} novos, ${result.atualizados} atualizados.`)
       await queryClient.invalidateQueries({ queryKey: ['documentos-tipos'] })
       await queryClient.invalidateQueries({ queryKey: ['documentos-cargos'] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
     },
     onError: showError,
   })
@@ -203,6 +232,7 @@ export default function DocumentosPage() {
       setDocFile(null)
       setMessage('Documento do colaborador salvo.')
       await queryClient.invalidateQueries({ queryKey: ['documentos-colaborador', selectedUserId] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
     },
     onError: showError,
   })
@@ -312,6 +342,7 @@ export default function DocumentosPage() {
           <p className="page-subtitle">Controle de documentos por cargo e montagem de pastas de envio por obra.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => {
+          void queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
           void queryClient.invalidateQueries({ queryKey: ['documentos-cargos'] })
           void queryClient.invalidateQueries({ queryKey: ['documentos-tipos'] })
           void queryClient.invalidateQueries({ queryKey: ['documentos-envios'] })
@@ -324,6 +355,7 @@ export default function DocumentosPage() {
       <section className="app-panel toolbar-panel">
         <div className="inline-actions flex-wrap">
           {[
+            ['alertas', 'Alertas', AlertTriangle],
             ['cargos', 'Cargos', Archive],
             ['tipos', 'Tipos e checklist', FileSpreadsheet],
             ['colaboradores', 'Por colaborador', FileText],
@@ -352,6 +384,87 @@ export default function DocumentosPage() {
         </div>
       ) : null}
       {error ? <QueryFeedback type="error" title="Nao foi possivel concluir" description={error} /> : null}
+
+      {activeTab === 'alertas' ? (
+        <div className="space-y-4">
+          {alertasQuery.isLoading ? (
+            <QueryFeedback type="loading" title="Carregando alertas" description="Conferindo documentos pendentes, vencidos e proximos do vencimento." />
+          ) : null}
+
+          {alertasQuery.isError ? (
+            <QueryFeedback type="error" title="Nao foi possivel carregar alertas" description={extractApiErrorMessage(alertasQuery.error)} />
+          ) : null}
+
+          {alertasQuery.data ? (
+            <>
+              <section className="grid gap-3 md:grid-cols-4">
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Pendentes</p>
+                  <strong className="mt-1 block text-2xl text-red-700">{alertasQuery.data.resumo.pendente}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Vencidos</p>
+                  <strong className="mt-1 block text-2xl text-red-700">{alertasQuery.data.resumo.vencido}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Vencem em 30 dias</p>
+                  <strong className="mt-1 block text-2xl text-amber-700">{alertasQuery.data.resumo.vence_em_breve}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Ok / sem vencimento</p>
+                  <strong className="mt-1 block text-2xl text-emerald-700">{alertasQuery.data.resumo.vigente + alertasQuery.data.resumo.sem_vencimento}</strong>
+                </div>
+              </section>
+
+              <section className="app-panel table-shell">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div>
+                    <h2 className="section-heading">Painel de controle</h2>
+                    <p className="text-sm text-slate-500">Lista baseada no cargo atual do colaborador e no checklist vinculado ao PGR.</p>
+                  </div>
+                </div>
+                <div className="table-scroll">
+                  <table className="data-table min-w-[980px]">
+                    <thead><tr><th>Colaborador</th><th>Cargo</th><th>Area</th><th>Documento</th><th>Vencimento</th><th>Status</th><th>Acoes</th></tr></thead>
+                    <tbody>
+                      {alertasQuery.data.alertas.map((alerta) => (
+                        <tr key={`${alerta.usuarioId}:${alerta.tipoDocumentoId}`}>
+                          <td className="font-semibold text-slate-800">{alerta.usuarioNome}</td>
+                          <td>{alerta.cargo || '-'}</td>
+                          <td>{alerta.secao}</td>
+                          <td>{alerta.tipoDocumento}</td>
+                          <td>{alerta.vencimento ? formatDate(alerta.vencimento) : '-'}</td>
+                          <td><span className={cn('status-badge', statusClass(alerta.status))}>{statusLabels[alerta.status]}</span></td>
+                          <td>
+                            <div className="inline-actions">
+                              {alerta.downloadUrl ? <a className="btn btn-secondary btn-icon" href={alerta.downloadUrl} target="_blank" rel="noreferrer"><Download size={14} /></a> : null}
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                onClick={() => {
+                                  setSelectedUserId(String(alerta.usuarioId))
+                                  setDocForm({ ...emptyDoc, tipoDocumentoId: String(alerta.tipoDocumentoId) })
+                                  setDocFile(null)
+                                  setActiveTab('colaboradores')
+                                }}
+                              >
+                                Regularizar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {!alertasQuery.data.alertas.length ? (
+                        <tr><td colSpan={7} className="text-center text-slate-500">Nenhum documento pendente, vencido ou perto do vencimento.</td></tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {activeTab === 'cargos' ? (
         <section className="app-panel section-panel">
@@ -411,7 +524,13 @@ export default function DocumentosPage() {
             </div>
 
             <div className="form-grid mt-4">
-              <div className="span-3"><label className="field-label">Secao</label><input className="field-input" value={tipoForm.secao} onChange={(event) => setTipoForm((f) => ({ ...f, secao: event.target.value }))} /></div>
+              <div className="span-3">
+                <label className="field-label">Area</label>
+                <select className="field-select" value={tipoForm.secao} onChange={(event) => setTipoForm((f) => ({ ...f, secao: event.target.value }))}>
+                  {tipoForm.secao && !secoesDocumento.includes(tipoForm.secao) ? <option value={tipoForm.secao}>{tipoForm.secao}</option> : null}
+                  {secoesDocumento.map((secao) => <option key={secao} value={secao}>{secao}</option>)}
+                </select>
+              </div>
               <div className="span-4"><label className="field-label">Nome</label><input className="field-input" value={tipoForm.nome} onChange={(event) => setTipoForm((f) => ({ ...f, nome: event.target.value }))} /></div>
               <div className="span-2"><label className="field-label">Codigo</label><input className="field-input" value={tipoForm.codigo} onChange={(event) => setTipoForm((f) => ({ ...f, codigo: event.target.value }))} /></div>
               <div className="span-2"><label className="field-label">Validade padrao</label><input className="field-input" type="number" min="0" value={tipoForm.validadePadraoDias} onChange={(event) => setTipoForm((f) => ({ ...f, validadePadraoDias: event.target.value }))} placeholder="dias" /></div>
@@ -467,6 +586,29 @@ export default function DocumentosPage() {
 
           {colaboradorQuery.data ? (
             <>
+              <section className="grid gap-3 md:grid-cols-5">
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Cargo</p>
+                  <strong className="mt-1 block text-base text-slate-800">{colaboradorQuery.data.colaborador.cargo || '-'}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Esperados</p>
+                  <strong className="mt-1 block text-2xl text-slate-800">{colaboradorResumo.total}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Pendentes</p>
+                  <strong className="mt-1 block text-2xl text-red-700">{colaboradorResumo.pendente}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Vencidos</p>
+                  <strong className="mt-1 block text-2xl text-red-700">{colaboradorResumo.vencido}</strong>
+                </div>
+                <div className="app-panel section-panel">
+                  <p className="text-xs font-semibold uppercase text-slate-500">Vencem / ok</p>
+                  <strong className="mt-1 block text-2xl text-amber-700">{colaboradorResumo.venceEmBreve}<span className="text-slate-300"> / </span><span className="text-emerald-700">{colaboradorResumo.vigente}</span></strong>
+                </div>
+              </section>
+
               <section className="app-panel section-panel">
                 <h2 className="section-heading">Documento de {colaboradorQuery.data.colaborador.nome}</h2>
                 <div className="form-grid">
@@ -499,7 +641,7 @@ export default function DocumentosPage() {
                             <td className="font-semibold text-slate-800">{tipo.nome}</td>
                             <td>{doc?.downloadUrl ? <a className="text-[var(--brand-red)]" href={doc.downloadUrl} target="_blank" rel="noreferrer">abrir arquivo</a> : doc?.url ? <a className="text-[var(--brand-red)]" href={doc.url} target="_blank" rel="noreferrer">abrir link</a> : '-'}</td>
                             <td>{doc?.vencimento ? formatDate(doc.vencimento) : '-'}</td>
-                            <td><span className={cn('status-badge', statusClass(doc?.status || 'sem_vencimento'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
+                            <td><span className={cn('status-badge', statusClass(doc?.status || 'pendente'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
                             <td>{doc ? <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button> : null}</td>
                           </tr>
                         )
@@ -561,7 +703,7 @@ export default function DocumentosPage() {
                             <td><input type="checkbox" checked={selectedItemKeys.has(key)} onChange={(event) => setSelectedItemKeys((current) => { const next = new Set(current); event.target.checked ? next.add(key) : next.delete(key); return next })} /></td>
                             <td>{colaboradorQuery.data.colaborador.nome}</td>
                             <td>{tipo.secao} - {tipo.nome}</td>
-                            <td><span className={cn('status-badge', statusClass(doc?.status || 'sem_vencimento'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
+                            <td><span className={cn('status-badge', statusClass(doc?.status || 'pendente'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
                             <td>{doc?.downloadUrl || doc?.url ? 'ok' : 'sem arquivo'}</td>
                           </tr>
                         )

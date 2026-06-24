@@ -285,6 +285,34 @@ export type DocumentoColaboradorResumo = {
   documentos: DocumentoColaborador[]
 }
 
+export type DocumentoAlerta = {
+  usuarioId: number
+  usuarioNome: string
+  cargo: string
+  tipoDocumentoId: number
+  tipoDocumento: string
+  secao: string
+  documentoUsuarioId: number | null
+  vencimento: string
+  status: DocumentoColaborador['status'] | 'pendente'
+  downloadUrl: string
+  nomeArquivo: string
+}
+
+export type DocumentoAlertasResumo = {
+  total: number
+  pendente: number
+  vencido: number
+  vence_em_breve: number
+  vigente: number
+  sem_vencimento: number
+}
+
+export type DocumentoAlertas = {
+  resumo: DocumentoAlertasResumo
+  alertas: DocumentoAlerta[]
+}
+
 export type DocumentoEnvio = {
   id: number
   obraId: number
@@ -1527,6 +1555,23 @@ function adaptDocumentoColaborador(row: Record<string, unknown>): DocumentoColab
   }
 }
 
+function adaptDocumentoAlerta(row: Record<string, unknown>): DocumentoAlerta {
+  const status = toStringValue(row.status) as DocumentoAlerta['status']
+  return {
+    usuarioId: Number(row.usuarioId || 0),
+    usuarioNome: toStringValue(row.usuarioNome),
+    cargo: toStringValue(row.cargo),
+    tipoDocumentoId: Number(row.tipoDocumentoId || 0),
+    tipoDocumento: toStringValue(row.tipoDocumento),
+    secao: toStringValue(row.secao || 'Geral'),
+    documentoUsuarioId: toNumberValue(row.documentoUsuarioId),
+    vencimento: toStringValue(row.vencimento),
+    status: ['pendente', 'vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'pendente',
+    downloadUrl: toStringValue(row.downloadUrl),
+    nomeArquivo: toStringValue(row.nomeArquivo),
+  }
+}
+
 function adaptDocumentoEnvio(row: Record<string, unknown>): DocumentoEnvio {
   const status = toStringValue(row.status) as DocumentoEnvio['status']
   return {
@@ -1616,6 +1661,22 @@ export const documentosService = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     return data.data
+  },
+  async listAlertas(): Promise<DocumentoAlertas> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/gontijo/documentos/alertas')
+    const payload = data.data
+    const resumo = payload.resumo as Record<string, unknown>
+    return {
+      resumo: {
+        total: Number(resumo?.total || 0),
+        pendente: Number(resumo?.pendente || 0),
+        vencido: Number(resumo?.vencido || 0),
+        vence_em_breve: Number(resumo?.vence_em_breve || 0),
+        vigente: Number(resumo?.vigente || 0),
+        sem_vencimento: Number(resumo?.sem_vencimento || 0),
+      },
+      alertas: Array.isArray(payload.alertas) ? payload.alertas.map((item) => adaptDocumentoAlerta(item as Record<string, unknown>)) : [],
+    }
   },
   async getColaborador(userId: number): Promise<DocumentoColaboradorResumo> {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>(`/gontijo/documentos/colaboradores/${userId}`)

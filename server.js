@@ -2880,6 +2880,17 @@ function formatDecimalNumber(value, digits = 2) {
   return Number(value).toFixed(digits).replace(".", ",");
 }
 
+const frontendDistDir = path.join(__dirname, "frontend", "dist");
+const frontendDistIndex = path.join(frontendDistDir, "index.html");
+const hasFrontendDist = fs.existsSync(frontendDistIndex);
+
+if (hasFrontendDist) {
+  app.use(express.static(frontendDistDir, {
+    maxAge: "1d",
+    etag: true,
+  }));
+}
+
 app.use(express.static(path.join(__dirname, "public"), {
   maxAge: "1d",
   etag: true,
@@ -7550,7 +7561,7 @@ app.use((req, res, next) => {
   if (req.method !== "GET") return next();
   if (req.path.startsWith("/api/")) return next();
   if (path.extname(req.path)) return next();
-  return res.sendFile(path.join(__dirname, "public", "index.html"));
+  return res.sendFile(hasFrontendDist ? frontendDistIndex : path.join(__dirname, "public", "index.html"));
 });
 
 if (!process.env.VERCEL) {
