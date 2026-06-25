@@ -5478,7 +5478,17 @@ async function fetchClientPortalDashboard(constructionId, filters = {}, baseUrl 
 
   const { dataInicio, dataFim } = filters
   const hasValorFaturado = await columnExists('diaries', 'valor_faturado')
+  const hasSignatureLinks = await tableExists("diary_signature_links")
   const dateExpr = "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d'))"
+
+  // Diario aprovado OU com link de assinatura ativo (enviado ao cliente antes da conferencia).
+  // Sem o OR, um diario aguardando assinatura fica invisivel na lista mas aparece no alerta de pendencia.
+  const approvedOrPendingSignature = hasSignatureLinks
+    ? `(d.conferencia_status = 'aprovado' OR EXISTS (
+        SELECT 1 FROM diary_signature_links sl
+        WHERE sl.diary_id = d.id AND sl.status = 'active' AND sl.expires_at > NOW()
+      ))`
+    : "d.conferencia_status = 'aprovado'"
 
   let dateWhere = ''
   const dateParams = []
@@ -5508,14 +5518,14 @@ async function fetchClientPortalDashboard(constructionId, filters = {}, baseUrl 
        CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_id')), '') AS UNSIGNED) = ?
        OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.construction_number')), '') = ?
      )
-     AND d.conferencia_status = 'aprovado'
+     AND ${approvedOrPendingSignature}
      ${dateWhere}
      ORDER BY data_diario DESC, d.id DESC`,
     [constructionId, String(construction.construction_number || ""), ...dateParams]
   );
 
   let assinaturasPendentes = [];
-  if (await tableExists("diary_signature_links")) {
+  if (hasSignatureLinks) {
     const [pendingRows] = await db.query(
       `SELECT d.id,
               ${dateExpr} AS data_diario,
