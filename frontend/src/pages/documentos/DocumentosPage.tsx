@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   documentosService,
@@ -103,6 +103,8 @@ export default function DocumentosPage() {
   const [extraForm, setExtraForm] = useState({ nome: '', url: '', observacao: '' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [alertasExpandidos, setAlertasExpandidos] = useState<Set<number>>(new Set())
+  const [alertaBusca, setAlertaBusca] = useState('')
 
   const cargosQuery = useQuery({ queryKey: ['documentos-cargos'], queryFn: documentosService.listCargos })
   const tiposQuery = useQuery({ queryKey: ['documentos-tipos'], queryFn: documentosService.listTipos })
@@ -154,6 +156,43 @@ export default function DocumentosPage() {
     if (!envioDetalheQuery.data) return
     setSelectedItemKeys(new Set(envioDetalheQuery.data.itens.map((item) => `${item.usuarioId}:${item.tipoDocumentoId}:${item.documentoUsuarioId || 0}`)))
   }, [envioDetalheQuery.data])
+
+  // agrupa os alertas por colaborador (evita listona) + contadores por status
+  const alertasPorPessoa = useMemo(() => {
+    type Grupo = {
+      usuarioId: number
+      nome: string
+      cargo: string
+      itens: DocumentoAlerta[]
+      pendente: number
+      vencido: number
+      venceEmBreve: number
+    }
+    const map = new Map<number, Grupo>()
+    for (const a of alertasQuery.data?.alertas ?? []) {
+      let g = map.get(a.usuarioId)
+      if (!g) {
+        g = { usuarioId: a.usuarioId, nome: a.usuarioNome, cargo: a.cargo || '', itens: [], pendente: 0, vencido: 0, venceEmBreve: 0 }
+        map.set(a.usuarioId, g)
+      }
+      g.itens.push(a)
+      if (a.status === 'pendente') g.pendente += 1
+      else if (a.status === 'vencido') g.vencido += 1
+      else if (a.status === 'vence_em_breve') g.venceEmBreve += 1
+    }
+    const lista = Array.from(map.values()).sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'))
+    const termo = alertaBusca.trim().toLowerCase()
+    return termo ? lista.filter((g) => g.nome.toLowerCase().includes(termo) || g.cargo.toLowerCase().includes(termo)) : lista
+  }, [alertasQuery.data, alertaBusca])
+
+  const toggleAlertaPessoa = (usuarioId: number) => {
+    setAlertasExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(usuarioId)) next.delete(usuarioId)
+      else next.add(usuarioId)
+      return next
+    })
+  }
 
   function clearNotices() {
     setMessage('')
@@ -416,50 +455,90 @@ export default function DocumentosPage() {
                 </div>
               </section>
 
-              <section className="app-panel table-shell">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <section className="app-panel section-panel">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="section-heading">Painel de controle</h2>
-                    <p className="text-sm text-slate-500">Lista baseada no cargo atual do colaborador e no checklist vinculado ao PGR.</p>
+                    <h2 className="section-heading">Alertas por colaborador</h2>
+                    <p className="text-sm text-slate-500">Clique no colaborador para ver os documentos pendentes/vencidos dele.</p>
+                  </div>
+                  <div className="relative w-full sm:w-72">
+                    <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      className="field-input field-input-with-icon"
+                      value={alertaBusca}
+                      onChange={(event) => setAlertaBusca(event.target.value)}
+                      placeholder="Buscar colaborador ou cargo"
+                    />
                   </div>
                 </div>
-                <div className="table-scroll">
-                  <table className="data-table min-w-[980px]">
-                    <thead><tr><th>Colaborador</th><th>Cargo</th><th>Area</th><th>Documento</th><th>Vencimento</th><th>Status</th><th>Acoes</th></tr></thead>
-                    <tbody>
-                      {alertasQuery.data.alertas.map((alerta) => (
-                        <tr key={`${alerta.usuarioId}:${alerta.tipoDocumentoId}`}>
-                          <td className="font-semibold text-slate-800">{alerta.usuarioNome}</td>
-                          <td>{alerta.cargo || '-'}</td>
-                          <td>{alerta.secao}</td>
-                          <td>{alerta.tipoDocumento}</td>
-                          <td>{alerta.vencimento ? formatDate(alerta.vencimento) : '-'}</td>
-                          <td><span className={cn('status-badge', statusClass(alerta.status))}>{statusLabels[alerta.status]}</span></td>
-                          <td>
-                            <div className="inline-actions">
-                              {alerta.downloadUrl ? <a className="btn btn-secondary btn-icon" href={alerta.downloadUrl} target="_blank" rel="noreferrer"><Download size={14} /></a> : null}
-                              <button
-                                className="btn btn-secondary"
-                                type="button"
-                                onClick={() => {
-                                  setSelectedUserId(String(alerta.usuarioId))
-                                  setDocForm({ ...emptyDoc, tipoDocumentoId: String(alerta.tipoDocumentoId) })
-                                  setDocFile(null)
-                                  setActiveTab('colaboradores')
-                                }}
-                              >
-                                Regularizar
-                              </button>
+
+                {!alertasPorPessoa.length ? (
+                  <p className="mt-4 text-center text-sm text-slate-500">
+                    {alertaBusca ? 'Nenhum colaborador encontrado.' : 'Nenhum documento pendente, vencido ou perto do vencimento.'}
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-2">
+                    <p className="text-xs text-slate-400">{alertasPorPessoa.length} colaborador(es) com pendências</p>
+                    {alertasPorPessoa.map((grupo) => {
+                      const aberto = alertasExpandidos.has(grupo.usuarioId)
+                      return (
+                        <div key={grupo.usuarioId} className="overflow-hidden rounded-lg border border-slate-200">
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left hover:bg-slate-50"
+                            onClick={() => toggleAlertaPessoa(grupo.usuarioId)}
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold text-slate-800">{grupo.nome}</div>
+                              <div className="truncate text-xs text-slate-500">{grupo.cargo || 'Sem cargo'} · {grupo.itens.length} documento(s)</div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {!alertasQuery.data.alertas.length ? (
-                        <tr><td colSpan={7} className="text-center text-slate-500">Nenhum documento pendente, vencido ou perto do vencimento.</td></tr>
-                      ) : null}
-                    </tbody>
-                  </table>
-                </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {grupo.vencido ? <span className="status-badge status-danger">{grupo.vencido} vencido(s)</span> : null}
+                              {grupo.pendente ? <span className="status-badge status-danger">{grupo.pendente} pendente(s)</span> : null}
+                              {grupo.venceEmBreve ? <span className="status-badge status-warning">{grupo.venceEmBreve} vence(m)</span> : null}
+                              <ChevronDown size={18} className={cn('text-slate-400 transition-transform', aberto && 'rotate-180')} />
+                            </div>
+                          </button>
+
+                          {aberto ? (
+                            <div className="border-t border-slate-100 table-scroll">
+                              <table className="data-table min-w-[760px]">
+                                <thead><tr><th>Area</th><th>Documento</th><th>Vencimento</th><th>Status</th><th>Acoes</th></tr></thead>
+                                <tbody>
+                                  {grupo.itens.map((alerta) => (
+                                    <tr key={`${alerta.usuarioId}:${alerta.tipoDocumentoId}`}>
+                                      <td>{alerta.secao}</td>
+                                      <td className="font-semibold text-slate-800">{alerta.tipoDocumento}</td>
+                                      <td>{alerta.vencimento ? formatDate(alerta.vencimento) : '-'}</td>
+                                      <td><span className={cn('status-badge', statusClass(alerta.status))}>{statusLabels[alerta.status]}</span></td>
+                                      <td>
+                                        <div className="inline-actions">
+                                          {alerta.downloadUrl ? <a className="btn btn-secondary btn-icon" href={alerta.downloadUrl} target="_blank" rel="noreferrer"><Download size={14} /></a> : null}
+                                          <button
+                                            className="btn btn-secondary"
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedUserId(String(alerta.usuarioId))
+                                              setDocForm({ ...emptyDoc, tipoDocumentoId: String(alerta.tipoDocumentoId) })
+                                              setDocFile(null)
+                                              setActiveTab('colaboradores')
+                                            }}
+                                          >
+                                            Regularizar
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </section>
             </>
           ) : null}
