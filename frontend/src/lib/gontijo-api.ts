@@ -2145,14 +2145,12 @@ export const diarioSignatureService = {
   },
   async submitPublic(
     token: string,
-    payload: { nome: string; documento: string; assinatura: string; observacao?: string; anexos?: PublicDiaryAttachment[] }
+    payload: { nome: string; documento: string; assinatura: string }
   ): Promise<{ diaryId: number; signedAt: string }> {
     const { data } = await api.post<ApiEnvelope<Record<string, unknown>>>(`/public/diarios/signature/${token}`, {
       nome: payload.nome,
       documento: payload.documento,
       assinatura: payload.assinatura,
-      observacao: payload.observacao || '',
-      anexos: payload.anexos || [],
     })
     return {
       diaryId: Number(data.data.diaryId || 0),

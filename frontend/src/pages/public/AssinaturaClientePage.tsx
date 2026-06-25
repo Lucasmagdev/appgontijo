@@ -1,28 +1,20 @@
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, FileText, Paperclip, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCircle2, FileText, RotateCcw } from 'lucide-react'
 import { useParams } from 'react-router-dom'
-import { diarioSignatureService, extractApiErrorMessage, type PublicDiaryAttachment } from '@/lib/gontijo-api'
+import { diarioSignatureService, extractApiErrorMessage } from '@/lib/gontijo-api'
 
 type FormState = {
   nome: string
   documento: string
   assinatura: string
-  observacao: string
-  anexos: PublicDiaryAttachment[]
 }
 
 const EMPTY_FORM: FormState = {
   nome: '',
   documento: '',
   assinatura: '',
-  observacao: '',
-  anexos: [],
 }
-
-const MAX_ATTACHMENTS = 5
-const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024
-const ACCEPTED_ATTACHMENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf']
 
 function formatDateBr(value: string) {
   const text = String(value || '')
@@ -52,7 +44,6 @@ function formatDateTimeBr(value: string) {
 export default function AssinaturaClientePage() {
   const { token } = useParams()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const drawingRef = useRef(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [submitError, setSubmitError] = useState('')
@@ -73,8 +64,6 @@ export default function AssinaturaClientePage() {
       nome: data.clientName || '',
       documento: data.clientDocument || '',
       assinatura: data.clientSignature || '',
-      observacao: data.clientObservationText || '',
-      anexos: data.clientAttachments || [],
     })
   }, [signatureQuery.data])
 
@@ -106,8 +95,6 @@ export default function AssinaturaClientePage() {
         nome: form.nome.trim(),
         documento: form.documento.trim(),
         assinatura: form.assinatura,
-        observacao: form.observacao.trim(),
-        anexos: form.anexos,
       }),
     onSuccess: () => {
       setSubmitError('')
@@ -183,47 +170,6 @@ export default function AssinaturaClientePage() {
     setField('assinatura', '')
   }
 
-  async function handleAttachmentChange(files: FileList | null) {
-    if (!files || isBlocked) return
-    setSubmitError('')
-
-    const current = form.anexos
-    const selected = Array.from(files)
-    if (current.length + selected.length > MAX_ATTACHMENTS) {
-      setSubmitError(`Envie no maximo ${MAX_ATTACHMENTS} anexos.`)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-
-    const converted: PublicDiaryAttachment[] = []
-    for (const file of selected) {
-      if (!ACCEPTED_ATTACHMENT_TYPES.includes(file.type)) {
-        setSubmitError('Use apenas imagens PNG/JPG/WEBP ou arquivos PDF.')
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        return
-      }
-      if (file.size > MAX_ATTACHMENT_SIZE) {
-        setSubmitError('Cada anexo pode ter no maximo 5 MB.')
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        return
-      }
-
-      converted.push({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        dataUrl: await readFileAsDataUrl(file),
-      })
-    }
-
-    setField('anexos', [...current, ...converted])
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  function removeAttachment(index: number) {
-    setField('anexos', form.anexos.filter((_, current) => current !== index))
-  }
-
   const canSubmit = useMemo(() => {
     return !isBlocked && Boolean(form.nome.trim() && form.documento.trim() && form.assinatura)
   }, [form, isBlocked])
@@ -285,59 +231,6 @@ export default function AssinaturaClientePage() {
               </div>
               <SummaryRow label="Operador" value={data.operatorName || '-'} />
               <SummaryRow label="Documento" value={data.operatorDocument || '-'} />
-            </div>
-
-            <div style={panelStyle}>
-              <div style={{ fontSize: '18px', fontWeight: 900, color: '#111827' }}>Observacoes do cliente</div>
-              <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
-                Observacoes pertinentes ou o que o cliente gostaria de adicionar ao diario para assinar.
-              </div>
-
-              <label style={fieldWrapStyle}>
-                <span style={fieldLabelStyle}>Observacoes</span>
-                <textarea
-                  value={form.observacao}
-                  onChange={(event) => setField('observacao', event.target.value)}
-                  disabled={isBlocked}
-                  rows={5}
-                  style={textareaStyle(isBlocked)}
-                  placeholder="Escreva aqui uma observacao opcional para constar no diario."
-                />
-              </label>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={ACCEPTED_ATTACHMENT_TYPES.join(',')}
-                style={{ display: 'none' }}
-                onChange={(event) => void handleAttachmentChange(event.target.files)}
-              />
-
-              {!isBlocked ? (
-                <button type="button" onClick={() => fileInputRef.current?.click()} style={secondaryButtonStyle}>
-                  <Paperclip size={16} />
-                  Adicionar anexo
-                </button>
-              ) : null}
-
-              {form.anexos.length ? (
-                <div style={{ display: 'grid', gap: '8px' }}>
-                  {form.anexos.map((anexo, index) => (
-                    <div key={`${anexo.name}-${index}`} style={attachmentRowStyle}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{anexo.name}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>{formatFileSize(anexo.size)} · {formatMimeType(anexo.type)}</div>
-                      </div>
-                      {!isBlocked ? (
-                        <button type="button" onClick={() => removeAttachment(index)} style={iconButtonStyle}>
-                          <Trash2 size={15} />
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </div>
 
             <div style={panelStyle}>
@@ -412,27 +305,6 @@ export default function AssinaturaClientePage() {
       </div>
     </div>
   )
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error || new Error('Falha ao ler anexo.'))
-    reader.readAsDataURL(file)
-  })
-}
-
-function formatFileSize(size: number) {
-  if (!Number.isFinite(size) || size <= 0) return '0 KB'
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1).replace('.', ',')} MB`
-  return `${Math.ceil(size / 1024)} KB`
-}
-
-function formatMimeType(type: string) {
-  if (type === 'application/pdf') return 'PDF'
-  if (type.startsWith('image/')) return 'Imagem'
-  return type || 'Arquivo'
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -511,48 +383,6 @@ function inputStyle(disabled: boolean): CSSProperties {
     outline: 'none',
     boxSizing: 'border-box',
   }
-}
-
-function textareaStyle(disabled: boolean): CSSProperties {
-  return {
-    borderRadius: '16px',
-    border: '1.5px solid #d8dee7',
-    background: disabled ? '#f8fafc' : '#fff',
-    color: '#111827',
-    padding: '14px 16px',
-    fontSize: '15px',
-    fontWeight: 600,
-    lineHeight: 1.45,
-    outline: 'none',
-    boxSizing: 'border-box',
-    resize: 'vertical',
-    minHeight: '130px',
-    fontFamily: 'inherit',
-  }
-}
-
-const attachmentRowStyle: CSSProperties = {
-  minHeight: '56px',
-  borderRadius: '14px',
-  border: '1px solid #e5e7eb',
-  background: '#f8fafc',
-  padding: '10px 12px',
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) auto',
-  alignItems: 'center',
-  gap: '10px',
-}
-
-const iconButtonStyle: CSSProperties = {
-  border: '1px solid #fecaca',
-  borderRadius: '12px',
-  background: '#fff',
-  color: '#b91c1c',
-  width: '38px',
-  height: '38px',
-  display: 'grid',
-  placeItems: 'center',
-  cursor: 'pointer',
 }
 
 const signaturePreviewWrap: CSSProperties = {

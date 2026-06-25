@@ -5740,27 +5740,6 @@ function isSignatureLinkExpired(link) {
   return new Date(link.expires_at).getTime() <= Date.now();
 }
 
-function normalizeClientDiaryAttachments(value) {
-  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "application/pdf"]);
-  const items = Array.isArray(value) ? value : [];
-  return items.slice(0, 5).map((item) => {
-    const name = String(item?.name || "anexo").trim().slice(0, 180) || "anexo";
-    const type = String(item?.type || "").trim().toLowerCase();
-    const size = Math.max(0, Number(item?.size || 0) || 0);
-    const dataUrl = String(item?.dataUrl || "").trim();
-
-    if (!allowedTypes.has(type)) return null;
-    if (size > 5 * 1024 * 1024) return null;
-    if (!dataUrl.startsWith(`data:${type};base64,`)) return null;
-
-    return { name, type, size, dataUrl };
-  }).filter(Boolean);
-}
-
-function normalizeClientDiaryObservation(value) {
-  return String(value || "").trim().slice(0, 5000);
-}
-
 async function fetchDiaryForSignatureFlow(diaryId, { operatorUserId = null, conn = db } = {}) {
   const params = [diaryId];
   let where = "WHERE d.id = ?";
@@ -6533,15 +6512,6 @@ app.get("/api/public/diarios/signature/:token", async (req, res) => {
         clientName: firstFilledText(diary.data.signatureName, link.client_name, requestMeta.clientName),
         clientDocument: firstFilledText(diary.data.signatureDoc, link.client_document, requestMeta.clientDocument),
         clientSignature: firstFilledText(diary.data.signature),
-        clientObservationText: firstFilledText(diary.data.clientObservation?.text),
-        clientAttachments: Array.isArray(diary.data.clientObservation?.attachments)
-          ? diary.data.clientObservation.attachments.map((item) => ({
-              name: firstFilledText(item?.name),
-              type: firstFilledText(item?.type),
-              size: Number(item?.size || 0) || 0,
-              dataUrl: firstFilledText(item?.dataUrl),
-            })).filter((item) => item.name)
-          : [],
         signedAt: firstFilledText(link.signed_at, diary.data.assinado_em, requestMeta.signedAt),
         expiresAt: firstFilledText(link.expires_at, requestMeta.expiresAt),
       },
@@ -6555,8 +6525,6 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
   const nome = String(req.body?.nome || "").trim();
   const documento = String(req.body?.documento || "").trim();
   const assinatura = String(req.body?.assinatura || "").trim();
-  const observacao = normalizeClientDiaryObservation(req.body?.observacao);
-  const anexos = normalizeClientDiaryAttachments(req.body?.anexos);
 
   if (!nome || !documento || !assinatura) {
     return res.status(400).json({
@@ -6636,11 +6604,6 @@ app.post("/api/public/diarios/signature/:token", async (req, res) => {
         document: documento,
         signature: assinatura,
         signedAt,
-      },
-      clientObservation: {
-        text: observacao,
-        attachments: anexos,
-        createdAt: signedAt,
       },
       signature_request: {
         ...(diaryData.signature_request && typeof diaryData.signature_request === "object" ? diaryData.signature_request : {}),
