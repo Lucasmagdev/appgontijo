@@ -483,22 +483,36 @@ export default function DocumentosPage() {
                       const aberto = alertasExpandidos.has(grupo.usuarioId)
                       return (
                         <div key={grupo.usuarioId} className="overflow-hidden rounded-lg border border-slate-200">
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left hover:bg-slate-50"
-                            onClick={() => toggleAlertaPessoa(grupo.usuarioId)}
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate font-semibold text-slate-800">{grupo.nome}</div>
-                              <div className="truncate text-xs text-slate-500">{grupo.cargo || 'Sem cargo'} · {grupo.itens.length} documento(s)</div>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              {grupo.vencido ? <span className="status-badge status-danger">{grupo.vencido} vencido(s)</span> : null}
-                              {grupo.pendente ? <span className="status-badge status-danger">{grupo.pendente} pendente(s)</span> : null}
-                              {grupo.venceEmBreve ? <span className="status-badge status-warning">{grupo.venceEmBreve} vence(m)</span> : null}
-                              <ChevronDown size={18} className={cn('text-slate-400 transition-transform', aberto && 'rotate-180')} />
-                            </div>
-                          </button>
+                          <div className="flex items-center gap-2 bg-white pr-3 hover:bg-slate-50">
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left"
+                              onClick={() => toggleAlertaPessoa(grupo.usuarioId)}
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate font-semibold text-slate-800">{grupo.nome}</div>
+                                <div className="truncate text-xs text-slate-500">{grupo.cargo || 'Sem cargo'} · {grupo.itens.length} documento(s)</div>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {grupo.vencido ? <span className="status-badge status-danger">{grupo.vencido} vencido(s)</span> : null}
+                                {grupo.pendente ? <span className="status-badge status-danger">{grupo.pendente} pendente(s)</span> : null}
+                                {grupo.venceEmBreve ? <span className="status-badge status-warning">{grupo.venceEmBreve} vence(m)</span> : null}
+                                <ChevronDown size={18} className={cn('text-slate-400 transition-transform', aberto && 'rotate-180')} />
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary shrink-0"
+                              onClick={() => {
+                                setSelectedUserId(String(grupo.usuarioId))
+                                setDocForm(emptyDoc)
+                                setDocFile(null)
+                                setActiveTab('colaboradores')
+                              }}
+                            >
+                              Regularizar
+                            </button>
+                          </div>
 
                           {aberto ? (
                             <div className="border-t border-slate-100 table-scroll">
