@@ -62,73 +62,10 @@ const portalDocsUpload = multer({
   limits: { fileSize: 50 * 1024 * 1024 },
 })
 
-let _portalDocsTableEnsured = false
-async function ensurePortalDocumentsTable() {
-  if (_portalDocsTableEnsured) return
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS portal_documents (
-      id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      construction_id INT UNSIGNED NOT NULL,
-      tipo         VARCHAR(30)  NOT NULL DEFAULT 'outro',
-      nome_original VARCHAR(255) NOT NULL,
-      nome_arquivo  VARCHAR(255) NOT NULL,
-      tamanho      INT UNSIGNED,
-      mime_type    VARCHAR(100),
-      criado_em    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_pd_construction (construction_id)
-    )
-  `)
-  _portalDocsTableEnsured = true
-}
+// Tabela portal_documents agora vive no banco; DDL em migrations/001_app_tables_baseline.sql
 
-const DEFAULT_PREDEFINED_OCCURRENCES = [
-  "Chuva forte - paralisacao da atividade",
-  "Falta de material / insumo",
-  "Falha no equipamento",
-  "Manutencao nao programada",
-  "Acidente de trabalho",
-  "Atraso ou falta da equipe",
-  "Paralisacao a pedido do cliente",
-  "Falta de agua / concreto",
-  "Problema eletrico",
-  "Dificuldade no solo / terreno",
-  "Interferencia de terceiros na area",
-  "Aguardando projeto / liberacao tecnica",
-  "Vento forte / condicoes climaticas adversas",
-  "Dificuldade de acesso ao local",
-];
-
-let _predefinedOccurrencesTableEnsured = false;
-async function ensurePredefinedOccurrencesTable() {
-  if (_predefinedOccurrencesTableEnsured) return;
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS predefined_occurrences (
-      id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      title         VARCHAR(160) NOT NULL,
-      category      VARCHAR(80) NULL,
-      template_text TEXT NOT NULL,
-      active        ENUM('S','N') NOT NULL DEFAULT 'S',
-      sort_order    INT NOT NULL DEFAULT 0,
-      created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      INDEX idx_predefined_occurrences_active_order (active, sort_order, title)
-    )
-  `);
-
-  const [[row]] = await db.query("SELECT COUNT(*) AS total FROM predefined_occurrences");
-  if (Number(row?.total || 0) === 0) {
-    for (let index = 0; index < DEFAULT_PREDEFINED_OCCURRENCES.length; index += 1) {
-      const title = DEFAULT_PREDEFINED_OCCURRENCES[index];
-      await db.query(
-        `INSERT INTO predefined_occurrences (title, category, template_text, active, sort_order)
-         VALUES (?, ?, ?, 'S', ?)`,
-        [title, "Geral", title, (index + 1) * 10]
-      );
-    }
-  }
-
-  _predefinedOccurrencesTableEnsured = true;
-}
+// Tabela predefined_occurrences (e seu seed) agora vive no banco;
+// DDL + seed em migrations/001_app_tables_baseline.sql
 let goalTargetSanitizePromise = null;
 
 function ensureGoalTargetsSanitized() {
@@ -241,23 +178,15 @@ class SessionStore {
   }
 }
 
-async function ensureSessionsTable() {
-  await db.query(
-    `CREATE TABLE IF NOT EXISTS app_sessions (
-      token VARCHAR(64) NOT NULL PRIMARY KEY,
-      scope VARCHAR(16) NOT NULL,
-      data JSON NOT NULL,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_app_sessions_scope (scope)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
-  );
-  // Limpa sessoes antigas (> 30 dias) para evitar crescimento indefinido.
+// Tabela app_sessions vive no banco (DDL em migrations/001_app_tables_baseline.sql).
+// Aqui so a manutencao: limpa sessoes antigas (> 30 dias) para evitar crescimento indefinido.
+async function cleanupOldSessions() {
   await db.query("DELETE FROM app_sessions WHERE created_at < (NOW() - INTERVAL 30 DAY)");
 }
 
 async function bootstrapSessions() {
   try {
-    await ensureSessionsTable();
+    await cleanupOldSessions();
     await Promise.all([adminSessions.load(), operadorSessions.load(), clientPortalSessions.load()]);
   } catch (error) {
     console.error("Falha ao inicializar sessoes persistentes:", error.message);
@@ -1353,17 +1282,10 @@ async function columnExists(tableName, columnName, conn = db) {
   return Number(row?.total || 0) > 0;
 }
 
-let userSignaturePermissionColumnEnsured = false;
-async function ensureUserSignaturePermissionColumn(conn = db) {
-  if (userSignaturePermissionColumnEnsured) return;
-  if (!(await columnExists("users", "pode_gerar_link_assinatura", conn))) {
-    await conn.query("ALTER TABLE users ADD COLUMN pode_gerar_link_assinatura ENUM('S','N') NOT NULL DEFAULT 'N'");
-  }
-  userSignaturePermissionColumnEnsured = true;
-}
+// Coluna users.pode_gerar_link_assinatura ja existe no banco
+// (registro em migrations/001_app_tables_baseline.sql).
 
 async function userCanGenerateDiarySignatureLink(userId, conn = db) {
-  await ensureUserSignaturePermissionColumn(conn);
   const [[row]] = await conn.query(
     "SELECT document, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
     [userId]
@@ -4075,7 +3997,6 @@ app.post("/api/admin/client-portals/:id/documentos", requireAdmin, portalDocsUpl
   const accessId = parsePositiveInteger(req.params.id)
   if (!accessId) return res.status(400).json({ ok: false, message: "Acesso invalido." })
   try {
-    await ensurePortalDocumentsTable()
     const access = await fetchClientPortalAccessById(accessId)
     if (!access) {
       if (req.file) { try { fs.unlinkSync(req.file.path) } catch { /* Ignore cleanup failure after invalid access. */ } }
@@ -4108,7 +4029,6 @@ app.get("/api/admin/client-portals/:id/documentos", requireAdmin, async (req, re
   const accessId = parsePositiveInteger(req.params.id)
   if (!accessId) return res.status(400).json({ ok: false, message: "Acesso invalido." })
   try {
-    await ensurePortalDocumentsTable()
     const access = await fetchClientPortalAccessById(accessId)
     if (!access) return res.status(404).json({ ok: false, message: "Acesso nao encontrado." })
     const [docs] = await db.query(
@@ -4126,7 +4046,6 @@ app.delete("/api/admin/portal-documentos/:docId", requireAdmin, async (req, res)
   const docId = parsePositiveInteger(req.params.docId)
   if (!docId) return res.status(400).json({ ok: false, message: "Documento invalido." })
   try {
-    await ensurePortalDocumentsTable()
     const [[doc]] = await db.query("SELECT nome_arquivo FROM portal_documents WHERE id = ?", [docId])
     if (!doc) return res.status(404).json({ ok: false, message: "Documento nao encontrado." })
     await db.query("DELETE FROM portal_documents WHERE id = ?", [docId])
@@ -4291,7 +4210,6 @@ app.get("/api/admin/sondagens/:id/download", requireAdmin, async (req, res) => {
 app.get("/api/client-portal/documentos", requireClientPortal, async (req, res) => {
   const session = req.clientPortalSession
   try {
-    await ensurePortalDocumentsTable()
     const [docs] = await db.query(
       `SELECT id, tipo, nome_original, tamanho, mime_type, criado_em
        FROM portal_documents WHERE construction_id = ? ORDER BY tipo, criado_em DESC`,
@@ -4308,7 +4226,6 @@ app.get("/api/client-portal/documentos/:docId/download", requireClientPortal, as
   const docId = parsePositiveInteger(req.params.docId)
   if (!docId) return res.status(400).json({ ok: false, message: "Documento invalido." })
   try {
-    await ensurePortalDocumentsTable()
     const [[doc]] = await db.query(
       "SELECT nome_original, nome_arquivo FROM portal_documents WHERE id = ? AND construction_id = ?",
       [docId, session.constructionId]
@@ -4897,7 +4814,6 @@ function hasGontijoAppAccess(req) {
 
 app.get("/api/admin/predefined-occurrences", requireAdmin, async (_req, res) => {
   try {
-    await ensurePredefinedOccurrencesTable();
     const [rows] = await db.query(
       `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
        FROM predefined_occurrences
@@ -4911,7 +4827,6 @@ app.get("/api/admin/predefined-occurrences", requireAdmin, async (_req, res) => 
 
 app.post("/api/admin/predefined-occurrences", requireAdmin, async (req, res) => {
   try {
-    await ensurePredefinedOccurrencesTable();
     const payload = validatePredefinedOccurrencePayload(req.body);
     const [result] = await db.query(
       `INSERT INTO predefined_occurrences (title, category, template_text, active, sort_order)
@@ -4933,7 +4848,6 @@ app.post("/api/admin/predefined-occurrences", requireAdmin, async (req, res) => 
 
 app.put("/api/admin/predefined-occurrences/:id", requireAdmin, async (req, res) => {
   try {
-    await ensurePredefinedOccurrencesTable();
     const id = parsePositiveInteger(req.params.id);
     if (!id) return res.status(400).json({ ok: false, message: "ID invalido." });
     const payload = validatePredefinedOccurrencePayload(req.body);
@@ -4959,7 +4873,6 @@ app.put("/api/admin/predefined-occurrences/:id", requireAdmin, async (req, res) 
 
 app.delete("/api/admin/predefined-occurrences/:id", requireAdmin, async (req, res) => {
   try {
-    await ensurePredefinedOccurrencesTable();
     const id = parsePositiveInteger(req.params.id);
     if (!id) return res.status(400).json({ ok: false, message: "ID invalido." });
     await db.query("DELETE FROM predefined_occurrences WHERE id = ?", [id]);
@@ -4974,7 +4887,6 @@ app.get("/api/gontijo/predefined-occurrences", async (_req, res) => {
     if (!hasGontijoAppAccess(_req)) {
       return res.status(401).json({ ok: false, message: "Sessao obrigatoria." });
     }
-    await ensurePredefinedOccurrencesTable();
     const [rows] = await db.query(
       `SELECT id, title, category, template_text, active, sort_order, created_at, updated_at
        FROM predefined_occurrences
@@ -5969,7 +5881,6 @@ app.post("/api/operador/session", async (req, res) => {
   }
 
   try {
-    await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
       "SELECT id, name, document, phone, password, active, cargo, pode_gerar_link_assinatura FROM users WHERE REPLACE(REPLACE(document, '.', ''), '-', '') = ? AND active = 'S'",
       [cpf]
@@ -6032,7 +5943,6 @@ app.get("/api/operador/status", async (req, res) => {
   if (!session) return res.json({ ok: true, authenticated: false });
 
   try {
-    await ensureUserSignaturePermissionColumn();
     const [[user]] = await db.query(
       "SELECT id, name, document, cargo, pode_gerar_link_assinatura FROM users WHERE id = ? AND active = 'S'",
       [session.userId]

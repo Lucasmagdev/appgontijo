@@ -3,3 +3,21 @@ node_modules
 .cache
 Acesso temporario
 tools/tessdata
+
+# residue / runtime artifacts
+_arquivo/
+*.log
+*.err
+.logs/
+.playwright-mcp/
+*.tgz
+coin-preview.png
+
+# sensitive (never commit)
+cookies*.txt
+cookies*.tmp
+set-passwords.out
+*.pem
+*.key
+id_rsa*
+uploads/sondagens
