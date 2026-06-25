@@ -293,7 +293,8 @@ export default function App() {
             <Route path="obras/nova" element={<ObraFormPage />} />
             <Route path="obras/:id/editar" element={<ObraFormPage />} />
             <Route path="equipamentos" element={<EquipamentosPage />} />
-            <Route path="sondagens" element={<SondagensPage />} />
+            <Route path="sondagens" element={<SondagensMapaPage />} />
+            <Route path="sondagens/arquivos" element={<SondagensPage />} />
             <Route path="sondagens/mapa" element={<SondagensMapaPage />} />
             <Route path="producao" element={<ProducaoPage />} />
             <Route path="indicadores-operacionais" element={<IndicadoresOperacionaisPage />} />

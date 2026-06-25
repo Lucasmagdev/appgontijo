@@ -40,7 +40,7 @@ export default function SondagensPage() {
           <p className="page-subtitle">Relatorios e anexos de sondagem importados do CRM (Pipefy).</p>
         </div>
 
-        <Link to="/sondagens/mapa" className="btn btn-primary">
+        <Link to="/sondagens" className="btn btn-primary">
           <Map size={15} />
           Ver no mapa
         </Link>

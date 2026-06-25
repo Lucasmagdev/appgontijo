@@ -1,17 +1,23 @@
 #!/usr/bin/env node
 /*
- * Geocodifica as sondagens (crm_sondagens) para o mapa.
+ * Geocodifica as sondagens (crm_sondagens) para o mapa — NIVEL ENDERECO.
  *
- * - Adiciona colunas lat/lng/geo_query/geo_em se faltarem.
- * - Geocodifica por cidade+estado (nivel cidade) via OpenStreetMap Nominatim.
- *   Cidade e o nivel mais confiavel; o endereco da obra costuma ser baguncado.
- * - Dedupe: cada cidade so consulta o Nominatim uma vez (cache em disco).
- * - Jitter deterministico por card_id pra alfinetes da mesma cidade nao
- *   ficarem exatamente sobrepostos.
+ * Estrategia:
+ *  1. Tenta geocodificar o endereco completo (endereco_obra + cidade + estado).
+ *  2. Valida: o resultado precisa cair a ate ~60km do centro da cidade
+ *     (pega erro grosso do Nominatim quando o endereco e ambiguo). Se passar,
+ *     usa a coordenada exata, sem jitter -> pin no local real.
+ *  3. Se o endereco falhar ou for rejeitado, cai pro nivel cidade
+ *     (centro da cidade + jitter deterministico) como antes.
  *
- * Politica Nominatim: 1 req/seg + User-Agent. Respeitado abaixo.
+ * Colunas: lat/lng/geo_query/geo_em/geo_precisao ('endereco' | 'cidade').
+ * Cache em disco por endereco e por cidade (dedupe, 1 req/seg Nominatim).
  *
- * Uso: node scripts/geocode-sondagens.js [--limit=N]
+ * Por padrao reprocessa quem ainda nao esta no nivel 'endereco'
+ * (geo_precisao NULL ou 'cidade'). Use --all pra reprocessar tudo,
+ * --limit=N pra testar.
+ *
+ * Uso: node scripts/geocode-sondagens.js [--limit=N] [--all]
  */
 require('dotenv').config()
 const fs = require('fs')
@@ -19,22 +25,24 @@ const path = require('path')
 const db = require('../lib/db')
 
 const args = process.argv.slice(2)
+const has = (n) => args.includes(`--${n}`)
 const valOf = (n) => { const a = args.find((x) => x.startsWith(`--${n}=`)); return a ? a.split('=')[1] : null }
 const LIMIT = valOf('limit') ? Number(valOf('limit')) : Infinity
+const ALL = has('all')
 
-const CACHE_PATH = path.join(__dirname, '..', 'data', 'geocode-cache.json')
+const CACHE_ADDR = path.join(__dirname, '..', 'data', 'geocode-cache-endereco.json')
+const CACHE_CITY = path.join(__dirname, '..', 'data', 'geocode-cache.json')
 const UA = 'AppGontijo-Sondagens/1.0 (contato@gontijofundacoes.com.br)'
+const MAX_DIST_KM = 60 // tolerancia entre endereco e centro da cidade
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-function loadCache() {
-  try { return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8')) } catch { return {} }
-}
-function saveCache(cache) {
-  fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true })
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(cache, null, 2))
+function loadCache(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')) } catch { return {} } }
+function saveCache(p, cache) {
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, JSON.stringify(cache, null, 2))
 }
 
-// offset pequeno e deterministico (~ ate 2km) a partir do card_id
+// offset pequeno e deterministico (~ ate 2km) a partir do card_id (so no fallback cidade)
 function jitter(cardId) {
   let h = 0
   for (const ch of String(cardId)) h = (h * 31 + ch.charCodeAt(0)) >>> 0
@@ -43,10 +51,25 @@ function jitter(cardId) {
   return { dx, dy }
 }
 
-async function geocodeCity(cidade, estado) {
-  const q = [cidade, estado, 'Brasil'].filter(Boolean).join(', ')
+// distancia haversine em km
+function distKm(a, b) {
+  const R = 6371
+  const toRad = (d) => (d * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat)
+  const dLng = toRad(b.lng - a.lng)
+  const lat1 = toRad(a.lat), lat2 = toRad(b.lat)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+// limpa o texto do endereco: tira quebras de linha, espacos duplos
+function limpaEndereco(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim()
+}
+
+async function nominatim(q) {
   const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(q)}`
-  const res = await fetch(url, { headers: { 'User-Agent': UA } })
+  const res = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'pt-BR' } })
   if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`)
   const data = await res.json()
   if (!data.length) return null
@@ -61,6 +84,7 @@ async function ensureColumns() {
   if (!names.includes('lng')) adds.push('ADD COLUMN lng DECIMAL(10,7) NULL')
   if (!names.includes('geo_query')) adds.push('ADD COLUMN geo_query VARCHAR(255) NULL')
   if (!names.includes('geo_em')) adds.push('ADD COLUMN geo_em DATETIME NULL')
+  if (!names.includes('geo_precisao')) adds.push("ADD COLUMN geo_precisao VARCHAR(20) NULL")
   if (adds.length) {
     await db.query(`ALTER TABLE crm_sondagens ${adds.join(', ')}`)
     console.log(`colunas adicionadas: ${adds.length}`)
@@ -69,57 +93,80 @@ async function ensureColumns() {
 
 async function main() {
   await ensureColumns()
-  const cache = loadCache()
+  const cacheAddr = loadCache(CACHE_ADDR)
+  const cacheCity = loadCache(CACHE_CITY)
 
-  // cidades distintas que ainda tem alguma linha sem lat
-  const [cities] = await db.query(
-    `SELECT cidade, estado, COUNT(*) n
-     FROM crm_sondagens
-     WHERE (lat IS NULL OR lng IS NULL) AND cidade IS NOT NULL AND cidade <> ''
-     GROUP BY cidade, estado
-     ORDER BY n DESC`
+  // resolve coord da cidade (cache) — usado p/ validar e como fallback
+  async function cidadeCoord(cidade, estado) {
+    const key = `${(cidade || '').trim().toLowerCase()}|${(estado || '').trim().toLowerCase()}`
+    if (cacheCity[key] !== undefined) return cacheCity[key]
+    let coord = null
+    try {
+      coord = await nominatim([cidade, estado, 'Brasil'].filter(Boolean).join(', '))
+    } catch (e) { console.warn(`  cidade falhou ${cidade}/${estado}: ${e.message}`) }
+    cacheCity[key] = coord
+    saveCache(CACHE_CITY, cacheCity)
+    await sleep(1100)
+    return coord
+  }
+
+  const where = ALL
+    ? '1=1'
+    : "(geo_precisao IS NULL OR geo_precisao <> 'endereco')"
+  const [rows] = await db.query(
+    `SELECT id, card_id, endereco_obra, cidade, estado
+       FROM crm_sondagens
+      WHERE ${where} AND cidade IS NOT NULL AND cidade <> ''
+      ORDER BY cidade, estado`
   )
-  console.log(`${cities.length} cidades a geocodificar`)
+  console.log(`${rows.length} obras a geocodificar (${ALL ? 'todas' : 'pendentes'})`)
 
-  let done = 0
-  for (const row of cities) {
+  let done = 0, exato = 0, cidade = 0, semCoord = 0
+  for (const row of rows) {
     if (done >= LIMIT) break
-    const key = `${(row.cidade || '').trim().toLowerCase()}|${(row.estado || '').trim().toLowerCase()}`
-    let coord = cache[key]
-    if (coord === undefined) {
-      try {
-        coord = await geocodeCity(row.cidade, row.estado)
-      } catch (e) {
-        console.warn(`falha ${row.cidade}/${row.estado}: ${e.message}`)
-        coord = null
-      }
-      cache[key] = coord
-      saveCache(cache)
-      await sleep(1100) // politica Nominatim
-    }
-    if (!coord) { console.log(`sem coord: ${row.cidade}/${row.estado}`); continue }
+    const cCoord = await cidadeCoord(row.cidade, row.estado)
 
-    // aplica a todas as linhas dessa cidade (com jitter por card)
-    const [pending] = await db.query(
-      `SELECT id, card_id FROM crm_sondagens
-       WHERE cidade = ? AND (estado <=> ?) AND (lat IS NULL OR lng IS NULL)`,
-      [row.cidade, row.estado]
-    )
-    for (const p of pending) {
-      const { dx, dy } = jitter(p.card_id)
-      await db.query(
-        'UPDATE crm_sondagens SET lat = ?, lng = ?, geo_query = ?, geo_em = NOW() WHERE id = ?',
-        [coord.lat + dy, coord.lng + dx, `${row.cidade}, ${row.estado}`, p.id]
-      )
+    let coord = null, precisao = null, query = null
+    const end = limpaEndereco(row.endereco_obra)
+
+    if (end) {
+      const q = [end, row.cidade, row.estado, 'Brasil'].filter(Boolean).join(', ')
+      const ckey = q.toLowerCase()
+      let addr = cacheAddr[ckey]
+      if (addr === undefined) {
+        try { addr = await nominatim(q) } catch (e) { console.warn(`  end falhou: ${e.message}`); addr = null }
+        cacheAddr[ckey] = addr
+        saveCache(CACHE_ADDR, cacheAddr)
+        await sleep(1100)
+      }
+      // aceita o endereco so se cair perto do centro da cidade (anti-erro grosso)
+      if (addr && (!cCoord || distKm(addr, cCoord) <= MAX_DIST_KM)) {
+        coord = addr; precisao = 'endereco'; query = q
+      }
     }
-    done += 1
-    process.stdout.write(`\r${done}/${cities.length} cidades  (${row.cidade}/${row.estado}: ${pending.length} linhas)        `)
+
+    // fallback: centro da cidade + jitter
+    if (!coord && cCoord) {
+      const { dx, dy } = jitter(row.card_id)
+      coord = { lat: cCoord.lat + dy, lng: cCoord.lng + dx }
+      precisao = 'cidade'; query = `${row.cidade}, ${row.estado}`
+    }
+
+    if (!coord) { semCoord++; continue }
+
+    await db.query(
+      'UPDATE crm_sondagens SET lat = ?, lng = ?, geo_query = ?, geo_precisao = ?, geo_em = NOW() WHERE id = ?',
+      [coord.lat, coord.lng, query, precisao, row.id]
+    )
+    done++
+    if (precisao === 'endereco') exato++; else cidade++
+    process.stdout.write(`\r${done}/${rows.length}  exato:${exato} cidade:${cidade} sem:${semCoord}   `)
   }
 
   const [[stats]] = await db.query(
-    'SELECT COUNT(*) total, SUM(lat IS NOT NULL) com_geo FROM crm_sondagens'
+    "SELECT COUNT(*) total, SUM(geo_precisao='endereco') exato, SUM(geo_precisao='cidade') cidade FROM crm_sondagens"
   )
-  console.log(`\nOK. ${stats.com_geo}/${stats.total} linhas com coordenada.`)
+  console.log(`\nOK. exato:${stats.exato} cidade:${stats.cidade} de ${stats.total}.`)
   await db.end()
 }
 

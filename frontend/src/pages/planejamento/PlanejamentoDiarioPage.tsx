@@ -136,8 +136,8 @@ function validDraftItems(items: ItemDraft[]) {
 function weeklyDayPayload(day: WeeklyDayDraft): PlanejamentoSemanalDiaPayload | null {
   if (!day.enabled) return null
   const itens = validDraftItems(day.items)
-  if (!itens.length || itens.length !== day.items.length) return null
-  if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null
+  if (!itens.length) return null // basta uma meta valida; linhas extras vazias sao ignoradas
+  if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null // acrescimo so e exigido se marcado
   return {
     data: day.data,
     fat_minimo_garantido: day.fatMinimo,
@@ -682,7 +682,7 @@ function WeeklyPlanModal({
       if (!obraNumero.trim()) throw new Error('Informe o número da obra.')
       if (!enabledDays.length) throw new Error('Ative ao menos um dia da semana.')
       if (!areEnabledDaysValid || !basePayload) {
-        throw new Error('Preencha todas as metas e valores de acréscimo dos dias ativos.')
+        throw new Error('Preencha ao menos uma meta válida em cada dia ativo.')
       }
       return planejamentoDiarioApi.createWeekly({
         ...basePayload,
