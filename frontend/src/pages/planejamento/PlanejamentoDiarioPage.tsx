@@ -107,6 +107,7 @@ type WeeklyDayDraft = {
   label: string
   enabled: boolean
   fatMinimo: boolean
+  fatMinimoValor: string
   incluiMobilizacao: boolean
   incluiDesmobilizacao: boolean
   incluiOutroAcrescimo: boolean
@@ -136,11 +137,16 @@ function validDraftItems(items: ItemDraft[]) {
 function weeklyDayPayload(day: WeeklyDayDraft): PlanejamentoSemanalDiaPayload | null {
   if (!day.enabled) return null
   const itens = validDraftItems(day.items)
-  if (!itens.length) return null // basta uma meta valida; linhas extras vazias sao ignoradas
+  const temAcrescimo = day.incluiMobilizacao || day.incluiDesmobilizacao || day.incluiOutroAcrescimo
+  // dia pode ter so acrescimo (mobilizacao/desmobilizacao) sem estacas; senao precisa de 1 meta valida
+  if (!itens.length && !temAcrescimo) return null
   if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null // acrescimo so e exigido se marcado
+  // fat minimo so e aplicado no valor quando ja tem um valor informado (evita erro no preview)
+  const fatMinimoOk = day.fatMinimo && Number(day.fatMinimoValor) > 0
   return {
     data: day.data,
-    fat_minimo_garantido: day.fatMinimo,
+    fat_minimo_garantido: fatMinimoOk,
+    fat_minimo_valor: fatMinimoOk ? Number(day.fatMinimoValor) : undefined,
     inclui_mobilizacao: day.incluiMobilizacao,
     inclui_desmobilizacao: day.incluiDesmobilizacao,
     inclui_outro_acrescimo: day.incluiOutroAcrescimo,
@@ -335,6 +341,8 @@ function PlanModal({
   const [equipamentoId, setEquipamentoId] = useState(String(plan?.equipamentoId ?? (mode.type === 'create' ? mode.equipamentoId ?? '' : '')))
   const [obraNumero, setObraNumero] = useState(plan?.obraNumero ?? '')
   const [fatMinimo, setFatMinimo] = useState(plan?.fatMinimoGarantido ?? false)
+  const [fatMinimoValor, setFatMinimoValor] = useState(plan?.fatMinimoValor != null ? String(plan.fatMinimoValor) : '')
+  const [fatMinimoSugerido, setFatMinimoSugerido] = useState<number | null>(null) // vem do cadastro da obra
   const [incluiMobilizacao, setIncluiMobilizacao] = useState(plan?.incluiMobilizacao ?? false)
   const [incluiDesmobilizacao, setIncluiDesmobilizacao] = useState(plan?.incluiDesmobilizacao ?? false)
   const [incluiOutroAcrescimo, setIncluiOutroAcrescimo] = useState(plan?.incluiOutroAcrescimo ?? false)
@@ -373,12 +381,21 @@ function PlanModal({
     ? 1
     : Math.max(1, Math.round((new Date(`${dataFim}T12:00:00`).getTime() - new Date(`${dataInicio}T12:00:00`).getTime()) / 86400000) + 1)
   const temAcrescimos = incluiMobilizacao || incluiDesmobilizacao || incluiOutroAcrescimo
-  const canPreview = Boolean(obraNumero.trim()) && validItems.length === items.length && validItems.length > 0
+  // linhas totalmente vazias sao ignoradas; o dia pode ter so acrescimo (sem estacas)
+  const nonBlankItems = items.filter((item) => item.metaQtdEstacas || item.diametro || item.profundidade)
+  const metasValidas = validItems.length === nonBlankItems.length && (validItems.length > 0 || temAcrescimos)
+  const canPreview = Boolean(obraNumero.trim()) && metasValidas
+  // valor do fat minimo: o digitado tem prioridade; senao usa a sugestao da obra
+  const fatMinimoValorEfetivo = fatMinimoValor || (fatMinimoSugerido != null ? String(fatMinimoSugerido) : '')
+  // so manda fat minimo no preview quando ja tem um valor (evita erro "informe o valor")
+  const enviarFatMinimo = fatMinimo && fatMinimoValorEfetivo !== ''
   const previewQuery = useQuery({
-    queryKey: ['planejamento-diario-preview', obraNumero.trim(), validItems, incluiMobilizacao, incluiDesmobilizacao, incluiOutroAcrescimo, outroAcrescimoDescricao, valorOutroAcrescimo],
+    queryKey: ['planejamento-diario-preview', obraNumero.trim(), validItems, enviarFatMinimo, fatMinimoValorEfetivo, incluiMobilizacao, incluiDesmobilizacao, incluiOutroAcrescimo, outroAcrescimoDescricao, valorOutroAcrescimo],
     queryFn: () => planejamentoDiarioApi.preview({
       obra_numero: obraNumero.trim(),
       itens: validItems,
+      fat_minimo_garantido: enviarFatMinimo,
+      fat_minimo_valor: enviarFatMinimo ? Number(fatMinimoValorEfetivo) : undefined,
       inclui_mobilizacao: incluiMobilizacao,
       inclui_desmobilizacao: incluiDesmobilizacao,
       inclui_outro_acrescimo: incluiOutroAcrescimo,
@@ -389,6 +406,19 @@ function PlanModal({
     retry: false,
   })
 
+  // captura a sugestao de fat minimo da obra (vinda do cadastro)
+  const previewSugerido = previewQuery.data?.fatMinimoSugerido ?? null
+  useEffect(() => {
+    setFatMinimoSugerido(previewSugerido)
+  }, [previewSugerido])
+
+  // ao marcar fat minimo, pre-preenche o valor com a sugestao da obra (editavel)
+  useEffect(() => {
+    if (fatMinimo && !fatMinimoValor && fatMinimoSugerido != null) {
+      setFatMinimoValor(String(fatMinimoSugerido))
+    }
+  }, [fatMinimo, fatMinimoValor, fatMinimoSugerido])
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       setError('')
@@ -398,16 +428,20 @@ function PlanModal({
       if (!isEdit && daysCount > 1 && temAcrescimos) {
         throw new Error('Mobilização, desmobilização e outros acréscimos devem ser planejados em um único dia.')
       }
-      if (validItems.length !== items.length || validItems.length === 0) {
-        throw new Error('Preencha quantidade, diâmetro e profundidade em todas as metas.')
+      if (!metasValidas) {
+        throw new Error('Preencha as metas corretamente ou marque um acréscimo (mobilização/desmobilização) para o dia.')
       }
       if (incluiOutroAcrescimo && Number(valorOutroAcrescimo) <= 0) {
         throw new Error('Informe o valor do outro acréscimo.')
+      }
+      if (fatMinimo && !(Number(fatMinimoValorEfetivo) > 0)) {
+        throw new Error('Informe o valor do faturamento mínimo garantido.')
       }
 
       if (isEdit) {
         await planejamentoDiarioApi.update(plan!.id, {
           fat_minimo_garantido: fatMinimo,
+          fat_minimo_valor: fatMinimo ? Number(fatMinimoValorEfetivo) : undefined,
           inclui_mobilizacao: incluiMobilizacao,
           inclui_desmobilizacao: incluiDesmobilizacao,
           inclui_outro_acrescimo: incluiOutroAcrescimo,
@@ -423,6 +457,7 @@ function PlanModal({
         equipamento_id: Number(equipamentoId),
         obra_numero: obraNumero.trim(),
         fat_minimo_garantido: fatMinimo,
+        fat_minimo_valor: fatMinimo ? Number(fatMinimoValorEfetivo) : undefined,
         inclui_mobilizacao: incluiMobilizacao,
         inclui_desmobilizacao: incluiDesmobilizacao,
         inclui_outro_acrescimo: incluiOutroAcrescimo,
@@ -484,9 +519,24 @@ function PlanModal({
             <input type="checkbox" className="mt-1" checked={fatMinimo} onChange={(event) => setFatMinimo(event.target.checked)} />
             <span>
               <span className="block text-sm font-semibold text-slate-700">Faturamento mínimo garantido</span>
-              <span className="block text-xs text-slate-500">Considere o mínimo contratual ao fechar a produção deste planejamento.</span>
+              <span className="block text-xs text-slate-500">Quando marcado, o valor estipulado do dia usa este fat mínimo (estacas viram só meta). Acréscimos somam por cima.</span>
             </span>
           </label>
+          {fatMinimo && (
+            <div className="mt-3">
+              <label className="field-label">Valor do fat mínimo garantido (dia)</label>
+              <input
+                type="number"
+                min={0.01}
+                step={0.01}
+                className="field-input"
+                value={fatMinimoValor}
+                onChange={(event) => setFatMinimoValor(event.target.value)}
+                placeholder={fatMinimoSugerido != null ? `Sugerido da obra: R$ ${fatMinimoSugerido}` : 'R$ 0,00'}
+              />
+              <p className="mt-1 text-xs text-slate-500">Pré-preenchido com o valor da obra; ajuste se precisar.</p>
+            </div>
+          )}
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
             <div className="mb-3">
@@ -629,6 +679,7 @@ function WeeklyPlanModal({
     label: day.label,
     enabled: index === 0,
     fatMinimo: false,
+    fatMinimoValor: '',
     incluiMobilizacao: false,
     incluiDesmobilizacao: false,
     incluiOutroAcrescimo: false,
@@ -652,6 +703,24 @@ function WeeklyPlanModal({
   })
   const previewByDate = new Map((previewQuery.data?.dias ?? []).map((day) => [day.data, day]))
 
+  // sugestao de fat minimo da obra (mesma para a semana toda)
+  const fatMinimoSugeridoObra = previewQuery.data?.dias?.find((day) => day.fatMinimoSugerido != null)?.fatMinimoSugerido ?? null
+  // ao marcar fat minimo num dia sem valor, pre-preenche com a sugestao da obra
+  useEffect(() => {
+    if (fatMinimoSugeridoObra == null) return
+    setDays((current) => {
+      let mudou = false
+      const next = current.map((day) => {
+        if (day.enabled && day.fatMinimo && !day.fatMinimoValor) {
+          mudou = true
+          return { ...day, fatMinimoValor: String(fatMinimoSugeridoObra) }
+        }
+        return day
+      })
+      return mudou ? next : current
+    })
+  }, [fatMinimoSugeridoObra, days])
+
   function updateDay(index: number, updater: (day: WeeklyDayDraft) => WeeklyDayDraft) {
     setDays((current) => current.map((day, currentIndex) => currentIndex === index ? updater(day) : day))
     setConflicts([])
@@ -665,6 +734,7 @@ function WeeklyPlanModal({
       ...day,
       enabled: true,
       fatMinimo: previous.fatMinimo,
+      fatMinimoValor: previous.fatMinimoValor,
       incluiMobilizacao: previous.incluiMobilizacao,
       incluiDesmobilizacao: previous.incluiDesmobilizacao,
       incluiOutroAcrescimo: previous.incluiOutroAcrescimo,
@@ -681,6 +751,9 @@ function WeeklyPlanModal({
       if (!equipamentoId) throw new Error('Selecione o equipamento.')
       if (!obraNumero.trim()) throw new Error('Informe o número da obra.')
       if (!enabledDays.length) throw new Error('Ative ao menos um dia da semana.')
+      if (enabledDays.some((day) => day.fatMinimo && !(Number(day.fatMinimoValor) > 0))) {
+        throw new Error('Informe o valor do faturamento mínimo garantido nos dias marcados.')
+      }
       if (!areEnabledDaysValid || !basePayload) {
         throw new Error('Preencha ao menos uma meta válida em cada dia ativo.')
       }
@@ -782,6 +855,20 @@ function WeeklyPlanModal({
                           <input type="checkbox" checked={day.fatMinimo} onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, fatMinimo: event.target.checked }))} />
                           Faturamento mínimo garantido
                         </label>
+                        {day.fatMinimo && (
+                          <div className="rounded-lg border border-slate-200 p-3">
+                            <div className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Valor do fat mínimo (dia)</div>
+                            <input
+                              type="number"
+                              min={0.01}
+                              step={0.01}
+                              className="field-input"
+                              value={day.fatMinimoValor}
+                              onChange={(event) => updateDay(dayIndex, (current) => ({ ...current, fatMinimoValor: event.target.value }))}
+                              placeholder={fatMinimoSugeridoObra != null ? `Sugerido: R$ ${fatMinimoSugeridoObra}` : 'R$ 0,00'}
+                            />
+                          </div>
+                        )}
                         <div className="rounded-lg border border-slate-200 p-3">
                           <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Acréscimos</div>
                           <div className="grid gap-2 text-sm">

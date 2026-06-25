@@ -3556,6 +3556,7 @@ export type PlanejamentoDiario = {
   obraNumero: string
   cliente: string
   fatMinimoGarantido: boolean
+  fatMinimoValor: number | null
   valorEstipuladoDia: number | null
   statusCalculo: 'calculado' | 'pendente'
   incluiMobilizacao: boolean
@@ -3574,6 +3575,7 @@ export type PlanejamentoDiarioPayload = {
   equipamento_id: number
   obra_numero: string
   fat_minimo_garantido: boolean
+  fat_minimo_valor?: number
   inclui_mobilizacao: boolean
   inclui_desmobilizacao: boolean
   inclui_outro_acrescimo: boolean
@@ -3585,6 +3587,7 @@ export type PlanejamentoDiarioPayload = {
 export type PlanejamentoSemanalDiaPayload = {
   data: string
   fat_minimo_garantido: boolean
+  fat_minimo_valor?: number
   inclui_mobilizacao: boolean
   inclui_desmobilizacao: boolean
   inclui_outro_acrescimo: boolean
@@ -3604,6 +3607,8 @@ export type PlanejamentoSemanalPreview = {
   dias: Array<PlanejamentoSemanalDiaPayload & {
     valorEstacasDia: number
     valorEstipuladoDia: number
+    fatMinimoValor: number | null
+    fatMinimoSugerido: number | null
     valorMobilizacao: number | null
     valorDesmobilizacao: number | null
     valorOutroAcrescimo: number | null
@@ -3620,8 +3625,8 @@ export const planejamentoDiarioApi = {
     const res = await api.post<{ ok: boolean; created: number }>('/gontijo/planejamento-diario', payload)
     return res.data
   },
-  async preview(payload: Pick<PlanejamentoDiarioPayload, 'obra_numero' | 'itens' | 'inclui_mobilizacao' | 'inclui_desmobilizacao' | 'inclui_outro_acrescimo' | 'outro_acrescimo_descricao' | 'valor_outro_acrescimo'>): Promise<{ itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null }> {
-    const res = await api.post<{ ok: boolean; data: { itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null } }>('/gontijo/planejamento-diario/preview', payload)
+  async preview(payload: Pick<PlanejamentoDiarioPayload, 'obra_numero' | 'itens' | 'fat_minimo_garantido' | 'fat_minimo_valor' | 'inclui_mobilizacao' | 'inclui_desmobilizacao' | 'inclui_outro_acrescimo' | 'outro_acrescimo_descricao' | 'valor_outro_acrescimo'>): Promise<{ itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; fatMinimoValor: number | null; fatMinimoSugerido: number | null; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null }> {
+    const res = await api.post<{ ok: boolean; data: { itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; fatMinimoValor: number | null; fatMinimoSugerido: number | null; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null } }>('/gontijo/planejamento-diario/preview', payload)
     return res.data.data
   },
   async previewWeekly(payload: PlanejamentoSemanalPayload): Promise<PlanejamentoSemanalPreview> {
