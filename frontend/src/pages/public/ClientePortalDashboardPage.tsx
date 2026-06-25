@@ -10,7 +10,6 @@ import {
   ExternalLink,
   FileText,
   Filter,
-  Gauge,
   LogOut,
   MapPin,
   Paperclip,
@@ -87,7 +86,6 @@ export default function ClientePortalDashboardPage() {
   })
 
   const data = dashboardQuery.data
-  const percent = data?.resumo.percentualConcluido ?? 0
   const latestDiary = data?.diarios[0]
   const hasFilter = Boolean(filterApplied.dataInicio || filterApplied.dataFim)
 
@@ -144,7 +142,7 @@ export default function ClientePortalDashboardPage() {
 
             {data ? (
               <>
-                {/* obra info + progress */}
+                {/* obra info */}
                 <div className="relative mt-7 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
                   <div className="flex-1 min-w-0">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
@@ -161,24 +159,6 @@ export default function ClientePortalDashboardPage() {
                       <Pill icon={<MapPin size={12} />} text={[data.obra.cidade, data.obra.estado].filter(Boolean).join(' / ') || 'Localidade não informada'} />
                       <Pill icon={<CalendarDays size={12} />} text={`Atualizado: ${formatSafeDate(data.resumo.ultimaAtualizacao)}`} />
                     </div>
-                  </div>
-
-                  {/* progress ring-style card */}
-                  <div className="w-full rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur lg:w-56 lg:shrink-0">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/55">Progresso geral</div>
-                    <div className="mt-2 flex items-end justify-between gap-2">
-                      <div className="text-5xl font-black tabular-nums">{percent}%</div>
-                      <Gauge size={32} className="mb-1 text-white/40" />
-                    </div>
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/20">
-                      <div
-                        className="h-full rounded-full bg-white transition-all duration-700"
-                        style={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}
-                      />
-                    </div>
-                    <p className="mt-2.5 text-xs text-white/60">
-                      {data.resumo.estacasExecutadas} de {data.resumo.estacasPlanejadas || 0} estacas
-                    </p>
                   </div>
                 </div>
 
