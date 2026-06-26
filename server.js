@@ -16,6 +16,15 @@ const adminStore = require("./lib/admin-store");
 const db = require("./lib/db");
 const gontijoRoutes = require("./lib/gontijo-routes");
 const { buildDiaryPdf } = require("./lib/pdf/diary-pdf");
+const {
+  sum,
+  formatDecimalNumber,
+  normalizeDigits,
+  parseBooleanFlag,
+  clampNumber,
+  textOrNull,
+  parsePositiveInteger,
+} = require("./lib/helpers");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
 const { resolveOfficialMachine, isOfficialGoalItem } = require("./lib/official-machine-catalog");
@@ -221,24 +230,11 @@ function getSolidesToken() {
   return String(process.env.SOLIDES_BASIC_TOKEN || "").trim();
 }
 
-function normalizeDigits(value) {
-  return String(value || "").replace(/\D+/g, "");
-}
+// normalizeDigits -> lib/helpers.js
 
-function parseBooleanFlag(value, defaultValue = false) {
-  if (value === undefined || value === null || value === "") return defaultValue;
-  if (typeof value === "boolean") return value;
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "sim", "yes", "y"].includes(normalized)) return true;
-  if (["0", "false", "nao", "não", "no", "n"].includes(normalized)) return false;
-  return defaultValue;
-}
+// parseBooleanFlag -> lib/helpers.js
 
-function clampNumber(value, min, max, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(min, Math.min(max, parsed));
-}
+// clampNumber -> lib/helpers.js
 
 function weekdayForSolides(dateText) {
   const date = parseDateString(dateText);
@@ -1315,10 +1311,7 @@ function stringifyJsonSafe(value) {
   }
 }
 
-function textOrNull(value) {
-  const text = String(value ?? "").trim();
-  return text ? text : null;
-}
+// textOrNull -> lib/helpers.js
 
 function eventTypeLabel(eventType) {
   if (eventType === "diary_overdue_reminder") return "Diário atrasado";
@@ -1918,9 +1911,7 @@ function average(values) {
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
 
-function sum(values) {
-  return values.filter((value) => Number.isFinite(value)).reduce((total, value) => total + value, 0);
-}
+// sum -> lib/helpers.js
 
 function parseBrDateTime(text) {
   const match = String(text || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
@@ -2373,10 +2364,7 @@ function buildAlerts(machineReports, previousMachineReports, allItems) {
   return alerts.slice(0, 20);
 }
 
-function formatDecimalNumber(value, digits = 2) {
-  if (!Number.isFinite(Number(value))) return "-";
-  return Number(value).toFixed(digits).replace(".", ",");
-}
+// formatDecimalNumber -> lib/helpers.js
 
 const frontendDistDir = path.join(__dirname, "frontend", "dist");
 const frontendDistIndex = path.join(frontendDistDir, "index.html");
@@ -4542,11 +4530,7 @@ function normalizePortalLogin(value) {
     .replace(/\s+/g, "");
 }
 
-function parsePositiveInteger(value) {
-  const numeric = Number(value);
-  if (!Number.isInteger(numeric) || numeric <= 0) return null;
-  return numeric;
-}
+// parsePositiveInteger -> lib/helpers.js
 
 function safeParseJsonObject(value) {
   if (!value) return {};
