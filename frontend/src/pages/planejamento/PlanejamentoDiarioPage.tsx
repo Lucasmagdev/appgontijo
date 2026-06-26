@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  DollarSign,
   Layers3,
   Pencil,
   Plus,
@@ -1036,9 +1037,10 @@ function WeeklyMachineCard({
       const dayTotals = planTotals(plan)
       result.estacas += dayTotals.estacas
       result.metros += dayTotals.metros
+      result.valor += plan.statusCalculo === 'calculado' ? plan.valorEstipuladoDia ?? 0 : 0
       return result
     },
-    { estacas: 0, metros: 0 }
+    { estacas: 0, metros: 0, valor: 0 }
   )
   const obras = Array.from(new Set(machine.plans.map((plan) => plan.obraNumero))).join(', ')
 
@@ -1052,6 +1054,7 @@ function WeeklyMachineCard({
         <div className="flex flex-wrap gap-2 text-xs font-semibold">
           <span className="rounded-lg bg-red-50 px-3 py-2 text-red-700">{totals.estacas.toLocaleString('pt-BR')} estacas / semana</span>
           <span className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700">{totals.metros.toLocaleString('pt-BR')} m / semana</span>
+          <span className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">{formatCurrency(totals.valor)} / semana</span>
         </div>
       </div>
       <div className="overflow-x-auto p-4">
@@ -1167,10 +1170,11 @@ export default function PlanejamentoDiarioPage() {
       const totals = planTotals(plan)
       result.estacas += totals.estacas
       result.metros += totals.metros
+      result.valor += plan.statusCalculo === 'calculado' ? plan.valorEstipuladoDia ?? 0 : 0
       result.maquinas.add(plan.equipamentoId)
       return result
     },
-    { estacas: 0, metros: 0, maquinas: new Set<number>() }
+    { estacas: 0, metros: 0, valor: 0, maquinas: new Set<number>() }
   ), [plans])
 
   function confirmDelete(plan: PlanejamentoDiario) {
@@ -1204,11 +1208,12 @@ export default function PlanejamentoDiarioPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard icon={<CalendarDays size={21} />} label="Planos" value={String(plans.length)} detail="na semana selecionada" />
         <MetricCard icon={<Layers3 size={21} />} label="Máquinas" value={String(summary.maquinas.size)} detail="com meta definida" />
         <MetricCard icon={<Target size={21} />} label="Estacas" value={summary.estacas.toLocaleString('pt-BR')} detail="meta total semanal" />
         <MetricCard icon={<Target size={21} />} label="Metros" value={summary.metros.toLocaleString('pt-BR')} detail="extensão planejada" />
+        <MetricCard icon={<DollarSign size={21} />} label="Valor" value={formatCurrency(summary.valor)} detail="total estimado da semana" />
       </div>
 
       <section className="app-panel mb-5 flex flex-wrap items-end justify-between gap-4 p-4">
