@@ -64,25 +64,33 @@ function connect() {
           if (stream) stream.destroy()
         })
 
-        ssh.forwardOut(
-          socket.remoteAddress || '127.0.0.1',
-          socket.remotePort || 0,
-          remoteHost,
-          remotePort,
-          (error, forwardedStream) => {
-            if (error) {
-              write(errPath, `forwardOut error: ${error.message}`)
-              socket.destroy()
-              return
+        // forwardOut pode lancar SINCRONO ("Not connected") se a sessao SSH caiu;
+        // envolver em try/catch evita derrubar o processo e dispara o reconnect
+        try {
+          ssh.forwardOut(
+            socket.remoteAddress || '127.0.0.1',
+            socket.remotePort || 0,
+            remoteHost,
+            remotePort,
+            (error, forwardedStream) => {
+              if (error) {
+                write(errPath, `forwardOut error: ${error.message}`)
+                socket.destroy()
+                return
+              }
+              stream = forwardedStream
+              stream.on('error', (err) => {
+                write(errPath, `stream error: ${err.message}`)
+                socket.destroy()
+              })
+              socket.pipe(stream).pipe(socket)
             }
-            stream = forwardedStream
-            stream.on('error', (err) => {
-              write(errPath, `stream error: ${err.message}`)
-              socket.destroy()
-            })
-            socket.pipe(stream).pipe(socket)
-          }
-        )
+          )
+        } catch (err) {
+          write(errPath, `forwardOut throw: ${err.message}`)
+          socket.destroy()
+          scheduleReconnect(ssh)
+        }
       })
 
       tcpServer.on('error', (err) => {
