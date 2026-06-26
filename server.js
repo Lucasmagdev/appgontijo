@@ -36,6 +36,23 @@ const {
   daysBetweenInclusive,
   weekdayForSolides,
 } = require("./lib/dates");
+const {
+  adminSessions,
+  operadorSessions,
+  clientPortalSessions,
+  bootstrapSessions,
+} = require("./lib/sessions");
+const {
+  parseCookies,
+  setCookie,
+  cookieOptionsForRequest,
+  clearCookie,
+  getAdminSession,
+  getOperadorSession,
+  getClientPortalSession,
+  requireAdmin,
+  requireClientPortal,
+} = require("./lib/auth");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
 const { resolveOfficialMachine, isOfficialGoalItem } = require("./lib/official-machine-catalog");
@@ -146,77 +163,6 @@ app.post("/api/clientlog", express.text({ type: "*/*", limit: "16kb" }), (req, r
   }
   res.status(204).end();
 });
-
-// Sessoes persistidas no banco (tabela app_sessions) para sobreviver a restart/deploy.
-// Mantem um Map em memoria como cache; get/has sao sincronos, set/delete espelham no banco.
-class SessionStore {
-  constructor(scope) {
-    this.scope = scope;
-    this.map = new Map();
-  }
-
-  async load() {
-    try {
-      const [rows] = await db.query(
-        "SELECT token, data FROM app_sessions WHERE scope = ?",
-        [this.scope]
-      );
-      for (const row of rows) {
-        try {
-          this.map.set(row.token, typeof row.data === "string" ? JSON.parse(row.data) : row.data);
-        } catch {
-          // ignora linha corrompida
-        }
-      }
-    } catch (error) {
-      console.error(`Falha ao carregar sessoes (${this.scope}):`, error.message);
-    }
-  }
-
-  get(token) {
-    return this.map.get(token);
-  }
-
-  has(token) {
-    return this.map.has(token);
-  }
-
-  set(token, value) {
-    this.map.set(token, value);
-    db.query(
-      "INSERT INTO app_sessions (token, scope, data) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)",
-      [token, this.scope, JSON.stringify(value)]
-    ).catch((error) => console.error(`Falha ao gravar sessao (${this.scope}):`, error.message));
-    return this;
-  }
-
-  delete(token) {
-    const existed = this.map.delete(token);
-    db.query("DELETE FROM app_sessions WHERE token = ?", [token]).catch((error) =>
-      console.error(`Falha ao remover sessao (${this.scope}):`, error.message)
-    );
-    return existed;
-  }
-}
-
-// Tabela app_sessions vive no banco (DDL em migrations/001_app_tables_baseline.sql).
-// Aqui so a manutencao: limpa sessoes antigas (> 30 dias) para evitar crescimento indefinido.
-async function cleanupOldSessions() {
-  await db.query("DELETE FROM app_sessions WHERE created_at < (NOW() - INTERVAL 30 DAY)");
-}
-
-async function bootstrapSessions() {
-  try {
-    await cleanupOldSessions();
-    await Promise.all([adminSessions.load(), operadorSessions.load(), clientPortalSessions.load()]);
-  } catch (error) {
-    console.error("Falha ao inicializar sessoes persistentes:", error.message);
-  }
-}
-
-const adminSessions = new SessionStore("admin");
-const operadorSessions = new SessionStore("operador");
-const clientPortalSessions = new SessionStore("client");
 
 const ADMIN_GLOBAL_CPFS = (process.env.ADMIN_CPFS || "")
   .split(",")
@@ -1714,89 +1660,6 @@ async function parseGoalImportFile(file) {
     items,
     skippedWithoutOfficialMachine,
   };
-}
-
-function parseCookies(req) {
-  const raw = String(req.headers.cookie || "");
-  return raw.split(";").reduce((acc, part) => {
-    const [name, ...rest] = part.trim().split("=");
-    if (!name) return acc;
-    acc[name] = decodeURIComponent(rest.join("="));
-    return acc;
-  }, {});
-}
-
-function setCookie(res, name, value, options = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`];
-  if (options.maxAge != null) parts.push(`Max-Age=${options.maxAge}`);
-  if (options.httpOnly !== false) parts.push("HttpOnly");
-  if (options.path) parts.push(`Path=${options.path}`);
-  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
-  if (options.secure) parts.push("Secure");
-  res.setHeader("Set-Cookie", parts.join("; "));
-}
-
-function cookieOptionsForRequest(req) {
-  const isCrossOrigin = Boolean(process.env.CORS_ORIGIN);
-  const forwardedProto = req ? String(req.headers["x-forwarded-proto"] || "") : "";
-  const host = req ? String(req.headers.host || "") : "";
-  const isLocalHost = /^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
-  const isHttps = forwardedProto === "https" || process.env.FORCE_HTTPS_COOKIES === "true";
-  const secure =
-    isHttps ||
-    ((process.env.NODE_ENV === "production" || isCrossOrigin) && !isLocalHost);
-  return {
-    path: "/",
-    sameSite: isCrossOrigin ? "None" : "Lax",
-    secure,
-  };
-}
-
-function clearCookie(res, name) {
-  setCookie(res, name, "", {
-    maxAge: 0,
-    ...cookieOptionsForRequest(),
-  });
-}
-
-function getAdminSession(req) {
-  const token = parseCookies(req).admin_session;
-  if (!token) return null;
-  const session = adminSessions.get(token);
-  if (!session) return null;
-  return { token, ...session };
-}
-
-function getClientPortalSession(req) {
-  const token = parseCookies(req).client_portal_session;
-  if (!token) return null;
-  const session = clientPortalSessions.get(token);
-  if (!session) return null;
-  return { token, ...session };
-}
-
-function requireAdmin(req, res, next) {
-  const session = getAdminSession(req);
-  if (!session) {
-    return res.status(401).json({
-      ok: false,
-      message: "Sessao admin obrigatoria.",
-    });
-  }
-  req.adminSession = session;
-  return next();
-}
-
-function requireClientPortal(req, res, next) {
-  const session = getClientPortalSession(req);
-  if (!session) {
-    return res.status(401).json({
-      ok: false,
-      message: "Sessao do portal do cliente obrigatoria.",
-    });
-  }
-  req.clientPortalSession = session;
-  return next();
 }
 
 function validateMappingPayload(input) {
@@ -3943,19 +3806,6 @@ app.post("/api/client-portal/diarios/:id/solicitar-assinatura", requireClientPor
     return res.status(500).json({ ok: false, message: "Erro ao gerar link de assinatura.", details: error.message });
   }
 });
-
-function getOperadorSession(req) {
-  const token = parseCookies(req).operador_session;
-  if (token) {
-    const session = operadorSessions.get(token);
-    if (session) return { token, ...session };
-  }
-  const adminSession = getAdminSession(req);
-  if (adminSession?.isAdmin) {
-    return { token: null, userId: adminSession.userId, cpf: adminSession.cpf, isAdminSession: true };
-  }
-  return null;
-}
 
 app.get("/api/gontijo/operador/cursos/:id/certificado", async (req, res) => {
   const session = getOperadorSession(req);
