@@ -53,6 +53,13 @@ const {
   requireAdmin,
   requireClientPortal,
 } = require("./lib/auth");
+const {
+  missingEnvVars,
+  buildS3Client,
+  getClientLogin,
+  buildPrefix,
+  parseEstacaKey,
+} = require("./lib/s3");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
 const { resolveOfficialMachine, isOfficialGoalItem } = require("./lib/official-machine-catalog");
@@ -173,15 +180,7 @@ const SOLIDES_EMPLOYER_BASE_URL = process.env.SOLIDES_EMPLOYER_BASE_URL || "http
 const SOLIDES_PUNCH_BASE_URL = process.env.SOLIDES_PUNCH_BASE_URL || "https://api.tangerino.com.br/api/punch";
 const SOLIDES_PAGE_SIZE = 200;
 
-const requiredEnv = [
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "S3_BUCKET",
-];
-
-function missingEnvVars() {
-  return requiredEnv.filter((name) => !process.env[name]);
-}
+// requiredEnv + missingEnvVars -> lib/s3.js
 
 function getSolidesToken() {
   return String(process.env.SOLIDES_BASIC_TOKEN || "").trim();
@@ -1045,57 +1044,6 @@ function bootstrapWhatsAppScheduler() {
   setInterval(() => {
     void runDiaryOverdueReminderSweep();
   }, intervalMinutes * 60 * 1000);
-}
-
-function buildS3Client() {
-  return new S3Client({
-    region: process.env.AWS_REGION || "sa-east-1",
-    // Buckets com pontos no nome podem falhar com TLS em virtual-hosted style.
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    },
-  });
-}
-
-function getClientLogin(value) {
-  return String(value || process.env.S3_CLIENT_LOGIN || "cgontijo").trim();
-}
-
-function buildPrefix(clientLogin, imei, date) {
-  const [year, month, day] = date.split("-");
-  const base = (process.env.S3_PREFIX_BASE || "c").replace(/\/+$/, "");
-  return `${base}/${clientLogin}/h/${imei}/${year}/${month}/${day}/`;
-}
-
-function parseEstacaKey(key) {
-  const fileName = key.split("/").pop() || "";
-  const match = fileName.match(
-    /^(\d{6})-([^-]+)-([^-]+)-(.+)$/
-  );
-
-  if (!match) {
-    return {
-      fileName,
-      finishedAt: null,
-      contrato: null,
-      obra: null,
-      estaca: null,
-    };
-  }
-
-  const [, hhmmss, contratoRaw, obraRaw, estacaRaw] = match;
-  const decode = (value) =>
-    value.replace(/e/g, " ").replace(/s/g, "-").replace(/p/g, ".").replace(/a/g, "+");
-
-  return {
-    fileName,
-    finishedAt: `${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)}:${hhmmss.slice(4, 6)}`,
-    contrato: decode(contratoRaw),
-    obra: decode(obraRaw),
-    estaca: decode(estacaRaw),
-  };
 }
 
 function getConverterPath() {
