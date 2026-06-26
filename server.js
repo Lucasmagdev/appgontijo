@@ -15,6 +15,7 @@ const bcrypt = require("bcrypt");
 const adminStore = require("./lib/admin-store");
 const db = require("./lib/db");
 const gontijoRoutes = require("./lib/gontijo-routes");
+const miscRoutes = require("./routes/misc");
 const { buildDiaryPdf } = require("./lib/pdf/diary-pdf");
 const {
   sum,
@@ -152,24 +153,8 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: "15mb" }));
 
-// Telemetria de boot do cliente (enviada via sendBeacon como text/plain pela
-// rede de seguranca no index.html). Sem auth, so loga pro pm2 pra diagnostico
-// de "tela branca / abre e fecha" em dispositivos que nao conseguimos reproduzir.
-app.post("/api/clientlog", express.text({ type: "*/*", limit: "16kb" }), (req, res) => {
-  try {
-    let data = req.body;
-    if (typeof data === "string" && data) {
-      try { data = JSON.parse(data); } catch { /* mantem string */ }
-    }
-    const d = data && typeof data === "object" ? data : { raw: String(data || "") };
-    console.warn(
-      `[CLIENTLOG] ${d.kind || "?"} | ${d.message || ""} | extra=${d.extra || ""} | url=${d.url || ""} | ua=${d.ua || ""} | ts=${d.ts || ""}`
-    );
-  } catch (error) {
-    console.warn("[CLIENTLOG] falha ao processar:", error.message);
-  }
-  res.status(204).end();
-});
+// Rotas utilitarias (clientlog, display/config, health) -> routes/misc.js
+app.use("/api", miscRoutes);
 
 const ADMIN_GLOBAL_CPFS = (process.env.ADMIN_CPFS || "")
   .split(",")
@@ -6086,25 +6071,6 @@ app.post("/api/admin/goal-imports/confirm", requireAdmin, async (req, res) => {
   }
 });
 
-app.get("/api/display/config", (req, res) => {
-  const screen = String(req.query.screen || "primary");
-  const rotationSeconds = Number(process.env.TV_ROTATION_SECONDS || 300);
-  const autoRefreshSeconds = Number(process.env.TV_AUTO_REFRESH_SECONDS || 60);
-
-  return res.json({
-    ok: true,
-    item: {
-      screen,
-      tvMode: true,
-      rotationSeconds: screen === "secondary" ? Number(process.env.TV_SECONDARY_ROTATION_SECONDS || 120) : rotationSeconds,
-      autoRefreshSeconds,
-      tabs: screen === "secondary"
-        ? ["secondary-overview", "secondary-heatmap", "secondary-timeline"]
-        : ["daily", "weekly"],
-    },
-  });
-});
-
 app.get("/api/estacas/sync", async (req, res) => {
   try {
     const imei = String(req.query.imei || "").trim();
@@ -6304,37 +6270,6 @@ app.get("/api/dashboard/secondary", async (req, res) => {
     return res.status(500).json({
       ok: false,
       message: "Falha ao gerar painel secundario.",
-      details: error.message,
-    });
-  }
-});
-
-app.get("/api/health", async (_req, res) => {
-  const missing = missingEnvVars();
-
-  if (missing.length > 0) {
-    return res.status(500).json({
-      ok: false,
-      message: "Variaveis de ambiente obrigatorias ausentes.",
-      missing,
-    });
-  }
-
-  try {
-    const client = buildS3Client();
-    await client.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET }));
-
-    return res.json({
-      ok: true,
-      message: "Conexao com o bucket validada.",
-      bucket: process.env.S3_BUCKET,
-      region: process.env.AWS_REGION || "sa-east-1",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      message: "Falha ao validar acesso ao bucket.",
-      error: error.name,
       details: error.message,
     });
   }
