@@ -1,8 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query'
 import './index.css'
 import App from './App.tsx'
+import { Toaster, showToast } from './components/ui/Toast'
+import { extractApiErrorMessage } from './lib/gontijo-api'
 
 // Captura o prompt de instalacao do PWA antes do React montar (o evento
 // pode disparar muito cedo). O componente OperadorInstallPrompt consome isso.
@@ -12,7 +14,27 @@ window.addEventListener('beforeinstallprompt', (e) => {
   window.dispatchEvent(new Event('pwa-installable'))
 })
 
+// Evita que a roda do mouse altere o valor de inputs numericos quando o usuario
+// apenas rola a pagina com o cursor sobre o campo (ex.: profundidade 14 -> 13,9).
+window.addEventListener(
+  'wheel',
+  () => {
+    const active = document.activeElement
+    if (active instanceof HTMLInputElement && active.type === 'number') {
+      active.blur()
+    }
+  },
+  { passive: true },
+)
+
 const queryClient = new QueryClient({
+  // Popup global em qualquer falha de cadastro/salvamento (mutation).
+  // Mostra mensagem amigavel para o usuario nao achar que e erro do sistema.
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      showToast(extractApiErrorMessage(error), 'error')
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5,
@@ -28,6 +50,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
+      <Toaster />
     </QueryClientProvider>
   </StrictMode>,
 )
