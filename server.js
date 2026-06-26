@@ -25,6 +25,17 @@ const {
   textOrNull,
   parsePositiveInteger,
 } = require("./lib/helpers");
+const {
+  formatUtcDate,
+  parseDateString,
+  normalizeDateOnly,
+  getCurrentDateString,
+  parseBrDateTime,
+  shiftDate,
+  shiftDateWithTz,
+  daysBetweenInclusive,
+  weekdayForSolides,
+} = require("./lib/dates");
 const goalTargetStore = require("./lib/goal-target-store");
 const { parseDiameterCm, getMeqFactor, calculateSegmentMeq } = require("./lib/meq");
 const { resolveOfficialMachine, isOfficialGoalItem } = require("./lib/official-machine-catalog");
@@ -236,11 +247,7 @@ function getSolidesToken() {
 
 // clampNumber -> lib/helpers.js
 
-function weekdayForSolides(dateText) {
-  const date = parseDateString(dateText);
-  const day = date.getUTCDay();
-  return day === 0 ? 1 : day + 1;
-}
+// weekdayForSolides -> lib/dates.js
 
 function msOfDayToTime(ms) {
   if (!Number.isFinite(Number(ms))) return null;
@@ -1183,24 +1190,11 @@ function writeCachedDetail(key, detail) {
   }
 }
 
-function parseDateString(date) {
-  const [year, month, day] = String(date).split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
+// parseDateString -> lib/dates.js
 
-function normalizeDateOnly(value) {
-  const text = String(value || "").trim();
-  if (!text) return null;
-  const match = text.match(/^(\d{4}-\d{2}-\d{2})/);
-  return match ? match[1] : text;
-}
+// normalizeDateOnly -> lib/dates.js
 
-function formatUtcDate(date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+// formatUtcDate -> lib/dates.js
 
 function buildWeekDates(weekStart) {
   const start = parseDateString(weekStart);
@@ -1211,21 +1205,9 @@ function buildWeekDates(weekStart) {
   });
 }
 
-function shiftDate(dateText, days) {
-  const date = parseDateString(dateText);
-  date.setUTCDate(date.getUTCDate() + days);
-  return formatUtcDate(date);
-}
+// shiftDate -> lib/dates.js
 
-function getCurrentDateString(timeZone = process.env.APP_TIMEZONE || "America/Sao_Paulo") {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(new Date());
-}
+// getCurrentDateString -> lib/dates.js
 
 function getWeekStartFromDate(dateText) {
   const date = parseDateString(dateText);
@@ -1243,20 +1225,9 @@ function formatDateBr(dateText) {
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-function shiftDateWithTz(dateText, days) {
-  return shiftDate(normalizeDateOnly(dateText) || getCurrentDateString(), days);
-}
+// shiftDateWithTz -> lib/dates.js
 
-function daysBetweenInclusive(startDateText, endDateText) {
-  const start = parseDateString(startDateText);
-  const end = parseDateString(endDateText);
-  const items = [];
-  while (start <= end) {
-    items.push(formatUtcDate(start));
-    start.setUTCDate(start.getUTCDate() + 1);
-  }
-  return items;
-}
+// daysBetweenInclusive -> lib/dates.js
 
 async function tableExists(tableName, conn = db) {
   const [[row]] = await conn.query(
@@ -1913,16 +1884,7 @@ function average(values) {
 
 // sum -> lib/helpers.js
 
-function parseBrDateTime(text) {
-  const match = String(text || "").trim().match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
-  if (!match) {
-    return null;
-  }
-
-  const [, dd, mm, yy, hh, min] = match.map(Number);
-  const year = yy >= 70 ? 1900 + yy : 2000 + yy;
-  return new Date(Date.UTC(year, mm - 1, dd, hh, min, 0));
-}
+// parseBrDateTime -> lib/dates.js
 
 function minutesBetween(startText, endText) {
   const start = parseBrDateTime(startText);
