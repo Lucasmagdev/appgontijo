@@ -204,8 +204,9 @@ function ExpandedRow({
         )}
       </div>
 
-      {temAlgumCusto && (
+      {(temAlgumCusto || fatMinimoValor != null) && (
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', gap: 24 }}>
+          {(temAlgumCusto || (consideraFatMinimo && fatMinimoValor != null)) && (
           <div>
             <strong style={{ fontSize: 13, color: '#2d3748', display: 'block', marginBottom: 8 }}>Faturamento</strong>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
@@ -233,6 +234,7 @@ function ExpandedRow({
               </div>
             </div>
           </div>
+          )}
 
           {fatMinimoValor != null && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
