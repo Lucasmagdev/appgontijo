@@ -91,6 +91,7 @@ function toNumberOrNull(value: string) {
 export default function DocumentosPage() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const docFileInputRef = useRef<HTMLInputElement | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>('alertas')
   const [cargoNome, setCargoNome] = useState('')
   const [tipoForm, setTipoForm] = useState<TipoForm>(emptyTipo)
@@ -360,6 +361,15 @@ export default function DocumentosPage() {
       observacao: doc.observacao,
     })
     setDocFile(null)
+  }
+
+  function anexarTipo(tipoId: number) {
+    setDocForm({ ...emptyDoc, tipoDocumentoId: String(tipoId) })
+    setDocFile(null)
+    setTimeout(() => {
+      docFileInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      docFileInputRef.current?.click()
+    }, 60)
   }
 
   function toggleTipoCargo(cargoId: number) {
@@ -723,7 +733,7 @@ export default function DocumentosPage() {
                   <div className="span-4"><label className="field-label">Tipo</label><select className="field-select" value={docForm.tipoDocumentoId} onChange={(event) => setDocForm((f) => ({ ...f, tipoDocumentoId: event.target.value }))}><option value="">Selecione</option>{(tiposQuery.data ?? []).filter((tipo) => tipo.ativo).map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.secao} - {tipo.nome}</option>)}</select></div>
                   <div className="span-8">
                     <label className="field-label">{docForm.id ? 'Substituir arquivo (opcional)' : 'Arquivo'}</label>
-                    <input className="field-input" type="file" onChange={(event) => setDocFile(event.target.files?.[0] ?? null)} />
+                    <input ref={docFileInputRef} className="field-input" type="file" onChange={(event) => setDocFile(event.target.files?.[0] ?? null)} />
                     {docFile ? <p className="mt-1 text-xs text-slate-500">{docFile.name}</p> : null}
                   </div>
                   <div className="span-3"><label className="field-label">Emissao</label><input type="date" className="field-input" value={docForm.dataEmissao} onChange={(event) => setDocForm((f) => ({ ...f, dataEmissao: event.target.value }))} /></div>
@@ -752,7 +762,8 @@ export default function DocumentosPage() {
                             <td><span className={cn('status-badge', statusClass(doc?.status || 'pendente'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
                             <td>
                               <div className="inline-actions">
-                                {doc ? <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button> : null}
+                                {doc ? <button className="btn btn-secondary btn-icon" type="button" title="Editar / substituir" onClick={() => editDoc(doc)}><Search size={14} /></button>
+                                  : <button className="btn btn-primary btn-icon" type="button" title="Anexar arquivo" onClick={() => anexarTipo(tipo.id)}><Upload size={14} /></button>}
                                 {doc?.pendenteRevisao ? <button className="btn btn-primary btn-icon" type="button" title="Marcar como conferido" disabled={conferirMutation.isPending} onClick={() => conferirMutation.mutate(doc.id)}><CheckCircle2 size={14} /></button> : null}
                               </div>
                             </td>
