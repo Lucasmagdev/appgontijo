@@ -265,7 +265,8 @@ export type DocumentoColaborador = {
   tamanho: number | null
   dataEmissao: string
   vencimento: string
-  status: 'vigente' | 'vence_em_breve' | 'vencido' | 'sem_vencimento'
+  status: 'vigente' | 'vence_em_breve' | 'vencido' | 'sem_vencimento' | 'pendente'
+  pendenteRevisao: boolean
   observacao: string
   ativo: boolean
 }
@@ -1549,7 +1550,8 @@ function adaptDocumentoColaborador(row: Record<string, unknown>): DocumentoColab
     tamanho: toNumberValue(row.tamanho),
     dataEmissao: toStringValue(row.dataEmissao),
     vencimento: toStringValue(row.vencimento),
-    status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento'].includes(status) ? status : 'sem_vencimento',
+    status: ['vigente', 'vence_em_breve', 'vencido', 'sem_vencimento', 'pendente'].includes(status) ? status : 'sem_vencimento',
+    pendenteRevisao: row.pendenteRevisao === true,
     observacao: toStringValue(row.observacao),
     ativo: row.ativo !== false,
   }
@@ -1718,6 +1720,12 @@ export const documentosService = {
   },
   async removeColaboradorDocumento(userId: number, documentId: number) {
     await api.delete(`/gontijo/documentos/colaboradores/${userId}/${documentId}`)
+  },
+  async conferirColaboradorDocumento(userId: number, documentId: number) {
+    await api.post(`/gontijo/documentos/colaboradores/${userId}/${documentId}/conferir`)
+  },
+  buildColaboradorExportUrl(userId: number) {
+    return `${API_BASE_URL}/gontijo/documentos/colaboradores/${userId}/exportar.zip`
   },
   async listEnvios() {
     const { data } = await api.get<ApiEnvelope<Record<string, unknown>[]>>('/gontijo/documentos/envios')

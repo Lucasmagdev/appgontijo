@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Archive, ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
+import { AlertTriangle, Archive, CheckCircle2, ChevronDown, Download, FileSpreadsheet, FileText, Plus, RefreshCw, Save, Search, Trash2, Upload } from 'lucide-react'
 import QueryFeedback from '@/components/ui/QueryFeedback'
 import {
   documentosService,
@@ -139,7 +139,7 @@ export default function DocumentosPage() {
     let vigente = 0
     for (const tipo of esperados) {
       const doc = userDocsByType.get(tipo.id)
-      if (!doc) {
+      if (!doc || doc.status === 'pendente') {
         pendente += 1
       } else if (doc.status === 'vencido') {
         vencido += 1
@@ -270,6 +270,16 @@ export default function DocumentosPage() {
       setDocForm(emptyDoc)
       setDocFile(null)
       setMessage('Documento do colaborador salvo.')
+      await queryClient.invalidateQueries({ queryKey: ['documentos-colaborador', selectedUserId] })
+      await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
+    },
+    onError: showError,
+  })
+
+  const conferirMutation = useMutation({
+    mutationFn: (documentId: number) => documentosService.conferirColaboradorDocumento(Number(selectedUserId), documentId),
+    onSuccess: async () => {
+      setMessage('Documento marcado como conferido.')
       await queryClient.invalidateQueries({ queryKey: ['documentos-colaborador', selectedUserId] })
       await queryClient.invalidateQueries({ queryKey: ['documentos-alertas'] })
     },
@@ -671,10 +681,15 @@ export default function DocumentosPage() {
         <div className="space-y-4">
           <section className="app-panel toolbar-panel">
             <label className="field-label">Colaborador</label>
-            <select className="field-select" value={selectedUserId} onChange={(event) => { setSelectedUserId(event.target.value); setDocForm(emptyDoc); setDocFile(null) }}>
-              <option value="">Selecione</option>
-              {(usuariosQuery.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.nome}</option>)}
-            </select>
+            <div className="flex items-end gap-3">
+              <select className="field-select flex-1" value={selectedUserId} onChange={(event) => { setSelectedUserId(event.target.value); setDocForm(emptyDoc); setDocFile(null) }}>
+                <option value="">Selecione</option>
+                {(usuariosQuery.data ?? []).map((user) => <option key={user.id} value={user.id}>{user.nome}</option>)}
+              </select>
+              {selectedUserId ? (
+                <a className="btn btn-secondary" href={documentosService.buildColaboradorExportUrl(Number(selectedUserId))} target="_blank" rel="noreferrer"><Download size={15} />Exportar ZIP</a>
+              ) : null}
+            </div>
           </section>
 
           {colaboradorQuery.data ? (
@@ -735,10 +750,32 @@ export default function DocumentosPage() {
                             <td>{doc?.downloadUrl ? <a className="text-[var(--brand-red)]" href={doc.downloadUrl} target="_blank" rel="noreferrer">abrir arquivo</a> : doc?.url ? <a className="text-[var(--brand-red)]" href={doc.url} target="_blank" rel="noreferrer">abrir link</a> : '-'}</td>
                             <td>{doc?.vencimento ? formatDate(doc.vencimento) : '-'}</td>
                             <td><span className={cn('status-badge', statusClass(doc?.status || 'pendente'))}>{doc ? statusLabels[doc.status] : 'Pendente'}</span></td>
-                            <td>{doc ? <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button> : null}</td>
+                            <td>
+                              <div className="inline-actions">
+                                {doc ? <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button> : null}
+                                {doc?.pendenteRevisao ? <button className="btn btn-primary btn-icon" type="button" title="Marcar como conferido" disabled={conferirMutation.isPending} onClick={() => conferirMutation.mutate(doc.id)}><CheckCircle2 size={14} /></button> : null}
+                              </div>
+                            </td>
                           </tr>
                         )
                       })}
+                      {(colaboradorQuery.data.documentos ?? [])
+                        .filter((doc) => !colaboradorQuery.data!.esperados.some((tipo) => tipo.id === doc.tipoDocumentoId))
+                        .map((doc) => (
+                          <tr key={`extra-${doc.id}`} className="opacity-90">
+                            <td>{doc.secao}</td>
+                            <td className="font-semibold text-slate-800">{doc.tipoDocumento} <span className="text-xs font-normal text-slate-400">(fora do cargo atual)</span></td>
+                            <td>{doc.downloadUrl ? <a className="text-[var(--brand-red)]" href={doc.downloadUrl} target="_blank" rel="noreferrer">abrir arquivo</a> : doc.url ? <a className="text-[var(--brand-red)]" href={doc.url} target="_blank" rel="noreferrer">abrir link</a> : '-'}</td>
+                            <td>{doc.vencimento ? formatDate(doc.vencimento) : '-'}</td>
+                            <td><span className={cn('status-badge', statusClass(doc.status))}>{statusLabels[doc.status]}</span></td>
+                            <td>
+                              <div className="inline-actions">
+                                <button className="btn btn-secondary btn-icon" type="button" onClick={() => editDoc(doc)}><Search size={14} /></button>
+                                {doc.pendenteRevisao ? <button className="btn btn-primary btn-icon" type="button" title="Marcar como conferido" disabled={conferirMutation.isPending} onClick={() => conferirMutation.mutate(doc.id)}><CheckCircle2 size={14} /></button> : null}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>

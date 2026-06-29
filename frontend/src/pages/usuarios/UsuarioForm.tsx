@@ -243,7 +243,7 @@ export default function UsuarioFormPage() {
                   <strong className="block text-amber-950">Impacto nos documentos</strong>
                   <span>
                     O cargo selecionado exige {documentosCargoAtual.length} documento(s) no checklist atual.
-                    {cargoFoiAlterado ? ' Como o cargo foi alterado, o painel de Documentos vai recalcular pendencias e vencimentos apos salvar.' : ''}
+                    {cargoFoiAlterado ? ' Como o cargo foi alterado, ao salvar TODOS os documentos do colaborador ficarao pendentes de conferencia no painel de Documentos (precisam ser revisados um a um).' : ''}
                   </span>
                   {cargoFoiAlterado && documentosNovosNoCargo.length ? (
                     <div className="mt-2 text-xs text-amber-900">
