@@ -1,6 +1,6 @@
 import { type CSSProperties, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, FileText, PenTool, Send, Trophy } from 'lucide-react'
+import { CheckCircle2, FileText, MessageCircle, PenTool, Send, Trophy } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, diarioSignatureService, extractApiErrorMessage, type DiaryCompletionResult } from '@/lib/gontijo-api'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
@@ -37,6 +37,7 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
   const { user } = useOperadorAuth()
   const [completionResult, setCompletionResult] = useState<DiaryCompletionResult | null>(null)
   const [showRewardOverlay, setShowRewardOverlay] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const backUrl = `/operador/diario-de-obras/novo/${equipamentoId || ''}?diario=${diarioId}`
 
@@ -93,6 +94,44 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
       window.setTimeout(() => setShowRewardOverlay(false), 3100)
     },
   })
+
+  async function handleEnviarGrupo() {
+    if (sharing) return
+    const pdfUrl = diarioService.getPdfUrl(diarioId)
+    const mensagem = [
+      'Diário de obra concluído',
+      `Obra: ${signatureStatus?.obraNumero || '-'}`,
+      `Máquina: ${signatureStatus?.equipamento || '-'}`,
+      `Data: ${formatDateBr(signatureStatus?.dataDiario || '')}`,
+    ].join('\n')
+    const filename = `diario-${(signatureStatus?.equipamento || diarioId).toString().replace(/\s+/g, '-')}-${signatureStatus?.dataDiario || ''}.pdf`
+
+    setSharing(true)
+    try {
+      // Busca o PDF autenticado (cookie) e compartilha o arquivo. Assim o grupo
+      // recebe o PDF anexado, sem precisar de sessao para abrir um link.
+      const resp = await fetch(pdfUrl, { credentials: 'include' })
+      if (!resp.ok) throw new Error('pdf')
+      const blob = await resp.blob()
+      const file = new File([blob], filename, { type: 'application/pdf' })
+      const navAny = navigator as Navigator & { canShare?: (data?: ShareData) => boolean }
+      if (navAny.canShare && navAny.canShare({ files: [file] })) {
+        // Abre a folha de compartilhamento -> WhatsApp -> tela de "quem enviar"
+        await navigator.share({ files: [file], title: 'Diário de obra', text: mensagem })
+        return
+      }
+      // Sem Web Share de arquivos (ex.: desktop): abre o PDF para anexar manualmente
+      const objectUrl = URL.createObjectURL(blob)
+      window.open(objectUrl, '_blank', 'noopener,noreferrer')
+      window.open(`https://wa.me/?text=${encodeURIComponent(mensagem)}`, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000)
+    } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') return
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+    } finally {
+      setSharing(false)
+    }
+  }
 
   return (
     <div style={pageStyle}>
@@ -155,46 +194,55 @@ export default function DiarioFinalizacaoPage({ diarioId, equipamentoId }: Props
               </button>
 
               {isOperatorCompleted ? (
-                isCompletionSuccess ? (
-                  <SuccessBox>
-                    +{completionResult?.points || 5} Pontos Gontijo registrados! Continue assim.
-                  </SuccessBox>
-                ) : (
-                  <ErrorBox>
-                    Diário realizado com atraso. Sem pontos desta vez.
-                  </ErrorBox>
-                )
-              ) : null}
+                <>
+                  {isCompletionSuccess ? (
+                    <SuccessBox>
+                      +{completionResult?.points || 5} Pontos Gontijo registrados! Continue assim.
+                    </SuccessBox>
+                  ) : (
+                    <ErrorBox>
+                      Diário realizado com atraso. Sem pontos desta vez.
+                    </ErrorBox>
+                  )}
 
-              {canGenerateSignatureLink ? (
-                <button
-                  onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
-                  style={actionButtonStyle(isSigned ? '#166534' : '#a72727')}
-                >
-                  {isSigned ? <CheckCircle2 size={18} /> : <Send size={18} />}
-                  {isSigned ? 'Ver assinatura do cliente' : 'Ir para envio de assinatura'}
-                </button>
+                  <button onClick={handleEnviarGrupo} disabled={sharing} style={actionButtonStyle('#128c4a')}>
+                    <MessageCircle size={18} />
+                    {sharing ? 'Preparando PDF...' : 'Enviar para grupo da maquina'}
+                  </button>
+
+                  {canGenerateSignatureLink ? (
+                    <button
+                      onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
+                      style={actionButtonStyle(isSigned ? '#166534' : '#a72727')}
+                    >
+                      {isSigned ? <CheckCircle2 size={18} /> : <Send size={18} />}
+                      {isSigned ? 'Ver assinatura do cliente' : 'Ir para envio de assinatura'}
+                    </button>
+                  ) : (
+                    <InfoBox>O link de assinatura sera gerado pelo administrativo ou pela conferencia autorizada.</InfoBox>
+                  )}
+
+                  <button
+                    onClick={() => window.open(diarioService.getPdfUrl(diarioId), '_blank', 'noopener,noreferrer')}
+                    style={secondaryButtonStyle}
+                  >
+                    <FileText size={18} />
+                    Abrir PDF do diario
+                  </button>
+
+                  {!isSigned && canGenerateSignatureLink ? (
+                    <button
+                      onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
+                      style={secondaryButtonStyle}
+                    >
+                      <PenTool size={18} />
+                      Acompanhar assinatura pendente
+                    </button>
+                  ) : null}
+                </>
               ) : (
-                <InfoBox>O link de assinatura sera gerado pelo administrativo ou pela conferencia autorizada.</InfoBox>
+                <InfoBox>Conclua o diário acima para liberar o envio ao grupo, o PDF e a assinatura.</InfoBox>
               )}
-
-              <button
-                onClick={() => window.open(diarioService.getPdfUrl(diarioId), '_blank', 'noopener,noreferrer')}
-                style={secondaryButtonStyle}
-              >
-                <FileText size={18} />
-                Abrir PDF do diario
-              </button>
-
-              {!isSigned && canGenerateSignatureLink ? (
-                <button
-                  onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamentoId || ''}/assinatura?diario=${diarioId}`)}
-                  style={secondaryButtonStyle}
-                >
-                  <PenTool size={18} />
-                  Acompanhar assinatura pendente
-                </button>
-              ) : null}
             </div>
           </>
         ) : null}

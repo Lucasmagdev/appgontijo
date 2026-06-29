@@ -120,15 +120,13 @@ function ExpandedRow({
   const fatMinimoValor = contratoPrecos?.fatMinimoValor ?? null
   const isFatMinimoPending = pendingFatMinimo === item.id
 
-  if (!estacasComCusto || estacasComCusto.length === 0) {
-    return <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
-  }
-
-  const totalCusto = estacasComCusto.reduce((sum, e) => sum + (e.custo_total ?? 0), 0)
-  const temAlgumCusto = estacasComCusto.some((e) => e.custo_total != null)
+  const hasEstacas = Boolean(estacasComCusto && estacasComCusto.length > 0)
+  const totalCusto = (estacasComCusto || []).reduce((sum, e) => sum + (e.custo_total ?? 0), 0)
+  const temAlgumCusto = (estacasComCusto || []).some((e) => e.custo_total != null)
 
   return (
     <div>
+      {hasEstacas ? (
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
@@ -184,6 +182,9 @@ function ExpandedRow({
           ) : null}
         </table>
       </div>
+      ) : (
+        <p style={{ color: '#718096', fontSize: 13 }}>Nenhuma estaca encontrada neste diário.</p>
+      )}
 
       <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
         <strong style={{ fontSize: 13, color: '#2d3748' }}>Ocorrências do Diário</strong>
