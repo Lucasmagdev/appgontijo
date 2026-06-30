@@ -170,7 +170,12 @@ function normalizeStaffRow(value: unknown): DiaryStaffRow {
 
 function normalizeOccurrenceRow(value: unknown): DiaryOccurrenceRow {
   const source = asRecord(value)
-  return { desc: toText(source.desc), hora_ini: toText(source.hora_ini), hora_fim: toText(source.hora_fim) }
+  // Tolera formato novo (descricao/horaInicial/horaFinal) e legado (desc/hora_ini/hora_fim).
+  return {
+    desc: toText(source.desc || source.descricao),
+    hora_ini: toText(source.hora_ini || source.horaInicial),
+    hora_fim: toText(source.hora_fim || source.horaFinal),
+  }
 }
 
 function normalizePlanRow(value: unknown): DiaryPlanRow {
@@ -223,6 +228,9 @@ function buildEditorState(rawValue: Record<string, unknown> | null): DiaryEditor
     'address',
     'staff',
     'occurrences',
+    'ocorrencias',
+    'ocorrencias_confirmed',
+    'occurrences_confirmed',
     'planning',
     'endConstruction',
     'supply',
@@ -248,7 +256,12 @@ function buildEditorState(rawValue: Record<string, unknown> | null): DiaryEditor
       neighborhood: toText(address.neighborhood),
     },
     staff: Array.isArray(source.staff) ? source.staff.map(normalizeStaffRow) : [],
-    occurrences: Array.isArray(source.occurrences) ? source.occurrences.map(normalizeOccurrenceRow) : [],
+    // Prefere ocorrencias (formato novo, autoritativo do operador); cai para occurrences (legado).
+    occurrences: Array.isArray(source.ocorrencias)
+      ? source.ocorrencias.map(normalizeOccurrenceRow)
+      : Array.isArray(source.occurrences)
+        ? source.occurrences.map(normalizeOccurrenceRow)
+        : [],
     planning: Array.isArray(source.planning) ? source.planning.map(normalizePlanRow) : [],
     endConstruction: Array.isArray(source.endConstruction) ? source.endConstruction.map(normalizePlanRow) : [],
     supply: {
@@ -289,6 +302,20 @@ function compactStringArray<T extends Record<string, string>>(rows: T[]) {
   return rows
     .map((row) => compactObject(Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value.trim()]))) as T)
     .filter((row) => Object.keys(row).length > 0)
+}
+
+// Espelha ocorrencias legadas (occurrences: desc/hora_ini/hora_fim) para o formato novo
+// (ocorrencias: descricao/horaInicial/horaFinal) que a conferencia e o app do operador leem
+// com prioridade. Sem isso, editar no diario admin nao reflete na conferencia.
+function buildNewOccurrence(row: { desc?: string; hora_ini?: string; hora_fim?: string }, index: number) {
+  return {
+    id: `ocorr-admin-${Date.now()}-${index}`,
+    tipo: 'manual' as const,
+    descricao: row.desc || '',
+    horaInicial: row.hora_ini || '',
+    horaFinal: row.hora_fim || '',
+    createdAt: new Date().toISOString(),
+  }
 }
 
 function makeStakeRow(isDrivenPile: boolean) {
@@ -565,6 +592,13 @@ export default function DiarioFormPage() {
     delete rebuiltJson.stakes
     delete rebuiltJson.stakesBE
     rebuiltJson[editor.stakesKey] = compactStringArray(editor.stakes)
+
+    // Mantem ocorrencias (formato novo) em sincronia com occurrences (legado) editado aqui.
+    // A conferencia e o operador leem parsed.ocorrencias com prioridade; sem isto ficam stale.
+    const occurrenceRows = compactStringArray(editor.occurrences)
+    rebuiltJson.ocorrencias = occurrenceRows.map(buildNewOccurrence)
+    rebuiltJson.ocorrencias_confirmed = occurrenceRows.length > 0
+    rebuiltJson.occurrences_confirmed = occurrenceRows.length > 0
 
     await mutation.mutateAsync({
       dataDiario: form.dataDiario,

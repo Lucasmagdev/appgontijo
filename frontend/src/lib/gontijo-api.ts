@@ -3637,6 +3637,10 @@ export const planejamentoDiarioApi = {
     const res = await api.post<{ ok: boolean; data: { itens: PlanejamentoDiarioItem[]; valorEstacasDia: number; valorEstipuladoDia: number; fatMinimoValor: number | null; fatMinimoSugerido: number | null; valorMobilizacao: number | null; valorDesmobilizacao: number | null; valorOutroAcrescimo: number | null } }>('/gontijo/planejamento-diario/preview', payload)
     return res.data.data
   },
+  async fatMinimoSugerido(obraNumero: string): Promise<number | null> {
+    const res = await api.get<{ ok: boolean; data: { fatMinimoSugerido: number | null } }>(`/gontijo/planejamento-diario/fat-minimo-sugerido/${encodeURIComponent(obraNumero)}`)
+    return res.data.data?.fatMinimoSugerido ?? null
+  },
   async previewWeekly(payload: PlanejamentoSemanalPayload): Promise<PlanejamentoSemanalPreview> {
     const res = await api.post<{ ok: boolean; data: PlanejamentoSemanalPreview }>('/gontijo/planejamento-diario/semanal/preview', payload)
     return res.data.data

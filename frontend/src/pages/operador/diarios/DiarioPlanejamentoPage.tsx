@@ -28,6 +28,9 @@ type Props = {
 
 const DIAMETER_OPTIONS = ['20', '25', '30', '35', '40', '50', '60', '70', '80', '100', '120']
 
+// Numerico recebe sufixo "cm"; perfis (ex: TR68 cravacao) ficam como estao.
+const diametroLabel = (d: string | number) => (/^\d+$/.test(String(d)) ? `${d} cm` : String(d))
+
 const inputStyle: CSSProperties = {
   width: '100%',
   minHeight: '56px',
@@ -278,7 +281,7 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
                 >
                   <option value="">Selecione</option>
                   {diameterOptions.map((item) => (
-                    <option key={item} value={item}>{item} cm</option>
+                    <option key={item} value={item}>{diametroLabel(item)}</option>
                   ))}
                 </select>
               </label>
@@ -311,7 +314,7 @@ export default function DiarioPlanejamentoPage({ diarioId, equipamentoId, kind }
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '14px', fontWeight: 800, color: '#111827' }}>{item.numeroEstacas} estacas</div>
-                      <div style={{ marginTop: '4px', fontSize: '12px', color: '#64748b', fontWeight: 700 }}>Diametro: {item.diametro} cm</div>
+                      <div style={{ marginTop: '4px', fontSize: '12px', color: '#64748b', fontWeight: 700 }}>Diametro: {diametroLabel(item.diametro)}</div>
                     </div>
                     <button onClick={() => handleEdit(item)} style={iconButtonStyle('#f1f5f9')}>
                       <Pencil size={13} color="#475569" />

@@ -25,7 +25,12 @@ import {
   type PlanejamentoSemanalPayload,
 } from '@/lib/gontijo-api'
 
-const DIAMETROS = ['20', '25', '30', '35', '40', '50', '60', '70', '80', '100', '120']
+const DIAMETROS = ['20', '25', '30', '35', '40', '50', '60', '70', '80', '100', '120', 'TR68']
+
+// Rotulo da opcao de diametro: numerico recebe sufixo "cm"; perfis (ex: TR68 cravacao) ficam como estao.
+function diametroLabel(diametro: string) {
+  return /^\d+$/.test(diametro) ? `${diametro} cm` : diametro
+}
 const DIAS_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
 
 function isForbiddenError(error: unknown): boolean {
@@ -139,11 +144,11 @@ function weeklyDayPayload(day: WeeklyDayDraft): PlanejamentoSemanalDiaPayload | 
   if (!day.enabled) return null
   const itens = validDraftItems(day.items)
   const temAcrescimo = day.incluiMobilizacao || day.incluiDesmobilizacao || day.incluiOutroAcrescimo
-  // dia pode ter so acrescimo (mobilizacao/desmobilizacao) sem estacas; senao precisa de 1 meta valida
-  if (!itens.length && !temAcrescimo) return null
-  if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null // acrescimo so e exigido se marcado
   // fat minimo so e aplicado no valor quando ja tem um valor informado (evita erro no preview)
   const fatMinimoOk = day.fatMinimo && Number(day.fatMinimoValor) > 0
+  // dia pode ter so acrescimo ou so fat minimo garantido (sem estacas); senao precisa de 1 meta valida
+  if (!itens.length && !temAcrescimo && !fatMinimoOk) return null
+  if (day.incluiOutroAcrescimo && Number(day.valorOutroAcrescimo) <= 0) return null // acrescimo so e exigido se marcado
   return {
     data: day.data,
     fat_minimo_garantido: fatMinimoOk,
@@ -217,7 +222,7 @@ function ItemRow({
           <label className="field-label">Diâmetro</label>
           <select className="field-select" value={item.diametro} onChange={(event) => onChange({ ...item, diametro: event.target.value })}>
             <option value="">Selecione</option>
-            {DIAMETROS.map((diametro) => <option key={diametro} value={diametro}>{diametro} cm</option>)}
+            {DIAMETROS.map((diametro) => <option key={diametro} value={diametro}>{diametroLabel(diametro)}</option>)}
           </select>
         </div>
         <div>
@@ -384,7 +389,9 @@ function PlanModal({
   const temAcrescimos = incluiMobilizacao || incluiDesmobilizacao || incluiOutroAcrescimo
   // linhas totalmente vazias sao ignoradas; o dia pode ter so acrescimo (sem estacas)
   const nonBlankItems = items.filter((item) => item.metaQtdEstacas || item.diametro || item.profundidade)
-  const metasValidas = validItems.length === nonBlankItems.length && (validItems.length > 0 || temAcrescimos)
+  // dia pode ter so fat minimo garantido (sem estacas/acrescimo): conta como valido para salvar/preview
+  const fatMinimoOk = fatMinimo && (Number(fatMinimoValor) > 0 || (fatMinimoSugerido != null && fatMinimoSugerido > 0))
+  const metasValidas = validItems.length === nonBlankItems.length && (validItems.length > 0 || temAcrescimos || fatMinimoOk)
   const canPreview = Boolean(obraNumero.trim()) && metasValidas
   // valor do fat minimo: o digitado tem prioridade; senao usa a sugestao da obra
   const fatMinimoValorEfetivo = fatMinimoValor || (fatMinimoSugerido != null ? String(fatMinimoSugerido) : '')
@@ -407,8 +414,17 @@ function PlanModal({
     retry: false,
   })
 
+  // sugestao de fat minimo direto do cadastro da obra, independente de ter meta valida
+  // (preview com itens vazios so para obter minimum_amount). Sem isto, marcar fat minimo
+  // antes de preencher uma meta nao puxava o valor do cadastro.
+  const fatMinimoSugestaoQuery = useQuery({
+    queryKey: ['planejamento-diario-fatminimo-sugerido', obraNumero.trim()],
+    queryFn: () => planejamentoDiarioApi.fatMinimoSugerido(obraNumero.trim()),
+    enabled: Boolean(obraNumero.trim()),
+    retry: false,
+  })
   // captura a sugestao de fat minimo da obra (vinda do cadastro)
-  const previewSugerido = previewQuery.data?.fatMinimoSugerido ?? null
+  const previewSugerido = previewQuery.data?.fatMinimoSugerido ?? fatMinimoSugestaoQuery.data ?? null
   useEffect(() => {
     setFatMinimoSugerido(previewSugerido)
   }, [previewSugerido])
@@ -704,8 +720,18 @@ function WeeklyPlanModal({
   })
   const previewByDate = new Map((previewQuery.data?.dias ?? []).map((day) => [day.data, day]))
 
+  // sugestao de fat minimo direto do cadastro da obra, independente de ter meta valida no dia
+  // (preview avulso com itens vazios). Sem isto, marcar fat minimo antes de preencher uma meta
+  // (ou em dia so de fat minimo) nao puxava o valor do cadastro.
+  const fatMinimoSugestaoQuery = useQuery({
+    queryKey: ['planejamento-diario-fatminimo-sugerido', obraNumero.trim()],
+    queryFn: () => planejamentoDiarioApi.fatMinimoSugerido(obraNumero.trim()),
+    enabled: Boolean(obraNumero.trim()),
+    retry: false,
+  })
   // sugestao de fat minimo da obra (mesma para a semana toda)
-  const fatMinimoSugeridoObra = previewQuery.data?.dias?.find((day) => day.fatMinimoSugerido != null)?.fatMinimoSugerido ?? null
+  const fatMinimoSugeridoObra = previewQuery.data?.dias?.find((day) => day.fatMinimoSugerido != null)?.fatMinimoSugerido
+    ?? fatMinimoSugestaoQuery.data ?? null
   // ao marcar fat minimo num dia sem valor, pre-preenche com a sugestao da obra
   useEffect(() => {
     if (fatMinimoSugeridoObra == null) return
