@@ -17,6 +17,7 @@ const db = require("./lib/db");
 const gontijoRoutes = require("./lib/gontijo-routes");
 const miscRoutes = require("./routes/misc");
 const publicRoutes = require("./routes/public");
+const dashboardRoutes = require("./routes/dashboard");
 const { buildDiaryPdf } = require("./lib/pdf/diary-pdf");
 const {
   sum,
@@ -41,6 +42,8 @@ const {
   shiftDateWithTz,
   daysBetweenInclusive,
   weekdayForSolides,
+  getWeekStartFromDate,
+  buildWeekDates,
 } = require("./lib/dates");
 const {
   adminSessions,
@@ -122,17 +125,7 @@ const portalDocsUpload = multer({
 
 // Tabela predefined_occurrences (e seu seed) agora vive no banco;
 // DDL + seed em migrations/001_app_tables_baseline.sql
-let goalTargetSanitizePromise = null;
-
-function ensureGoalTargetsSanitized() {
-  if (!goalTargetSanitizePromise) {
-    goalTargetSanitizePromise = goalTargetStore.archiveInvalidGoals().catch((error) => {
-      goalTargetSanitizePromise = null;
-      throw error;
-    });
-  }
-  return goalTargetSanitizePromise;
-}
+// ensureGoalTargetsSanitized -> goalTargetStore.ensureSanitized() (lib/goal-target-store.js)
 
 app.use((req, res, next) => {
   const requestOrigin = req.headers.origin;
@@ -167,6 +160,8 @@ app.use(express.json({ limit: "15mb" }));
 app.use("/api", miscRoutes);
 // Rotas publicas de assinatura de diario -> routes/public.js
 app.use("/api/public", publicRoutes);
+// Rotas de dashboard (GET daily/weekly/secondary) -> routes/dashboard.js
+app.use("/api/dashboard", dashboardRoutes);
 
 const ADMIN_GLOBAL_CPFS = (process.env.ADMIN_CPFS || "")
   .split(",")
@@ -1043,25 +1038,13 @@ function bootstrapWhatsAppScheduler() {
   }, intervalMinutes * 60 * 1000);
 }
 
-function buildWeekDates(weekStart) {
-  const start = parseDateString(weekStart);
-  return Array.from({ length: 7 }, (_, index) => {
-    const current = new Date(start);
-    current.setUTCDate(start.getUTCDate() + index);
-    return formatUtcDate(current);
-  });
-}
+// buildWeekDates -> lib/dates.js
 
 // shiftDate -> lib/dates.js
 
 // getCurrentDateString -> lib/dates.js
 
-function getWeekStartFromDate(dateText) {
-  const date = parseDateString(dateText);
-  const day = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() - day + 1);
-  return formatUtcDate(date);
-}
+// getWeekStartFromDate -> lib/dates.js
 
 function formatDateBr(dateText) {
   // Dedup (refatoracao fase 1): havia uma 2a definicao de mesmo nome no bloco
@@ -5301,7 +5284,7 @@ app.post("/api/admin/mappings/:id/archive", requireAdmin, async (req, res) => {
 
 app.get("/api/admin/goal-targets", requireAdmin, async (req, res) => {
   try {
-    await ensureGoalTargetsSanitized();
+    await goalTargetStore.ensureSanitized();
     const includeArchived = String(req.query.includeArchived || "false") === "true";
     const limit = Number(req.query.limit || 100);
     return res.json({
@@ -5345,7 +5328,7 @@ app.post("/api/admin/goal-imports/parse", requireAdmin, upload.single("file"), a
 
 app.post("/api/admin/goal-imports/confirm", requireAdmin, async (req, res) => {
   try {
-    await ensureGoalTargetsSanitized();
+    await goalTargetStore.ensureSanitized();
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) {
       return res.status(400).json({
@@ -5442,173 +5425,6 @@ app.get("/api/estacas/sync", async (req, res) => {
     return res.json({ ok: true, data });
   } catch (e) {
     return res.status(500).json({ ok: false, message: e.message });
-  }
-});
-
-app.get("/api/dashboard/daily", async (req, res) => {
-  const missing = missingEnvVars();
-  if (missing.length > 0) {
-    return res.status(500).json({
-      ok: false,
-      message: "Variaveis de ambiente obrigatorias ausentes.",
-      missing,
-    });
-  }
-
-  try {
-    await ensureGoalTargetsSanitized();
-    const date = String(req.query.date || getCurrentDateString());
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({
-        ok: false,
-        message: "Data invalida. Use o formato YYYY-MM-DD.",
-      });
-    }
-
-    const clientLogin = getClientLogin(req.query.clientLogin);
-    const client = buildS3Client();
-    const mappings = await adminStore.listActiveMappings();
-    const goalTargets = await goalTargetStore.listGoals({ dateFrom: date, dateTo: date, limit: 1000 });
-    const dashboard = await buildDailyDashboard({
-      mappings,
-      date,
-      goalTargets,
-      loadSummaries: async (imei, summaryDate) => {
-        const prefix = buildPrefix(clientLogin, imei, summaryDate);
-        return buildOperationalSummaries(client, prefix);
-      },
-    });
-
-    return res.json({
-      ok: true,
-      clientLogin,
-      ...dashboard,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      message: "Falha ao gerar dashboard diario.",
-      details: error.message,
-    });
-  }
-});
-
-app.get("/api/dashboard/weekly", async (req, res) => {
-  const missing = missingEnvVars();
-  if (missing.length > 0) {
-    return res.status(500).json({
-      ok: false,
-      message: "Variaveis de ambiente obrigatorias ausentes.",
-      missing,
-    });
-  }
-
-  try {
-    await ensureGoalTargetsSanitized();
-    const weekStart = String(req.query.weekStart || getWeekStartFromDate(getCurrentDateString()));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
-      return res.status(400).json({
-        ok: false,
-        message: "weekStart invalido. Use o formato YYYY-MM-DD.",
-      });
-    }
-
-    const clientLogin = getClientLogin(req.query.clientLogin);
-    const client = buildS3Client();
-    const weekDates = buildWeekDates(weekStart);
-    const mappings = await adminStore.listActiveMappings();
-    const goalTargets = await goalTargetStore.listGoals({
-      dateFrom: weekDates[0],
-      dateTo: weekDates[weekDates.length - 1],
-      limit: 5000,
-    });
-    const dashboard = await buildWeeklyDashboard({
-      mappings,
-      weekStart,
-      weekDates,
-      goalTargets,
-      loadSummaries: async (imei, summaryDate) => {
-        const prefix = buildPrefix(clientLogin, imei, summaryDate);
-        return buildOperationalSummaries(client, prefix);
-      },
-    });
-
-    return res.json({
-      ok: true,
-      clientLogin,
-      ...dashboard,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      message: "Falha ao gerar dashboard semanal.",
-      details: error.message,
-    });
-  }
-});
-
-app.get("/api/dashboard/secondary", async (req, res) => {
-  const missing = missingEnvVars();
-  if (missing.length > 0) {
-    return res.status(500).json({
-      ok: false,
-      message: "Variaveis de ambiente obrigatorias ausentes.",
-      missing,
-    });
-  }
-
-  try {
-    await ensureGoalTargetsSanitized();
-    const date = String(req.query.date || getCurrentDateString());
-    const weekStart = String(req.query.weekStart || getWeekStartFromDate(date));
-    const clientLogin = getClientLogin(req.query.clientLogin);
-    const client = buildS3Client();
-    const mappings = await adminStore.listActiveMappings();
-    const weekDates = buildWeekDates(weekStart);
-    const goalTargets = await goalTargetStore.listGoals({
-      dateFrom: weekDates[0],
-      dateTo: weekDates[weekDates.length - 1],
-      limit: 5000,
-    });
-    const dailyGoalTargets = goalTargets.filter((item) => String(item.date || "") === date);
-
-    const dailyDashboard = await buildDailyDashboard({
-      mappings,
-      date,
-      goalTargets: dailyGoalTargets,
-      loadSummaries: async (imei, summaryDate) => {
-        const prefix = buildPrefix(clientLogin, imei, summaryDate);
-        return buildOperationalSummaries(client, prefix);
-      },
-    });
-
-    const weeklyDashboard = await buildWeeklyDashboard({
-      mappings,
-      weekStart,
-      weekDates,
-      goalTargets,
-      loadSummaries: async (imei, summaryDate) => {
-        const prefix = buildPrefix(clientLogin, imei, summaryDate);
-        return buildOperationalSummaries(client, prefix);
-      },
-    });
-
-    return res.json({
-      ok: true,
-      clientLogin,
-      date,
-      weekStart,
-      item: buildSecondaryDashboard({
-        dailyDashboard,
-        weeklyDashboard,
-      }),
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      message: "Falha ao gerar painel secundario.",
-      details: error.message,
-    });
   }
 });
 
