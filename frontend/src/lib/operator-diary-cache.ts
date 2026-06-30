@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { DiarioDetail } from '@/lib/gontijo-api'
 
-export const PARAMETRIZED_EQUIPMENT_STALE_TIME = 2 * 60 * 1000
+export const PARAMETRIZED_EQUIPMENT_STALE_TIME = 0
 
 export function updateOperatorDiaryCache(
   queryClient: QueryClient,
