@@ -12,23 +12,23 @@ function formatBRL(value: number | null): string {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-type ConferenciaStatus = 'pendente' | 'aprovado' | 'rejeitado'
-type StakeActionState = { diaryId: number; stakeIndex: number; status: 'aprovado' | 'rejeitado' } | null
+type ConferenciaStatus = 'pendente' | 'cobrado' | 'nao_cobrado'
+type StakeActionState = { diaryId: number; stakeIndex: number; status: 'cobrado' | 'nao_cobrado' } | null
 
 function statusLabel(status: ConferenciaStatus, variant: 'diario' | 'estaca' = 'diario') {
   if (variant === 'estaca') {
-    if (status === 'aprovado') return 'Cobrar'
-    if (status === 'rejeitado') return 'Não cobrar'
+    if (status === 'cobrado') return 'Cobrar'
+    if (status === 'nao_cobrado') return 'Não cobrar'
     return 'Pendente'
   }
-  if (status === 'aprovado') return 'Aprovado'
-  if (status === 'rejeitado') return 'Rejeitado'
+  if (status === 'cobrado') return 'Cobrado'
+  if (status === 'nao_cobrado') return 'Não cobrado'
   return 'Pendente'
 }
 
 function statusStyle(status: ConferenciaStatus): React.CSSProperties {
-  if (status === 'aprovado') return { background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4' }
-  if (status === 'rejeitado') return { background: '#fed7d7', color: '#9b2c2c', border: '1px solid #fc8181' }
+  if (status === 'cobrado') return { background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4' }
+  if (status === 'nao_cobrado') return { background: '#fed7d7', color: '#9b2c2c', border: '1px solid #fc8181' }
   return { background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e' }
 }
 
@@ -49,11 +49,11 @@ function StakeAcoes({
   item: ConferenciaEstacaItem
   stakeIndex: number
   pendingStakeAction: StakeActionState
-  onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
+  onStakeAction: (diaryId: number, stakeIndex: number, status: 'cobrado' | 'nao_cobrado', obs?: string) => void
 }) {
   const [rejectingObs, setRejectingObs] = useState<string | null>(null)
-  const isApproving = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'aprovado'
-  const isRejecting = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'rejeitado'
+  const isApproving = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'cobrado'
+  const isRejecting = pendingStakeAction?.diaryId === item.id && pendingStakeAction.stakeIndex === stakeIndex && pendingStakeAction.status === 'nao_cobrado'
 
   if (rejectingObs !== null) {
     return (
@@ -71,7 +71,7 @@ function StakeAcoes({
             className="btn"
             style={{ background: '#e53e3e', color: '#fff', padding: '4px 9px', fontSize: 12, flex: 1 }}
             disabled={!rejectingObs.trim() || Boolean(pendingStakeAction)}
-            onClick={() => { onStakeAction(item.id, stakeIndex, 'rejeitado', rejectingObs.trim()); setRejectingObs(null) }}
+            onClick={() => { onStakeAction(item.id, stakeIndex, 'nao_cobrado', rejectingObs.trim()); setRejectingObs(null) }}
           >
             {isRejecting ? 'Salvando...' : 'Confirmar'}
           </button>
@@ -90,7 +90,7 @@ function StakeAcoes({
         className="btn"
         style={{ background: '#38a169', color: '#fff', padding: '4px 9px', fontSize: 12, minWidth: 92 }}
         disabled={Boolean(pendingStakeAction)}
-        onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
+        onClick={() => onStakeAction(item.id, stakeIndex, 'cobrado')}
       >
         {isApproving ? 'Salvando...' : 'Cobrar'}
       </button>
@@ -117,7 +117,7 @@ function ExpandedRow({
 }: {
   item: ConferenciaEstacaItem
   pendingStakeAction: StakeActionState
-  onStakeAction: (diaryId: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string) => void
+  onStakeAction: (diaryId: number, stakeIndex: number, status: 'cobrado' | 'nao_cobrado', obs?: string) => void
   onConsideraFatMinimo: (diaryId: number, considera: boolean) => void
   pendingFatMinimo: number | null
 }) {
@@ -228,12 +228,12 @@ function ExpandedRow({
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 2 }}>
                 <span style={{ color: '#718096' }}>Valor a Faturar:</span>
                 <span style={{ fontWeight: 700, fontSize: 15, color: '#276749' }}>
-                  R$ {formatBRL(conferenciaStatus === 'aprovado' && valorFaturadoFechado != null ? valorFaturadoFechado : valorFaturado)}
+                  R$ {formatBRL(conferenciaStatus === 'cobrado' && valorFaturadoFechado != null ? valorFaturadoFechado : valorFaturado)}
                 </span>
                 {consideraFatMinimo && fatMinimoValor != null && producaoReal != null && producaoReal < fatMinimoValor && (
                   <span style={{ fontSize: 11, background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e', borderRadius: 4, padding: '1px 6px' }}>mín. aplicado</span>
                 )}
-                {conferenciaStatus === 'aprovado' && valorFaturadoFechado != null && (
+                {conferenciaStatus === 'cobrado' && valorFaturadoFechado != null && (
                   <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '1px 6px' }}>fechado</span>
                 )}
               </div>
@@ -447,7 +447,7 @@ const PERDAS_GRUPOS: { grupo: string; itens: string[] }[] = [
   },
 ]
 
-function AprovarModal({
+function CobrarModal({
   item,
   onConfirm,
   onCancel,
@@ -466,7 +466,7 @@ function AprovarModal({
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 480, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Aprovar diário</h3>
+        <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Cobrar diário completo</h3>
 
         {item.planejamentoStatus === 'calculado' && item.planejamentoValorEstipuladoDia != null ? (
           <div style={{ marginBottom: 16, border: '1px solid #d6bcfa', borderRadius: 8, background: '#faf5ff', padding: 12 }}>
@@ -570,7 +570,7 @@ function AprovarModal({
             disabled={!canConfirm}
             onClick={() => onConfirm({ meta_atingida: metaAtingida!, perda: perda || undefined, obs: obs.trim() || undefined })}
           >
-            Confirmar aprovação
+            Confirmar cobrança
           </button>
         </div>
       </div>
@@ -578,14 +578,14 @@ function AprovarModal({
   )
 }
 
-function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => void; onCancel: () => void }) {
+function NaoCobrarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => void; onCancel: () => void }) {
   const [obs, setObs] = useState('')
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, boxShadow: '0 4px 24px rgba(0,0,0,0.15)' }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>Rejeitar diário</h3>
-        <p style={{ fontSize: 13, color: '#4a5568', marginBottom: 12 }}>Informe o motivo da rejeição (obrigatório):</p>
+        <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>Não cobrar diário completo</h3>
+        <p style={{ fontSize: 13, color: '#4a5568', marginBottom: 12 }}>Informe o motivo para não cobrar (obrigatório):</p>
         <textarea
           value={obs}
           onChange={(event) => setObs(event.target.value)}
@@ -603,7 +603,7 @@ function RejeitarModal({ onConfirm, onCancel }: { onConfirm: (obs: string) => vo
             disabled={!obs.trim()}
             onClick={() => onConfirm(obs.trim())}
           >
-            Confirmar rejeição
+            Confirmar não cobrança
           </button>
         </div>
       </div>
@@ -620,8 +620,8 @@ export default function DiarioConferenciaPage() {
   const [applied, setApplied] = useState({ obra_numero: '', conferencia_status: '', engenheiro: '', page: 1 })
   const [showParams, setShowParams] = useState(false)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [rejeitarId, setRejeitarId] = useState<number | null>(null)
-  const [aprovarId, setAprovarId] = useState<number | null>(null)
+  const [naoCobrarId, setNaoCobrarId] = useState<number | null>(null)
+  const [cobrarId, setCobrarId] = useState<number | null>(null)
   const [actionError, setActionError] = useState('')
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
@@ -641,29 +641,29 @@ export default function DiarioConferenciaPage() {
     staleTime: 1000 * 60 * 2,
   })
 
-  const aprovarMutation = useMutation({
+  const cobrarMutation = useMutation({
     mutationFn: ({ id, opts }: { id: number; opts: { meta_atingida: boolean; perda?: string; obs?: string } }) =>
-      conferenciaEstacasApi.aprovar(id, opts),
+      conferenciaEstacasApi.cobrar(id, opts),
     onSuccess: async () => {
       setActionError('')
-      setAprovarId(null)
+      setCobrarId(null)
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
     onError: (error) => setActionError(extractApiErrorMessage(error)),
   })
 
-  const rejeitarMutation = useMutation({
-    mutationFn: ({ id, obs }: { id: number; obs: string }) => conferenciaEstacasApi.rejeitar(id, obs),
+  const naoCobrarMutation = useMutation({
+    mutationFn: ({ id, obs }: { id: number; obs: string }) => conferenciaEstacasApi.naoCobrar(id, obs),
     onSuccess: async () => {
       setActionError('')
-      setRejeitarId(null)
+      setNaoCobrarId(null)
       await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
     },
     onError: (error) => setActionError(extractApiErrorMessage(error)),
   })
 
   const estacaMutation = useMutation({
-    mutationFn: ({ id, stakeIndex, status, obs }: { id: number; stakeIndex: number; status: 'aprovado' | 'rejeitado'; obs?: string }) =>
+    mutationFn: ({ id, stakeIndex, status, obs }: { id: number; stakeIndex: number; status: 'cobrado' | 'nao_cobrado'; obs?: string }) =>
       conferenciaEstacasApi.definirStatusEstaca(id, stakeIndex, status, obs),
     onMutate: (variables) => {
       setActionError('')
@@ -713,7 +713,7 @@ export default function DiarioConferenciaPage() {
   }
 
   async function handleSignatureLink(item: ConferenciaEstacaItem) {
-    if (item.conferenciaStatus !== 'aprovado') return
+    if (item.conferenciaStatus !== 'cobrado') return
     setActionError('')
     setSignatureLoadingId(item.id)
 
@@ -785,8 +785,8 @@ export default function DiarioConferenciaPage() {
             >
               <option value="">Todos</option>
               <option value="pendente">Pendente</option>
-              <option value="aprovado">Aprovado</option>
-              <option value="rejeitado">Rejeitado</option>
+              <option value="cobrado">Cobrado</option>
+              <option value="nao_cobrado">Não cobrado</option>
             </select>
           </div>
 
@@ -865,13 +865,13 @@ export default function DiarioConferenciaPage() {
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Badge status={item.conferenciaStatus} />
-                        {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'aprovado' && !item.conferenciaPorNome ? (
-                          <span style={{ fontSize: 11, color: '#718096' }}>Auto-aprovado</span>
+                        {item.autoComparacao.dentroTolerancia && item.conferenciaStatus === 'cobrado' && !item.conferenciaPorNome ? (
+                          <span style={{ fontSize: 11, color: '#718096' }}>Auto-cobrado</span>
                         ) : null}
-                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === true && (
+                        {item.conferenciaStatus === 'cobrado' && item.metaAtingida === true && (
                           <span style={{ fontSize: 11, background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 3, padding: '1px 5px' }}>Meta atingida</span>
                         )}
-                        {item.conferenciaStatus === 'aprovado' && item.metaAtingida === false && item.perda && (
+                        {item.conferenciaStatus === 'cobrado' && item.metaAtingida === false && item.perda && (
                           <span style={{ fontSize: 11, fontWeight: 600, background: '#faf5ff', color: '#6b46c1', border: '1px solid #d6bcfa', borderRadius: 3, padding: '2px 6px' }} title={`Perda considerada: ${item.perda}`}>
                             Perda: {item.perda.length > 30 ? `${item.perda.slice(0, 30)}...` : item.perda}
                           </span>
@@ -886,7 +886,7 @@ export default function DiarioConferenciaPage() {
                       </div>
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      {item.conferenciaStatus === 'aprovado' && item.valorFaturadoFechado != null ? (
+                      {item.conferenciaStatus === 'cobrado' && item.valorFaturadoFechado != null ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                           <span style={{ fontWeight: 700, color: '#276749', fontSize: 13 }}>R$ {formatBRL(item.valorFaturadoFechado)}</span>
                           {item.producaoRealFechado != null && item.producaoRealFechado !== item.valorFaturadoFechado && (
@@ -898,7 +898,7 @@ export default function DiarioConferenciaPage() {
                       )}
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      {item.conferenciaStatus === 'aprovado' || item.portalEnviadoEm
+                      {item.conferenciaStatus === 'cobrado' || item.portalEnviadoEm
                         ? <span style={{ background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Visível</span>
                         : <span style={{ background: '#edf2f7', color: '#718096', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Oculto</span>
                       }
@@ -911,38 +911,38 @@ export default function DiarioConferenciaPage() {
                               type="button"
                               className="btn"
                               style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                              onClick={() => setAprovarId(item.id)}
+                              onClick={() => setCobrarId(item.id)}
                             >
-                              Aprovar
+                              Cobrar diário completo
                             </button>
                             <button
                               type="button"
                               className="btn"
                               style={{ background: '#e53e3e', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                              disabled={rejeitarMutation.isPending}
-                              onClick={() => setRejeitarId(item.id)}
+                              disabled={naoCobrarMutation.isPending}
+                              onClick={() => setNaoCobrarId(item.id)}
                             >
-                              Rejeitar
+                              Não cobrar diário completo
                             </button>
                           </div>
                         ) : null}
-                        {item.conferenciaStatus === 'rejeitado' ? (
+                        {item.conferenciaStatus === 'nao_cobrado' ? (
                           <button
                             type="button"
                             className="btn"
                             style={{ background: '#38a169', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                            onClick={() => setAprovarId(item.id)}
+                            onClick={() => setCobrarId(item.id)}
                           >
-                            Aprovar
+                            Cobrar diário completo
                           </button>
                         ) : null}
                         <div style={{ display: 'flex', gap: 5 }}>
                           <button
                             type="button"
                             className="btn"
-                            style={{ background: item.conferenciaStatus === 'aprovado' ? '#2f855a' : '#a0aec0', color: '#fff', padding: '4px 10px', fontSize: 12 }}
-                            disabled={item.conferenciaStatus !== 'aprovado' || signatureLoadingId === item.id}
-                            title={item.conferenciaStatus !== 'aprovado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
+                            style={{ background: item.conferenciaStatus === 'cobrado' ? '#2f855a' : '#a0aec0', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                            disabled={item.conferenciaStatus !== 'cobrado' || signatureLoadingId === item.id}
+                            title={item.conferenciaStatus !== 'cobrado' ? 'Conclua a conferencia antes de gerar o link.' : undefined}
                             onClick={() => void handleSignatureLink(item)}
                           >
                             {signatureLoadingId === item.id ? 'Gerando...' : 'Link assinatura'}
@@ -1002,18 +1002,18 @@ export default function DiarioConferenciaPage() {
         />
       ) : null}
 
-      {aprovarId !== null ? (
-        <AprovarModal
-          item={items.find((item) => item.id === aprovarId)!}
-          onConfirm={(opts) => aprovarMutation.mutate({ id: aprovarId, opts })}
-          onCancel={() => setAprovarId(null)}
+      {cobrarId !== null ? (
+        <CobrarModal
+          item={items.find((item) => item.id === cobrarId)!}
+          onConfirm={(opts) => cobrarMutation.mutate({ id: cobrarId, opts })}
+          onCancel={() => setCobrarId(null)}
         />
       ) : null}
 
-      {rejeitarId !== null ? (
-        <RejeitarModal
-          onConfirm={(obs) => rejeitarMutation.mutate({ id: rejeitarId, obs })}
-          onCancel={() => setRejeitarId(null)}
+      {naoCobrarId !== null ? (
+        <NaoCobrarModal
+          onConfirm={(obs) => naoCobrarMutation.mutate({ id: naoCobrarId, obs })}
+          onCancel={() => setNaoCobrarId(null)}
         />
       ) : null}
     </div>

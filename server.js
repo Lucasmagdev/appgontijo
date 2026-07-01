@@ -4264,7 +4264,7 @@ async function fetchClientPortalDashboard(constructionId, filters = {}, baseUrl 
   // Diario aprovado OU com link de assinatura ativo (enviado ao cliente antes da conferencia)
   // OU enviado manualmente ao portal pelo admin (independente do status de conferencia).
   // Sem o OR, um diario aguardando assinatura fica invisivel na lista mas aparece no alerta de pendencia.
-  const approvedOrPendingSignature = `(d.conferencia_status = 'aprovado'${hasSignatureLinks ? ` OR EXISTS (
+  const approvedOrPendingSignature = `(d.conferencia_status = 'cobrado'${hasSignatureLinks ? ` OR EXISTS (
         SELECT 1 FROM diary_signature_links sl
         WHERE sl.diary_id = d.id AND sl.status = 'active' AND sl.expires_at > NOW()
       )` : ''}${hasPortalEnviado ? ' OR d.portal_enviado_em IS NOT NULL' : ''})`
@@ -5085,7 +5085,7 @@ app.post("/api/operador/diarios/:id/signature-link", async (req, res) => {
     // Diary is now 'pendente' — trigger auto-approval check against obra_producao
     const obraIdForConferencia = parseInt(diary.data.construction_id || diary.data.obra_id || 0) || null;
     if (obraIdForConferencia) {
-      await gontijoRoutes.tryAutoAprovarConferencia(conn, diary.id, obraIdForConferencia);
+      await gontijoRoutes.tryAutoCobrarConferencia(conn, diary.id, obraIdForConferencia);
     }
 
     const payload = buildSignatureStatusPayload({
@@ -5166,7 +5166,7 @@ app.post("/api/admin/diarios/:id/signature-link", requireAdmin, async (req, res)
 
     const obraIdForConferencia = parseInt(diary.data.construction_id || diary.data.obra_id || 0) || null;
     if (obraIdForConferencia) {
-      await gontijoRoutes.tryAutoAprovarConferencia(conn, diary.id, obraIdForConferencia);
+      await gontijoRoutes.tryAutoCobrarConferencia(conn, diary.id, obraIdForConferencia);
     }
 
     return res.json({ ok: true, data: result.payload });

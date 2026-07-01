@@ -241,7 +241,7 @@ _🟢 app novo · 19 linhas · criada Mon Apr 13_
 | stake_index | int unsigned |  |
 | stake_key | varchar(191) |  |
 | stake_name | varchar(191) |  |
-| status | enum('pendente','aprovado','rejeitado') | idx |
+| status | enum('pendente','cobrado','nao_cobrado') | idx |
 | obs | text |  |
 | reviewed_by | bigint unsigned | idx |
 | reviewed_at | datetime |  |
@@ -1071,7 +1071,7 @@ _🔵 Laravel · 7808 linhas · criada Fri May 22_
 | user_id | bigint unsigned | idx |
 | created_at | timestamp |  |
 | updated_at | timestamp |  |
-| conferencia_status | enum('pendente','aprovado','rejeitado') | idx |
+| conferencia_status | enum('pendente','cobrado','nao_cobrado') | idx |
 | conferencia_em | datetime |  |
 | conferencia_por | bigint unsigned |  |
 | conferencia_obs | text |  |

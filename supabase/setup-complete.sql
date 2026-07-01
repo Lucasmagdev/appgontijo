@@ -549,16 +549,16 @@ CREATE TABLE IF NOT EXISTS diary_helper_evaluations (
 -- Permite ao admin validar profundidade/diâmetro antes de liberar diário ao portal do cliente
 
 ALTER TABLE diaries
-  ADD COLUMN conferencia_status ENUM('pendente','aprovado','rejeitado')
+  ADD COLUMN conferencia_status ENUM('pendente','cobrado','nao_cobrado')
     NOT NULL DEFAULT 'pendente',
   ADD COLUMN conferencia_em DATETIME NULL DEFAULT NULL,
   ADD COLUMN conferencia_por BIGINT UNSIGNED NULL DEFAULT NULL,
   ADD COLUMN conferencia_obs TEXT NULL DEFAULT NULL,
   ADD KEY idx_diaries_conferencia_status (conferencia_status);
 
--- Backfill: diários já assinados são aprovados automaticamente (sem quebrar visibilidade no portal)
+-- Backfill: diários já assinados são cobrados automaticamente (sem quebrar visibilidade no portal)
 UPDATE diaries
-SET conferencia_status = 'aprovado'
+SET conferencia_status = 'cobrado'
 WHERE COALESCE(
   NULLIF(JSON_UNQUOTE(JSON_EXTRACT(data, '$.status')), ''),
   'rascunho'
@@ -804,7 +804,7 @@ CREATE TABLE IF NOT EXISTS diary_stake_conference_items (
   stake_index INT UNSIGNED NOT NULL,
   stake_key VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   stake_name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  status ENUM('pendente','aprovado','rejeitado') NOT NULL DEFAULT 'pendente',
+  status ENUM('pendente','cobrado','nao_cobrado') NOT NULL DEFAULT 'pendente',
   obs TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL,
   reviewed_by BIGINT UNSIGNED NULL DEFAULT NULL,
   reviewed_at DATETIME NULL DEFAULT NULL,

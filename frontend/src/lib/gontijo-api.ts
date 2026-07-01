@@ -581,7 +581,7 @@ export type DiarioRecord = {
   obraNumero: string
   cliente: string
   equipamento: string
-  conferenciaStatus?: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaStatus?: 'pendente' | 'cobrado' | 'nao_cobrado'
 }
 
 export type DiarioDetail = DiarioRecord & {
@@ -3151,7 +3151,7 @@ export type ComparacaoDetalhe = {
   diferencaPct?: number
   ok: boolean
   motivo?: string
-  conferenciaStatus?: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaStatus?: 'pendente' | 'cobrado' | 'nao_cobrado'
   conferenciaObs?: string | null
   conferenciaPorNome?: string | null
   conferenciaEm?: string | null
@@ -3176,7 +3176,7 @@ export type EstacaComCusto = {
   custo_bit: number | null
   custo_armacao: number | null
   custo_total: number | null
-  conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaStatus: 'pendente' | 'cobrado' | 'nao_cobrado'
   conferenciaObs: string | null
   conferenciaPorNome: string | null
   conferenciaEm: string | null
@@ -3198,7 +3198,7 @@ export type ConferenciaEstacaItem = {
   equipamento: string
   operadorNome: string
   engenheiroResponsavel: string | null
-  conferenciaStatus: 'pendente' | 'aprovado' | 'rejeitado'
+  conferenciaStatus: 'pendente' | 'cobrado' | 'nao_cobrado'
   conferenciaEm: string | null
   conferenciaObs: string | null
   metaAtingida: boolean | null
@@ -3237,15 +3237,15 @@ export const conferenciaEstacasApi = {
     }
   },
 
-  async aprovar(id: number, opts: { obs?: string; meta_atingida: boolean; perda?: string }): Promise<void> {
-    await api.post(`/gontijo/conferencia-estacas/${id}/aprovar`, opts)
+  async cobrar(id: number, opts: { obs?: string; meta_atingida: boolean; perda?: string }): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/cobrar`, opts)
   },
 
-  async rejeitar(id: number, obs: string): Promise<void> {
-    await api.post(`/gontijo/conferencia-estacas/${id}/rejeitar`, { obs })
+  async naoCobrar(id: number, obs: string): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/nao-cobrar`, { obs })
   },
 
-  async definirStatusEstaca(id: number, stakeIndex: number, status: 'aprovado' | 'rejeitado', obs?: string): Promise<void> {
+  async definirStatusEstaca(id: number, stakeIndex: number, status: 'cobrado' | 'nao_cobrado', obs?: string): Promise<void> {
     await api.post(`/gontijo/conferencia-estacas/${id}/estacas/${stakeIndex}/status`, { status, obs })
   },
 

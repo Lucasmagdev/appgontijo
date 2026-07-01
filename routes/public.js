@@ -234,7 +234,7 @@ router.post("/diarios/signature/:token", async (req, res) => {
     // Trigger auto-approval check now that the diary is signed
     const obraId = parseInt(diaryData.construction_id || diaryData.obra_id || 0) || null;
     if (obraId) {
-      await gontijoRoutes.tryAutoAprovarConferencia(conn, row.diary_id, obraId);
+      await gontijoRoutes.tryAutoCobrarConferencia(conn, row.diary_id, obraId);
     }
 
     return res.json({

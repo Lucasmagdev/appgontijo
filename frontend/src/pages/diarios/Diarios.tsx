@@ -395,14 +395,14 @@ export default function DiariosPage() {
                             <span
                               className="text-xs font-semibold px-2 py-0.5 rounded"
                               style={
-                                item.conferenciaStatus === 'aprovado'
+                                item.conferenciaStatus === 'cobrado'
                                   ? { backgroundColor: '#c6f6d5', color: '#276749' }
-                                  : item.conferenciaStatus === 'rejeitado'
+                                  : item.conferenciaStatus === 'nao_cobrado'
                                     ? { backgroundColor: '#fed7d7', color: '#9b2c2c' }
                                     : { backgroundColor: '#fefcbf', color: '#744210' }
                               }
                             >
-                              {item.conferenciaStatus === 'aprovado' ? 'Conferido' : item.conferenciaStatus === 'rejeitado' ? 'Rejeitado' : 'Aguard. Conferência'}
+                              {item.conferenciaStatus === 'cobrado' ? 'Conferido' : item.conferenciaStatus === 'nao_cobrado' ? 'Não cobrado' : 'Aguard. Conferência'}
                             </span>
                           )}
                         </td>
