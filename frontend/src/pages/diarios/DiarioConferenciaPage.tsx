@@ -15,7 +15,12 @@ function formatBRL(value: number | null): string {
 type ConferenciaStatus = 'pendente' | 'aprovado' | 'rejeitado'
 type StakeActionState = { diaryId: number; stakeIndex: number; status: 'aprovado' | 'rejeitado' } | null
 
-function statusLabel(status: ConferenciaStatus) {
+function statusLabel(status: ConferenciaStatus, variant: 'diario' | 'estaca' = 'diario') {
+  if (variant === 'estaca') {
+    if (status === 'aprovado') return 'Cobrar'
+    if (status === 'rejeitado') return 'Não cobrar'
+    return 'Pendente'
+  }
   if (status === 'aprovado') return 'Aprovado'
   if (status === 'rejeitado') return 'Rejeitado'
   return 'Pendente'
@@ -27,10 +32,10 @@ function statusStyle(status: ConferenciaStatus): React.CSSProperties {
   return { background: '#fefcbf', color: '#744210', border: '1px solid #f6e05e' }
 }
 
-function Badge({ status, rounded = false }: { status: ConferenciaStatus; rounded?: boolean }) {
+function Badge({ status, rounded = false, variant = 'diario' }: { status: ConferenciaStatus; rounded?: boolean; variant?: 'diario' | 'estaca' }) {
   return (
     <span style={{ ...statusStyle(status), borderRadius: rounded ? 999 : 4, padding: rounded ? '3px 9px' : '2px 8px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
-      {statusLabel(status)}
+      {statusLabel(status, variant)}
     </span>
   )
 }
@@ -55,7 +60,7 @@ function StakeAcoes({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 220 }}>
         <textarea
           autoFocus
-          placeholder="Motivo da reprovação (obrigatório)"
+          placeholder="Motivo para não cobrar (obrigatório)"
           value={rejectingObs}
           onChange={(e) => setRejectingObs(e.target.value)}
           style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #fc8181', minHeight: 60, resize: 'vertical' }}
@@ -68,7 +73,7 @@ function StakeAcoes({
             disabled={!rejectingObs.trim() || Boolean(pendingStakeAction)}
             onClick={() => { onStakeAction(item.id, stakeIndex, 'rejeitado', rejectingObs.trim()); setRejectingObs(null) }}
           >
-            {isRejecting ? 'Reprovando...' : 'Confirmar'}
+            {isRejecting ? 'Salvando...' : 'Confirmar'}
           </button>
           <button type="button" className="btn btn-secondary" style={{ padding: '4px 9px', fontSize: 12 }} onClick={() => setRejectingObs(null)}>
             Cancelar
@@ -87,7 +92,7 @@ function StakeAcoes({
         disabled={Boolean(pendingStakeAction)}
         onClick={() => onStakeAction(item.id, stakeIndex, 'aprovado')}
       >
-        {isApproving ? 'Aprovando...' : 'Aprovar'}
+        {isApproving ? 'Salvando...' : 'Cobrar'}
       </button>
       <button
         type="button"
@@ -96,7 +101,7 @@ function StakeAcoes({
         disabled={Boolean(pendingStakeAction)}
         onClick={() => setRejectingObs('')}
       >
-        Reprovar
+        Não cobrar
       </button>
       {(isApproving || isRejecting) ? <span style={{ color: '#718096', fontSize: 11, fontWeight: 700 }}>Salvando...</span> : null}
     </div>
@@ -141,7 +146,7 @@ function ExpandedRow({
               <th style={thStyle}>Acrésc. Bit</th>
               <th style={thStyle}>Custo Arm.</th>
               <th style={{ ...thStyle, fontWeight: 700 }}>Custo Total</th>
-              <th style={thStyle}>Conferência</th>
+              <th style={thStyle}>Cobrança</th>
               <th style={thStyle}>Ações</th>
             </tr>
           </thead>
@@ -160,7 +165,7 @@ function ExpandedRow({
                 <td style={{ ...tdStyle, fontWeight: 700 }}>{formatBRL(estaca.custo_total)}</td>
                 <td style={tdStyle}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Badge status={estaca.conferenciaStatus || 'pendente'} rounded />
+                    <Badge status={estaca.conferenciaStatus || 'pendente'} rounded variant="estaca" />
                     {estaca.conferenciaPorNome ? <span style={{ color: '#718096', fontSize: 11 }}>{estaca.conferenciaPorNome}</span> : null}
                     {estaca.conferenciaObs ? <span style={{ color: '#718096', fontSize: 11, fontStyle: 'italic' }}>{estaca.conferenciaObs}</span> : null}
                   </div>
@@ -621,6 +626,7 @@ export default function DiarioConferenciaPage() {
   const [pendingStakeAction, setPendingStakeAction] = useState<StakeActionState>(null)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
   const [pendingFatMinimo, setPendingFatMinimo] = useState<number | null>(null)
+  const [pendingPortalId, setPendingPortalId] = useState<number | null>(null)
 
   const query = useQuery({
     queryKey: ['conferencia-estacas', applied],
@@ -668,6 +674,19 @@ export default function DiarioConferenciaPage() {
     },
     onError: (error) => setActionError(extractApiErrorMessage(error)),
     onSettled: () => setPendingStakeAction(null),
+  })
+
+  const enviarPortalMutation = useMutation({
+    mutationFn: (id: number) => conferenciaEstacasApi.enviarPortal(id),
+    onMutate: (id) => {
+      setActionError('')
+      setPendingPortalId(id)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['conferencia-estacas'] })
+    },
+    onError: (error) => setActionError(extractApiErrorMessage(error)),
+    onSettled: () => setPendingPortalId(null),
   })
 
   const fatMinimoMutation = useMutation({
@@ -879,7 +898,7 @@ export default function DiarioConferenciaPage() {
                       )}
                     </td>
                     <td style={tdStyle} onClick={(event) => event.stopPropagation()}>
-                      {item.conferenciaStatus === 'aprovado'
+                      {item.conferenciaStatus === 'aprovado' || item.portalEnviadoEm
                         ? <span style={{ background: '#c6f6d5', color: '#276749', border: '1px solid #9ae6b4', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Visível</span>
                         : <span style={{ background: '#edf2f7', color: '#718096', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 8px', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>Oculto</span>
                       }
@@ -936,6 +955,21 @@ export default function DiarioConferenciaPage() {
                             Editar diário
                           </Link>
                         </div>
+                        {item.portalEnviadoEm ? (
+                          <span style={{ fontSize: 11, color: '#276749', background: '#c6f6d5', border: '1px solid #9ae6b4', borderRadius: 4, padding: '3px 8px', fontWeight: 700 }}>
+                            ✓ Upload feito no portal
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{ background: '#2b6cb0', color: '#fff', padding: '4px 10px', fontSize: 12 }}
+                            disabled={pendingPortalId === item.id}
+                            onClick={() => enviarPortalMutation.mutate(item.id)}
+                          >
+                            {pendingPortalId === item.id ? 'Enviando...' : 'Enviar ao Portal'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

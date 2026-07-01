@@ -4258,16 +4258,16 @@ async function fetchClientPortalDashboard(constructionId, filters = {}, baseUrl 
   const { dataInicio, dataFim } = filters
   const hasValorFaturado = await columnExists('diaries', 'valor_faturado')
   const hasSignatureLinks = await tableExists("diary_signature_links")
+  const hasPortalEnviado = await columnExists('diaries', 'portal_enviado_em')
   const dateExpr = "COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(d.data, '$.date')), ''), DATE_FORMAT(d.created_at, '%Y-%m-%d'))"
 
-  // Diario aprovado OU com link de assinatura ativo (enviado ao cliente antes da conferencia).
+  // Diario aprovado OU com link de assinatura ativo (enviado ao cliente antes da conferencia)
+  // OU enviado manualmente ao portal pelo admin (independente do status de conferencia).
   // Sem o OR, um diario aguardando assinatura fica invisivel na lista mas aparece no alerta de pendencia.
-  const approvedOrPendingSignature = hasSignatureLinks
-    ? `(d.conferencia_status = 'aprovado' OR EXISTS (
+  const approvedOrPendingSignature = `(d.conferencia_status = 'aprovado'${hasSignatureLinks ? ` OR EXISTS (
         SELECT 1 FROM diary_signature_links sl
         WHERE sl.diary_id = d.id AND sl.status = 'active' AND sl.expires_at > NOW()
-      ))`
-    : "d.conferencia_status = 'aprovado'"
+      )` : ''}${hasPortalEnviado ? ' OR d.portal_enviado_em IS NOT NULL' : ''})`
 
   let dateWhere = ''
   const dateParams = []

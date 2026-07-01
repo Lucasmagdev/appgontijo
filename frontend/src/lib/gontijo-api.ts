@@ -3206,6 +3206,8 @@ export type ConferenciaEstacaItem = {
   conferenciaPorNome: string | null
   assinaturaStatus: string
   linkGeradoEm: string | null
+  portalEnviadoEm: string | null
+  portalEnviadoPorNome: string | null
   estacas: EstacaExecutada[]
   producaoPlanejada: ProducaoPlanejada[]
   autoComparacao: AutoComparacao
@@ -3249,6 +3251,10 @@ export const conferenciaEstacasApi = {
 
   async setConsideraFatMinimo(id: number, considera: boolean): Promise<void> {
     await api.post(`/gontijo/conferencia-estacas/${id}/considera-fat-minimo`, { considera })
+  },
+
+  async enviarPortal(id: number): Promise<void> {
+    await api.post(`/gontijo/conferencia-estacas/${id}/enviar-portal`, {})
   },
 }
 
