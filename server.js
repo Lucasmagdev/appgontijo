@@ -3593,7 +3593,7 @@ function buildAiCorrectionPrompt(text) {
 }
 
 async function correctTextWithOllama(text) {
-  const enabled = String(process.env.OLLAMA_TEXT_CORRECTION_ENABLED || "true").toLowerCase() !== "false";
+  const enabled = String(process.env.OLLAMA_TEXT_CORRECTION_ENABLED || "false").toLowerCase() === "true";
   if (!enabled) return null;
 
   const endpoint = process.env.OLLAMA_API_URL || "http://127.0.0.1:11434/api/generate";
@@ -3633,6 +3633,52 @@ async function correctTextWithOllama(text) {
       textoCorrigido: correctedText,
       alterado: correctedText !== text,
       provider: "ollama",
+      sugestoes: [],
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function correctTextWithOpenAI(text) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const endpoint = process.env.OPENAI_API_URL || "https://api.openai.com/v1/chat/completions";
+  const model = process.env.OPENAI_TEXT_CORRECTION_MODEL || "gpt-4o-mini";
+  const timeoutMs = Number(process.env.OPENAI_TEXT_CORRECTION_TIMEOUT_MS || 8000);
+  const preparedText = applyCommonTextCorrections(text);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 8000);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: Number(process.env.OPENAI_TEXT_CORRECTION_MAX_TOKENS || 300),
+        messages: [{ role: "user", content: buildAiCorrectionPrompt(preparedText) }],
+      }),
+      signal: controller.signal,
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error?.message || "OpenAI indisponivel.");
+
+    const correctedText = cleanAiCorrectionOutput(payload?.choices?.[0]?.message?.content);
+    if (!correctedText) return null;
+    if (correctedText.length > Math.max(text.length * 3, text.length + 180)) return null;
+
+    return {
+      textoOriginal: text,
+      textoCorrigido: correctedText,
+      alterado: correctedText !== text,
+      provider: "openai",
       sugestoes: [],
     };
   } finally {
@@ -3799,6 +3845,13 @@ app.post("/api/gontijo/texto/corrigir", async (req, res) => {
   if (text.length > 3000) return res.status(400).json({ ok: false, message: "Texto limitado a 3000 caracteres." });
 
   const errors = [];
+
+  try {
+    const openaiResult = await correctTextWithOpenAI(text);
+    if (openaiResult) return res.json({ ok: true, data: openaiResult });
+  } catch (error) {
+    errors.push(`openai: ${error?.message || "erro desconhecido"}`);
+  }
 
   try {
     const aiResult = await correctTextWithOllama(text);
