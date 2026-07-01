@@ -406,6 +406,23 @@ export type EquipamentoPayload = {
   operadorId?: number | null
 }
 
+export type OperadorObraLookup = {
+  id: number
+  numero: string
+  status: 'em andamento' | 'finalizada' | 'pausada' | 'cancelada'
+  cliente: string
+  endereco: {
+    estado: string
+    cidade: string
+    cep: string
+    logradouro: string
+    bairro: string
+    numero: string
+    complemento: string
+  }
+  equipamentos: EquipamentoRecord[]
+}
+
 export type ObraResumo = {
   id: number
   numero: string
@@ -951,6 +968,31 @@ function adaptEquipamento(row: Record<string, unknown>): EquipamentoRecord {
     operadorId: toNumberValue(row.operador_id),
     operadorNome: toStringValue(row.operador_nome),
     operadorTelefone: toStringValue(row.operador_telefone),
+  }
+}
+
+function adaptOperadorObraLookup(row: Record<string, unknown>): OperadorObraLookup {
+  const endereco = row.endereco && typeof row.endereco === 'object'
+    ? (row.endereco as Record<string, unknown>)
+    : {}
+
+  return {
+    id: Number(row.id),
+    numero: toStringValue(row.numero),
+    status: (toStringValue(row.status) || 'em andamento') as OperadorObraLookup['status'],
+    cliente: toStringValue(row.cliente),
+    endereco: {
+      estado: toStringValue(endereco.estado),
+      cidade: toStringValue(endereco.cidade),
+      cep: toStringValue(endereco.cep),
+      logradouro: toStringValue(endereco.logradouro),
+      bairro: toStringValue(endereco.bairro),
+      numero: toStringValue(endereco.numero),
+      complemento: toStringValue(endereco.complemento),
+    },
+    equipamentos: Array.isArray(row.equipamentos)
+      ? row.equipamentos.map((item) => adaptEquipamento(item as Record<string, unknown>))
+      : [],
   }
 }
 
@@ -1911,6 +1953,15 @@ export const obraService = {
     })
     const payload = data.data || {}
     return toPhotoListValue(payload.fotos_obra)
+  },
+}
+
+export const operadorObraService = {
+  async lookup(numero: string): Promise<OperadorObraLookup> {
+    const { data } = await api.get<ApiEnvelope<Record<string, unknown>>>('/gontijo/operador/obras/lookup', {
+      params: { numero },
+    })
+    return adaptOperadorObraLookup(data.data)
   },
 }
 

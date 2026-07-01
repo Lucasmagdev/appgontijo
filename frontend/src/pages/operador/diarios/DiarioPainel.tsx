@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useOperadorAuth } from '@/hooks/useOperadorAuth'
-import { diarioService, equipamentoService, extractApiErrorMessage, obraService } from '@/lib/gontijo-api'
+import { diarioService, equipamentoService, extractApiErrorMessage, operadorObraService, obraService } from '@/lib/gontijo-api'
 import HeliceContinuaIcon from '@/components/operador/HeliceContinuaIcon'
 import { PARAMETRIZED_EQUIPMENT_STALE_TIME } from '@/lib/operator-diary-cache'
 
@@ -1044,6 +1044,7 @@ export default function DiarioPainel() {
   const canGenerateSignatureLink = Boolean(user?.podeGerarLinkAssinatura)
   const selectedId = Number(equipamentoId)
   const routeDiaryId = Number(searchParams.get('diario') || '')
+  const routeObraNumero = String(searchParams.get('obra') || '').trim()
   const hasRouteDiaryId = Number.isFinite(routeDiaryId) && routeDiaryId > 0
   const [activeTopModal, setActiveTopModal] = useState<TopFieldKey | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -1059,9 +1060,22 @@ export default function DiarioPainel() {
     queryKey: ['equipamentos-parametrizados'],
     queryFn: equipamentoService.listParametrizados,
     staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
+    enabled: !routeObraNumero,
   })
 
-  const equipamento = equipamentosQuery.data?.find((item) => item.id === selectedId) ?? null
+  const obraLookupQuery = useQuery({
+    queryKey: ['operador-obra-lookup', routeObraNumero],
+    enabled: Boolean(routeObraNumero) && !hasRouteDiaryId,
+    queryFn: () => operadorObraService.lookup(routeObraNumero),
+    retry: false,
+  })
+
+  const equipamento =
+    obraLookupQuery.data?.equipamentos.find((item) => item.id === selectedId) ??
+    equipamentosQuery.data?.find((item) => item.id === selectedId) ??
+    null
+  const selectedObraNumero = obraLookupQuery.data?.numero || equipamento?.obraNumero || ''
+  const selectedObraId = obraLookupQuery.data?.id ?? null
 
   const routeDiaryQuery = useQuery({
     queryKey: ['operador-diario', routeDiaryId],
@@ -1070,15 +1084,16 @@ export default function DiarioPainel() {
     retry: false,
   })
 
-  const draftQueryKey = ['operador-diario-draft', selectedId, equipamento?.obraNumero, user?.id, confirmedDraftDate] as const
+  const draftQueryKey = ['operador-diario-draft', selectedId, selectedObraNumero, user?.id, confirmedDraftDate] as const
   const draftQuery = useQuery({
     queryKey: draftQueryKey,
-    enabled: !hasRouteDiaryId && Boolean(selectedId && equipamento?.obraNumero && user?.id && confirmedDraftDate),
+    enabled: !hasRouteDiaryId && Boolean(selectedId && selectedObraNumero && user?.id && confirmedDraftDate),
     queryFn: () =>
       diarioService.resolveDraft({
+        obraId: selectedObraId,
         equipamentoId: selectedId,
         operadorId: user!.id,
-        obraNumero: equipamento!.obraNumero,
+        obraNumero: selectedObraNumero,
         dataDiario: confirmedDraftDate,
       }),
     gcTime: 0,
@@ -1160,8 +1175,8 @@ export default function DiarioPainel() {
 
   const obraTitulo = activeDiary
     ? `${activeDiary.obraNumero} - ${activeDiary.cliente || 'Obra selecionada'}`
-    : equipamento
-      ? `${equipamento.obraNumero} - Obra selecionada`
+    : selectedObraNumero
+      ? `${selectedObraNumero} - ${obraLookupQuery.data?.cliente || 'Obra selecionada'}`
       : 'Diario de obras'
   const endereco = obraDetailQuery.data
     ? buildAddress(obraDetailQuery.data)
@@ -1240,8 +1255,9 @@ export default function DiarioPainel() {
 
   useEffect(() => {
     if (hasRouteDiaryId || !draftQuery.data?.id || !selectedId) return
-    navigate(`/operador/diario-de-obras/novo/${selectedId}?diario=${draftQuery.data.id}`, { replace: true })
-  }, [draftQuery.data?.id, hasRouteDiaryId, navigate, selectedId])
+    const obraQuery = selectedObraNumero ? `&obra=${encodeURIComponent(selectedObraNumero)}` : ''
+    navigate(`/operador/diario-de-obras/novo/${selectedId}?diario=${draftQuery.data.id}${obraQuery}`, { replace: true })
+  }, [draftQuery.data?.id, hasRouteDiaryId, navigate, selectedId, selectedObraNumero])
 
   function openTopModal(key: TopFieldKey) {
     if (!activeDiary) return
@@ -1282,11 +1298,11 @@ export default function DiarioPainel() {
     navigate(`/operador/diario-de-obras/novo/${panelEquipmentId}/${modulo}?diario=${activeDiary.id}`)
   }
 
-  if (equipamentosQuery.isLoading || routeDiaryQuery.isLoading || draftQuery.isLoading || (!hasRouteDiaryId && Boolean(draftQuery.data?.id))) {
+  if (equipamentosQuery.isLoading || obraLookupQuery.isLoading || routeDiaryQuery.isLoading || draftQuery.isLoading || (!hasRouteDiaryId && Boolean(draftQuery.data?.id))) {
     return <OpeningDiaryLoading />
   }
 
-  if (equipamentosQuery.isError) {
+  if (equipamentosQuery.isError || obraLookupQuery.isError) {
     return (
       <div
         style={{
@@ -1309,7 +1325,7 @@ export default function DiarioPainel() {
         >
           <div style={{ fontSize: '18px', fontWeight: 800, color: '#1f2937' }}>Nao foi possivel abrir o diario</div>
           <div style={{ marginTop: '8px', fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
-            {extractApiErrorMessage(equipamentosQuery.error)}
+            {extractApiErrorMessage(equipamentosQuery.error || obraLookupQuery.error)}
           </div>
         </div>
       </div>
@@ -1410,7 +1426,7 @@ export default function DiarioPainel() {
     return (
       <DiaryDateSelection
         equipamentoNome={equipamento?.nome || ''}
-        obraNumero={equipamento?.obraNumero || ''}
+        obraNumero={selectedObraNumero}
         value={draftDateInput}
         maxDate={todayIso}
         error={draftQuery.isError ? extractApiErrorMessage(draftQuery.error) : undefined}

@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState, type FormEvent } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { equipamentoService, extractApiErrorMessage } from '@/lib/gontijo-api'
-import { PARAMETRIZED_EQUIPMENT_STALE_TIME } from '@/lib/operator-diary-cache'
+import { extractApiErrorMessage, operadorObraService, type EquipamentoRecord, type OperadorObraLookup } from '@/lib/gontijo-api'
 
 function OperadorHeader() {
   const navigate = useNavigate()
@@ -44,13 +44,78 @@ function OperadorHeader() {
   )
 }
 
+function buildAddress(obra: OperadorObraLookup) {
+  const endereco = obra.endereco
+  return [
+    endereco.logradouro,
+    endereco.numero,
+    endereco.bairro,
+    endereco.cidade,
+    endereco.estado,
+  ].filter(Boolean).join(', ')
+}
+
+function EquipmentButton({ equipment, selected, onClick }: { equipment: EquipamentoRecord; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: '100%',
+        border: selected ? '2px solid #c0392b' : '1px solid #d1d5db',
+        borderRadius: '14px',
+        background: selected ? '#fff7f6' : '#fff',
+        padding: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        textAlign: 'left',
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ fontSize: '15px', fontWeight: 800, color: '#111827' }}>{equipment.nome}</span>
+      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 700 }}>
+        {equipment.modalidadeNome || 'Modalidade nao informada'}
+      </span>
+      <span style={{ fontSize: '12px', color: '#4b5563' }}>
+        IMEI: {equipment.imei || 'Nao informado'}
+      </span>
+    </button>
+  )
+}
+
 export default function DiarioNovoObra() {
   const navigate = useNavigate()
-  const equipamentosQuery = useQuery({
-    queryKey: ['equipamentos-parametrizados'],
-    queryFn: equipamentoService.listParametrizados,
-    staleTime: PARAMETRIZED_EQUIPMENT_STALE_TIME,
+  const [obraNumero, setObraNumero] = useState('')
+  const [obra, setObra] = useState<OperadorObraLookup | null>(null)
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<number | null>(null)
+
+  const lookupMutation = useMutation({
+    mutationFn: operadorObraService.lookup,
+    onSuccess: (data) => {
+      setObra(data)
+      setSelectedEquipmentId(data.equipamentos[0]?.id ?? null)
+    },
   })
+
+  const selectedEquipment = useMemo(
+    () => obra?.equipamentos.find((item) => item.id === selectedEquipmentId) ?? null,
+    [obra?.equipamentos, selectedEquipmentId],
+  )
+
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const numero = obraNumero.trim()
+    if (!numero) return
+    setObra(null)
+    setSelectedEquipmentId(null)
+    lookupMutation.mutate(numero)
+  }
+
+  function handleContinue() {
+    if (!obra || !selectedEquipment) return
+    navigate(`/operador/diario-de-obras/novo/${selectedEquipment.id}?obra=${encodeURIComponent(obra.numero)}`)
+  }
 
   return (
     <div
@@ -66,155 +131,158 @@ export default function DiarioNovoObra() {
       <OperadorHeader />
 
       <div style={{ padding: '24px 20px 32px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <p style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1f2937' }}>
-            Escolha a maquina para iniciar o diario
-          </p>
-          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
-            Aqui aparecem somente as maquinas que ja estao parametrizadas com numero da obra e IMEI no administrativo.
-          </p>
-        </div>
+        <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="obra-numero" style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1f2937' }}>
+              Numero da obra
+            </label>
+            <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', lineHeight: '1.5' }}>
+              Digite o numero exato da obra para carregar os equipamentos cadastrados nela.
+            </p>
+          </div>
 
-        {equipamentosQuery.isLoading ? (
-          <div
+          <input
+            id="obra-numero"
+            type="text"
+            inputMode="numeric"
+            value={obraNumero}
+            onChange={(event) => setObraNumero(event.target.value)}
+            placeholder="Ex: 22365"
             style={{
-              border: '1px solid #e5e7eb',
+              width: '100%',
+              border: '1px solid #cbd5e1',
               borderRadius: '14px',
-              padding: '18px',
-              background: '#f8fafc',
-              color: '#6b7280',
+              padding: '14px 15px',
+              fontSize: '18px',
+              fontWeight: 800,
+              color: '#111827',
+              outline: 'none',
+            }}
+          />
+
+          <button
+            type="submit"
+            disabled={lookupMutation.isPending || !obraNumero.trim()}
+            style={{
+              border: 'none',
+              borderRadius: '14px',
+              background: lookupMutation.isPending || !obraNumero.trim() ? '#d1d5db' : '#c0392b',
+              color: '#fff',
+              minHeight: '48px',
+              padding: '0 16px',
               fontSize: '14px',
+              fontWeight: 800,
+              cursor: lookupMutation.isPending || !obraNumero.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            Carregando maquinas disponiveis...
-          </div>
-        ) : null}
+            {lookupMutation.isPending ? 'Buscando obra...' : 'Buscar obra'}
+          </button>
+        </form>
 
-        {equipamentosQuery.isError ? (
+        {lookupMutation.isError ? (
           <div
             style={{
               border: '1px solid #fecaca',
               borderRadius: '14px',
-              padding: '18px',
+              padding: '16px',
               background: '#fef2f2',
               color: '#b91c1c',
               fontSize: '14px',
               lineHeight: '1.5',
             }}
           >
-            {extractApiErrorMessage(equipamentosQuery.error)}
+            {extractApiErrorMessage(lookupMutation.error)}
           </div>
         ) : null}
 
-        {equipamentosQuery.data?.length ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {equipamentosQuery.data.map((equipamento) => (
-              <button
-                key={equipamento.id}
-                onClick={() => navigate(`/operador/diario-de-obras/novo/${equipamento.id}`)}
-                style={{
-                  width: '100%',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '16px',
-                  background: '#fff',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'stretch',
-                  gap: '12px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '12px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Obra
-                    </span>
-                    <span style={{ fontSize: '22px', fontWeight: 800, color: '#111827', lineHeight: 1 }}>
-                      {equipamento.obraNumero}
-                    </span>
-                  </div>
-
-                  <span
-                    style={{
-                      minWidth: '38px',
-                      minHeight: '38px',
-                      borderRadius: '12px',
-                      background: '#fef2f2',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#c0392b',
-                      fontWeight: 800,
-                    }}
-                  >
-                    M
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      Maquina
-                    </span>
-                    <span style={{ display: 'block', marginTop: '3px', fontSize: '15px', fontWeight: 700, color: '#1f2937' }}>
-                      {equipamento.nome}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      IMEI
-                    </span>
-                    <span style={{ display: 'block', marginTop: '3px', fontSize: '14px', color: '#4b5563', fontWeight: 600 }}>
-                      {equipamento.imei}
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    borderTop: '1px solid #f1f5f9',
-                    paddingTop: '12px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span style={{ fontSize: '13px', color: '#6b7280' }}>
-                    Tocar para continuar
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#c0392b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Selecionar
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {!equipamentosQuery.isLoading && !equipamentosQuery.isError && !equipamentosQuery.data?.length ? (
-          <div
+        {obra ? (
+          <section
             style={{
               border: '1px solid #e5e7eb',
               borderRadius: '16px',
-              padding: '24px 18px',
-              background: '#f8fafc',
+              background: '#fff',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(15,23,42,0.06)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '8px',
-              textAlign: 'center',
+              gap: '14px',
             }}
           >
-            <span style={{ fontSize: '16px', fontWeight: 700, color: '#334155' }}>
-              Nenhuma maquina disponivel
-            </span>
-            <span style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.5' }}>
-              Cadastre no administrativo o numero da obra e o IMEI do equipamento para ele aparecer aqui.
-            </span>
-          </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Obra
+                </span>
+                <span style={{ fontSize: '24px', fontWeight: 900, color: '#111827', lineHeight: 1 }}>
+                  {obra.numero}
+                </span>
+              </div>
+              <span style={{ fontSize: '12px', color: '#991b1b', background: '#fef2f2', borderRadius: '999px', padding: '6px 10px', fontWeight: 800 }}>
+                {obra.status}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '13px', color: '#1f2937', fontWeight: 800 }}>
+                {obra.cliente || 'Cliente nao informado'}
+              </span>
+              <span style={{ fontSize: '12px', color: '#6b7280', lineHeight: '1.45' }}>
+                {buildAddress(obra) || 'Endereco nao informado'}
+              </span>
+            </div>
+
+            {obra.equipamentos.length ? (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#374151', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Equipamento
+                  </span>
+                  {obra.equipamentos.map((equipment) => (
+                    <EquipmentButton
+                      key={equipment.id}
+                      equipment={equipment}
+                      selected={equipment.id === selectedEquipmentId}
+                      onClick={() => setSelectedEquipmentId(equipment.id)}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleContinue}
+                  disabled={!selectedEquipment}
+                  style={{
+                    border: 'none',
+                    borderRadius: '14px',
+                    background: selectedEquipment ? '#c0392b' : '#d1d5db',
+                    color: '#fff',
+                    minHeight: '50px',
+                    padding: '0 16px',
+                    fontSize: '14px',
+                    fontWeight: 900,
+                    cursor: selectedEquipment ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Continuar
+                </button>
+              </>
+            ) : (
+              <div
+                style={{
+                  border: '1px solid #fed7aa',
+                  borderRadius: '14px',
+                  padding: '16px',
+                  background: '#fff7ed',
+                  color: '#9a3412',
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                  fontWeight: 700,
+                }}
+              >
+                Esta obra nao tem equipamentos ativos cadastrados. Cadastre os equipamentos possiveis na aba Obras antes de iniciar o diario.
+              </div>
+            )}
+          </section>
         ) : null}
       </div>
     </div>
