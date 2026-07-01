@@ -725,7 +725,7 @@ export default function DiarioConferenciaPage() {
   return (
     <div className="page-shell">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <h1 className="page-heading" style={{ margin: 0 }}>Conferência de Estacas</h1>
+        <h1 className="page-heading" style={{ margin: 0 }}>Validação de Diários</h1>
         <button
           type="button"
           className="btn"

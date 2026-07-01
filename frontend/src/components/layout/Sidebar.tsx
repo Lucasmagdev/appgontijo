@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
     icon: Layers,
     children: [
       { label: 'Diarios de Obra', to: '/diarios', icon: FileText },
-      { label: 'Conferencia de Estacas', to: '/diarios/conferencia', icon: ClipboardList },
+      { label: 'Validacao de Diarios', to: '/diarios/conferencia', icon: ClipboardList },
       { label: 'Medicoes', to: '/medicoes', icon: Receipt },
       { label: 'Planejamento Diario', to: '/planejamento-diario', icon: CalendarClock },
     ],

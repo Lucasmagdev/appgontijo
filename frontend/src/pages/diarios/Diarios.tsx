@@ -195,7 +195,7 @@ export default function DiariosPage() {
             gap: 6,
           }}
         >
-          ✓ Conferência de Estacas
+          ✓ Validação de Diários
         </Link>
       </div>
 
