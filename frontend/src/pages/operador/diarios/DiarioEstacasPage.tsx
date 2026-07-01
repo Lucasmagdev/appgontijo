@@ -1,6 +1,6 @@
 import { type CSSProperties, useMemo, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Layers, Pencil, Plus, RefreshCcw, Trash2 } from 'lucide-react'
+import { Pencil, Plus, RefreshCcw, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { diarioService, equipamentoService, estacaService, extractApiErrorMessage } from '@/lib/gontijo-api'
 import { SkeletonBlock, SkeletonLine } from '@/components/ui/Skeleton'
@@ -50,11 +50,6 @@ function normalizeStakeLookup(value: string) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]+/g, '')
     .toLowerCase()
-}
-
-function isHeliceContinua(nome: string) {
-  const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-  return n.includes('helice') && n.includes('continua')
 }
 
 function isBateEstaca(nome: string) {
@@ -226,8 +221,8 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
   const currentEquipmentId = diarioQuery.data?.equipamentoId ?? routeEquipmentId
   const equipment = equipamentosQuery.data?.find((e) => e.id === currentEquipmentId) ?? null
   const obraDiametros = diarioQuery.data?.obraDiametros ?? []
-  const isHC = equipment ? isHeliceContinua(equipment.modalidadeNome) : null
   const isBE = equipment ? isBateEstaca(equipment.modalidadeNome) : null
+  const isHC = equipment ? !isBE : null
 
   // ── Parse stakes from dadosJson ──
   const stakes: DiarioEstaca[] = useMemo(() => {
@@ -468,31 +463,7 @@ export default function DiarioEstacasPage({ diarioId, equipamentoId }: Props) {
         </div>
       ) : null}
 
-      {/* Modalidade nao suportada */}
-      {!diarioQuery.isLoading && !equipamentosQuery.isLoading && isHC === false && isBE === false ? (
-        <div style={{ padding: '24px 18px' }}>
-          <div style={{
-            borderRadius: '20px',
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            padding: '28px 20px',
-            textAlign: 'center',
-          }}>
-            <Layers size={40} color="#94a3b8" style={{ margin: '0 auto 14px' }} />
-            <div style={{ fontSize: '17px', fontWeight: 800, color: '#1f2937', marginBottom: '8px' }}>
-              Modalidade nao suportada
-            </div>
-            <div style={{ fontSize: '13px', color: '#6b7280', lineHeight: '1.6' }}>
-              Esta aba de estacas esta preparada para as modalidades{' '}
-              <strong>Helice Continua</strong> e <strong>Bate Estaca</strong>.<br />
-              A modalidade desta maquina e{' '}
-              <strong>{equipment?.modalidadeNome || 'nao definida'}</strong>.
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {/* Conteudo principal — Helice Continua */}
+      {/* Conteudo principal — Helice Continua / demais modalidades */}
       {!diarioQuery.isLoading && !equipamentosQuery.isLoading && isHC ? (
         <div style={{ padding: '18px 18px 80px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
