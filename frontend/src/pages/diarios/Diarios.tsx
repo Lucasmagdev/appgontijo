@@ -49,6 +49,8 @@ export default function DiariosPage() {
 
   const [deleteError, setDeleteError] = useState('')
   const [signatureError, setSignatureError] = useState('')
+  const [exportError, setExportError] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
   const [signatureLoadingId, setSignatureLoadingId] = useState<number | null>(null)
 
   const modalidadesQuery = useQuery({
@@ -134,18 +136,44 @@ export default function DiariosPage() {
     window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
   }
 
-  function handleExportExcel() {
-    window.open(
-      diarioService.getExportUrl({
-        dataInicio: appliedFilters.dataInicio || undefined,
-        dataFim: appliedFilters.dataFim || undefined,
-        obra: appliedFilters.obra || undefined,
-        modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
-        equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
-      }),
-      '_blank',
-      'noopener,noreferrer'
-    )
+  async function handleExportExcel() {
+    setExportError('')
+    setIsExporting(true)
+
+    try {
+      const response = await fetch(
+        diarioService.getExportUrl({
+          dataInicio: appliedFilters.dataInicio || undefined,
+          dataFim: appliedFilters.dataFim || undefined,
+          obra: appliedFilters.obra || undefined,
+          modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
+          equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
+        }),
+        { credentials: 'include' }
+      )
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null
+        throw new Error(payload?.error || payload?.message || 'Nao foi possivel exportar o Excel.')
+      }
+
+      const blob = await response.blob()
+      const disposition = response.headers.get('content-disposition') || ''
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/i)
+      const filename = filenameMatch?.[1] || 'diarios.xlsx'
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'Nao foi possivel exportar o Excel.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   function getSignatureActionLabel(item: NonNullable<typeof diariosQuery.data>['items'][number]) {
@@ -301,11 +329,12 @@ export default function DiariosPage() {
 
           <button
             type="button"
-            onClick={handleExportExcel}
+            onClick={() => void handleExportExcel()}
             className="btn"
             style={{ backgroundColor: '#2d3748', color: '#fff', alignSelf: 'flex-end' }}
+            disabled={isExporting}
           >
-            Extrair Excel
+            {isExporting ? 'Extraindo...' : 'Extrair Excel'}
           </button>
         </div>
       </section>
@@ -316,6 +345,10 @@ export default function DiariosPage() {
 
       {signatureError ? (
         <QueryFeedback type="error" title="Nao foi possivel gerar o link" description={signatureError} />
+      ) : null}
+
+      {exportError ? (
+        <QueryFeedback type="error" title="Nao foi possivel exportar o Excel" description={exportError} />
       ) : null}
 
       {diariosQuery.isLoading ? (
