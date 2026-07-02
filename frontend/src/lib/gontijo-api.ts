@@ -2033,6 +2033,18 @@ export const diarioService = {
     const { data } = await api.post<ApiEnvelope<DiaryCompletionResult>>(`/gontijo/operador/diarios/${id}/concluir`)
     return data.data
   },
+  getExportUrl(filters: DiarioFilters = {}) {
+    const params = new URLSearchParams()
+    if (filters.dataInicio) params.set('data_inicio', filters.dataInicio)
+    if (filters.dataFim) params.set('data_fim', filters.dataFim)
+    if (filters.obra) params.set('obra', filters.obra)
+    if (filters.modalidadeId) params.set('modalidade_id', String(filters.modalidadeId))
+    if (filters.equipamentoId) params.set('equipamento_id', String(filters.equipamentoId))
+    if (filters.operadorId) params.set('operador_id', String(filters.operadorId))
+    if (filters.status) params.set('status', filters.status)
+    const query = params.toString()
+    return resolveApiUrl(`/api/gontijo/diarios/export${query ? `?${query}` : ''}`)
+  },
   getPdfUrl(id: number) {
     return resolveApiUrl(`/api/gontijo/diarios/${id}/pdf`)
   },

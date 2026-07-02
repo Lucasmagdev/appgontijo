@@ -134,6 +134,20 @@ export default function DiariosPage() {
     window.open(diarioService.getPdfUrl(id), '_blank', 'noopener,noreferrer')
   }
 
+  function handleExportExcel() {
+    window.open(
+      diarioService.getExportUrl({
+        dataInicio: appliedFilters.dataInicio || undefined,
+        dataFim: appliedFilters.dataFim || undefined,
+        obra: appliedFilters.obra || undefined,
+        modalidadeId: appliedFilters.modalidadeId ? Number(appliedFilters.modalidadeId) : null,
+        equipamentoId: appliedFilters.equipamentoId ? Number(appliedFilters.equipamentoId) : null,
+      }),
+      '_blank',
+      'noopener,noreferrer'
+    )
+  }
+
   function getSignatureActionLabel(item: NonNullable<typeof diariosQuery.data>['items'][number]) {
     if (item.status === 'assinado') return 'Ver assinatura'
     if (item.linkGeradoEm || item.enviadoEm || item.status === 'pendente') return 'Copiar/Enviar link'
@@ -287,11 +301,11 @@ export default function DiariosPage() {
 
           <button
             type="button"
+            onClick={handleExportExcel}
             className="btn"
             style={{ backgroundColor: '#2d3748', color: '#fff', alignSelf: 'flex-end' }}
-            disabled
           >
-            Baixar todos
+            Extrair Excel
           </button>
         </div>
       </section>
